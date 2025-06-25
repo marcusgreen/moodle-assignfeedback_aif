@@ -39,10 +39,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return void
      */
     public function get_settings(MoodleQuickForm $mform) {
-        xdebug_break();
 
         $defaultprompt = get_config('assignfeedback_aif', 'prompt');
-
         $mform->addElement('textarea',
                         'assignfeedback_aif_prompt',
                         get_string('prompt', 'assignfeedback_aif'),
@@ -66,7 +64,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
         global $DB;
         $id = optional_param('update', 0, PARAM_INT);
-
         $record = $DB->get_record('assignfeedback_aif', ['assignment' => $id]);
         if ($record) {
             $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
@@ -143,7 +140,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function set_editor_text($name, $value, $gradeid) {
         global $DB;
-        return 'set_editor_text function';
+        xdebug_break();
         if ($name === 'aif') {
             $feedback = $DB->get_record('assignfeedback_aif', ['grade' => $gradeid]);
             if ($feedback) {
@@ -171,14 +168,18 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @param int $userid
      * @return bool true if elements were added to the form
      */
-    public function get_form_elements_for_user($grade, MoodleQuickForm $mform, stdClass $data, $userid) {
-        global $DB;
-        $mform->addElement('text', 'assignfeedbackaif', $this->get_name());
-        $mform->setType('assignfeedbackaif', PARAM_TEXT);
-        $mform->setDefault('assignfeedbackaif', 'zzzzzz');
+    // public function get_form_elements_for_user($grade, MoodleQuickForm $mform, stdClass $data, $userid) {
+    //     global $DB;
+    //     $mform->addElement('text', 'assignfeedbackaif', $this->get_name());
+    //     $mform->setType('assignfeedbackaif', PARAM_TEXT);
+    //     $mform->setDefault('assignfeedbackaif', 'zzzzzz');
+    //     xdebug_break();
+    //     //global $DB;
+    //     $aifeedback =  $DB->get_record('assignfeedback_aif', array('grade'=>$grade->id));
 
-        return true;
-    }
+
+    //     return true;
+    // }
     /**
      * Save the settings for feedback comments plugin
      *
@@ -187,17 +188,24 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function save_settings(stdClass $data) {
         global $DB;
+        xdebug_break();
         $prompt = $data->assignfeedback_aif_prompt;
-        $assignment = $data->coursemodule;
-        $feedback = $DB->get_record('assignfeedback_aif', ['assignment' => $assignment]);
-        if($feedback) {
-            $feedback->prompt = $prompt;
-            $DB->update_record('assignfeedback_aif', $feedback);
+        $instance = $data->instance;
+        $record = $DB->get_record('assignfeedback_aif', ['assignment' => $instance]);
+        if($record) {
+            $data = (object) [
+                'id' => $record->id,
+                'prompt' => $prompt,
+                'assignment' => $instance
+            ];
+
+            $DB->update_record('assignfeedback_aif', $data);
         } else {
-            $feedback = new stdClass();
-            $feedback->prompt = $prompt;
-            $feedback->assignment = $assignment;
-            $DB->insert_record('assignfeedback_aif', $feedback);
+              $data = (object) [
+                'prompt' => $prompt,
+                'assignment' => $instance
+            ];
+            $DB->insert_record('assignfeedback_aif', $data);
         }
         return true;
     }
@@ -210,7 +218,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function save(stdClass $grade, stdClass $data) {
         global $DB;
-        return true;
+        xdebug_break();
         $feedback = $DB->get_record('assignfeedback_aif', ['grade' => $grade->id]);
         if ($feedback) {
             $feedback->value = $data->assignfeedbackaif;
@@ -218,7 +226,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         } else {
             $feedback = new stdClass();
             $feedback->commenttext = $data->assignfeedbackaif;
-            $feedback->grade = $grade->id;
+            $feedback->gradeid = $grade->id;
             $feedback->assignment = $this->assignment->get_instance()->id;
             $DB->insert_record('assignfeedback_aif', $feedback);
         }
@@ -233,7 +241,31 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string
      */
     public function view_summary(stdClass $grade, & $showviewlink) {
+
+        /**
+         *
+         SELECT *
+         FROM mdl_assign a
+         JOIN mdl_course_modules cm
+         ON cm.instance = a.id and cm.course = a.course
+         JOIN mdl_assignfeedback_aif aif
+         ON aif.assignment = cm.id
+         JOIN mdl_assignfeedback_aif_feedback aiff
+         ON aiff.aif = aif.id
+         JOIN mdl_assign_submission sub
+         ON sub.assignment = cm.instance AND aiff.submission = sub.id
+         ORDER BY aiff.id\G
+
+         SELECT * FROM mdl_assign_submission sub
+         JOIN mdl_assignfeedback_aif aif ON aif.assignment = sub.assignment
+         JOIN mdl_assignfeedback_aif_feedback aiff on aiff.aif = aif.id;
+
+
+         *
+         *
+         */
         global $DB;
+        xdebug_break();
         $sql = "SELECT aiff.feedback
         FROM {assign} a
         JOIN {course_modules} cm
@@ -248,6 +280,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         ORDER BY aiff.id";
         $params = ['assignment' => $grade->assignment, 'userid' => $grade->userid];
         $record = $DB->get_record_sql($sql, $params);
+        //return 'Here is some ai feedback';
         return $record ? format_text($record->feedback) : '';
     }
 
@@ -276,9 +309,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function text_for_gradebook(stdClass $grade) {
         global $DB;
+        xdebug_break();
         return 'text_for_gradebook function';
-        $feedback = $DB->get_record('assignfeedback_aif', ['grade' => $grade->id]);
-        return $feedback ? $feedback->value : '';
+        $record = $DB->get_record('assignfeedback_aif_feedback', ['grade' => $grade->id]);
+        return $feedback ? $fecord->feedback : '';
     }
 
     /**

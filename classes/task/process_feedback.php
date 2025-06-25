@@ -40,6 +40,8 @@ class process_feedback extends \core\task\scheduled_task {
      * Execute the scheduled task.
      */
     public function execute() {
+              xdebug_break();
+
       /**
        * Equivalent cli
           SELECT  *
@@ -54,11 +56,25 @@ class process_feedback extends \core\task\scheduled_task {
           ON olt.assignment = a.id
           WHERE sub.status='submitted'\G;
 
+          or when not in phpunit
+
+                    SELECT  *
+          FROM mdl_assign a
+          JOIN mdl_course_modules cm
+          ON cm.instance = a.id
+          JOIN mdl_assignfeedback_aif aif
+          ON aif.assignment = cm.id
+          JOIN mdl_assign_submission sub
+          ON sub.assignment = a.id
+          JOIN mdl_assignsubmission_onlinetext olt
+          ON olt.assignment = a.id;
+          WHERE sub.status='submitted'\G;
+
        *
        */
 
         global $DB;
-         $sql = "SELECT aif.id AS aifid, aif.prompt AS prompt,olt.onlinetext AS onlinetext, sub.id AS subid
+         $sql = "SELECT aif.id AS aifid, aif.prompt AS prompt,olt.onlinetext AS onlinetext, sub.id AS subid, sub.assignment as assignid, sub.userid as userid
                  FROM {assign} a
                  JOIN {course_modules} cm
                  ON cm.instance = a.id
@@ -69,8 +85,9 @@ class process_feedback extends \core\task\scheduled_task {
                  JOIN {assignsubmission_onlinetext} olt
                  ON olt.assignment = a.id
                  WHERE sub.status='submitted'";
+                xdebug_break();
+
         $assignments = $DB->get_records_sql($sql);
-        xdebug_break();
         $aif = new \assignfeedback_aif\aif(\context_system::instance()->id);
         foreach ($assignments as $assignment) {
           $prompt = $assignment->prompt . ' '.$assignment->onlinetext;
@@ -81,7 +98,18 @@ class process_feedback extends \core\task\scheduled_task {
             'timecreated' => time(),
             'submission' => $assignment->subid,
           ];
-          $DB->insert_record('assignfeedback_aif_feedback', $data);
+
+        $grade = $DB->get_record('assign_grades', ['assignment' => $assignment->assignid, 'userid' => $assignment->userid]);
+        if(!$grade) {
+           $grade = new \stdClass();
+           $grade->assignment = $assignment->assignid;
+           $grade->userid = $assignment->userid;
+           $gradeid = $DB->insert_record('assign_grades', $grade);
+        } else {
+          $gradeid = $grade->id;
+        }
+        $data->grade = $gradeid;
+        $DB->insert_record('assignfeedback_aif_feedback', $data);
         }
 
     }

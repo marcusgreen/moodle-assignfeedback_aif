@@ -34,17 +34,8 @@ class observer {
         }
 
         public static function somefunc($event) {
+            xdebug_break();
             global $USER;
-            $grade = '3.14';
-            $teachercommenttext = 'This is FABULOUS!.';
-            $data = new \stdClass();
-            $data->attemptnumber = 1;
-            $data->grade = $grade;
-            $data->assignfeedbackcomments_editor = ['text' => $teachercommenttext, 'format' => FORMAT_MOODLE];
-            $assign = $event->get_assign();
-            $aif = $assign->get_feedback_plugins()[0];
-            //$prompt = $aif->get_prompt();
 
-            //$assign->save_grade($USER->id, $data);
         }
 }

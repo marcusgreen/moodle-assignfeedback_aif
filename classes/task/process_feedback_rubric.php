@@ -81,6 +81,7 @@ class process_feedback_rubric  extends \core\task\scheduled_task {
                 ['rcid' => $record->id]);
                 $prompt .= " ". $record->description. " " . $definition;
             }
+            xdebug_break();
             $prompt .= " ".strip_tags($assignment->onlinetext);
             $aifeedback =  $aif->perform_request($prompt);
             $data = (object) [
