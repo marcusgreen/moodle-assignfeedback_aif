@@ -264,21 +264,37 @@ class assign_feedback_aif extends assign_feedback_plugin {
          *
          *
          */
-        global $DB;
+        // global $DB;
+        // xdebug_break();
+        // $sql = "SELECT aiff.feedback
+        // FROM {assign} a
+        // JOIN {course_modules} cm
+        // ON cm.instance = a.id and cm.course = a.course
+        // JOIN {assignfeedback_aif} aif
+        // ON aif.assignment = cm.id
+        // JOIN {assignfeedback_aif_feedback} aiff
+        // ON aiff.aif = aif.id
+        // JOIN {assign_submission} sub
+        // ON sub.assignment = a.id AND aiff.submission = sub.id
+        // WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1 AND sub.status = 'submitted'
+        // ORDER BY aiff.id";
+        // $params = ['assignment' => $grade->assignment, 'userid' => $grade->userid];
         xdebug_break();
+        global $DB;
         $sql = "SELECT aiff.feedback
-        FROM {assign} a
-        JOIN {course_modules} cm
-        ON cm.instance = a.id and cm.course = a.course
-        JOIN {assignfeedback_aif} aif
-        ON aif.assignment = cm.id
-        JOIN {assignfeedback_aif_feedback} aiff
-        ON aiff.aif = aif.id
-        JOIN {assign_submission} sub
-        ON sub.assignment = a.id AND aiff.submission = sub.id
-        WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1 AND sub.status = 'submitted'
-        ORDER BY aiff.id";
-        $params = ['assignment' => $grade->assignment, 'userid' => $grade->userid];
+            FROM {course_modules} cm
+            JOIN {assignfeedback_aif} aif
+            ON aif.assignment = cm.instance
+            JOIN {assignfeedback_aif_feedback} aiff
+            ON aiff.aif = aif.id
+            JOIN {assign_submission} sub
+            ON sub.assignment = cm.instance
+            JOIN {assignsubmission_onlinetext} olt
+            ON olt.assignment = cm.instance
+            WHERE sub.status='submitted'
+            AND sub.userid=:userid";
+            $params = ['assignment' => $grade->assignment, 'userid' => $grade->userid];
+
         $record = $DB->get_record_sql($sql, $params);
         //return 'Here is some ai feedback';
         return $record ? format_text($record->feedback) : '';

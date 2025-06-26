@@ -58,16 +58,16 @@ class process_feedback extends \core\task\scheduled_task {
 
           or when not in phpunit
 
-                    SELECT  *
-          FROM mdl_assign a
-          JOIN mdl_course_modules cm
-          ON cm.instance = a.id
+          select aif.*
+          FROM mdl_course_modules cm
           JOIN mdl_assignfeedback_aif aif
-          ON aif.assignment = cm.id
+          ON aif.assignment = cm.instance
+          JOIN mdl_assignfeedback_aif_feedback aiff
+          ON aiff.aif = aif.id
           JOIN mdl_assign_submission sub
-          ON sub.assignment = a.id
+          ON sub.assignment = cm.instance
           JOIN mdl_assignsubmission_onlinetext olt
-          ON olt.assignment = a.id;
+          ON olt.assignment = cm.instance
           WHERE sub.status='submitted'\G;
 
        *
@@ -75,16 +75,14 @@ class process_feedback extends \core\task\scheduled_task {
 
         global $DB;
          $sql = "SELECT aif.id AS aifid, aif.prompt AS prompt,olt.onlinetext AS onlinetext, sub.id AS subid, sub.assignment as assignid, sub.userid as userid
-                 FROM {assign} a
-                 JOIN {course_modules} cm
-                 ON cm.instance = a.id
-                 JOIN {assignfeedback_aif} aif
-                 ON aif.assignment = cm.id
-                 JOIN {assign_submission} sub
-                 ON sub.assignment = a.id
-                 JOIN {assignsubmission_onlinetext} olt
-                 ON olt.assignment = a.id
-                 WHERE sub.status='submitted'";
+                FROM {course_modules} cm
+                JOIN {assignfeedback_aif} aif
+                ON aif.assignment = cm.instance
+                JOIN {assign_submission} sub
+                ON sub.assignment = cm.instance
+                JOIN {assignsubmission_onlinetext} olt
+                ON olt.assignment = cm.instance
+                WHERE sub.status='submitted'";
                 xdebug_break();
 
         $assignments = $DB->get_records_sql($sql);
@@ -92,7 +90,7 @@ class process_feedback extends \core\task\scheduled_task {
         foreach ($assignments as $assignment) {
           $prompt = $assignment->prompt . ' '.$assignment->onlinetext;
           $aifeedback =  $aif->perform_request($prompt);
-          $data = (object) [
+          $feedback = (object) [
             'aif' => $assignment->aifid,
             'feedback' => $aifeedback,
             'timecreated' => time(),
@@ -108,8 +106,8 @@ class process_feedback extends \core\task\scheduled_task {
         } else {
           $gradeid = $grade->id;
         }
-        $data->grade = $gradeid;
-        $DB->insert_record('assignfeedback_aif_feedback', $data);
+        $feedback->grade = $gradeid;
+        $DB->insert_record('assignfeedback_aif_feedback', $feedback);
         }
 
     }
