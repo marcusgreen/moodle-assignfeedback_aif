@@ -74,16 +74,34 @@ class process_feedback extends \core\task\scheduled_task {
        */
 
         global $DB;
-         $sql = "SELECT aif.id AS aifid, aif.prompt AS prompt,olt.onlinetext AS onlinetext, sub.id AS subid, sub.assignment as assignid, sub.userid as userid
-                FROM {course_modules} cm
-                JOIN {assignfeedback_aif} aif
-                ON aif.assignment = cm.instance
-                JOIN {assign_submission} sub
-                ON sub.assignment = cm.instance
-                JOIN {assignsubmission_onlinetext} olt
-                ON olt.assignment = cm.instance
-                WHERE sub.status='submitted'";
-                xdebug_break();
+        //  $sql = "SELECT aif.id AS aifid, aif.prompt AS prompt,olt.onlinetext AS onlinetext, sub.id AS submission, sub.assignment as assignid, sub.userid as userid
+        //         FROM {course_modules} cm
+        //         JOIN {assignfeedback_aif} aif
+        //         ON aif.assignment = cm.instance
+        //         JOIN {assign_submission} sub
+        //         ON sub.assignment = cm.instance
+        //         JOIN {assignsubmission_onlinetext} olt
+        //         ON olt.assignment = cm.instance
+        //         WHERE sub.status='submitted'
+        //         AND sub.id = NOT IN
+        //         (SELECT submission FROM {assignfeedback_aif_feedback} WHERE submission = sub.id)";
+          xdebug_break();
+
+      $sql = "SELECT
+            aif.id AS aifid,
+            aif.prompt AS prompt,
+            olt.onlinetext AS onlinetext,
+            sub.id AS submission,
+            sub.attemptnumber
+            sub.assignment AS assignid,
+            sub.userid AS userid
+            FROM {course_modules} cm
+            JOIN {assignfeedback_aif} aif ON aif.assignment = cm.instance
+            JOIN {assign_submission} sub ON sub.assignment = cm.instance
+            JOIN {assignsubmission_onlinetext} olt ON olt.assignment = cm.instance
+            WHERE sub.status = 'submitted'
+            AND sub.id NOT IN (SELECT subaiff.submission FROM {assignfeedback_aif_feedback} subaiff)";
+            xdebug_break();
 
         $assignments = $DB->get_records_sql($sql);
         $aif = new \assignfeedback_aif\aif(\context_system::instance()->id);
@@ -94,19 +112,10 @@ class process_feedback extends \core\task\scheduled_task {
             'aif' => $assignment->aifid,
             'feedback' => $aifeedback,
             'timecreated' => time(),
-            'submission' => $assignment->subid,
+            'userid' => $assignment->userid,
+            'submission' => $assignment->submission,
           ];
 
-        $grade = $DB->get_record('assign_grades', ['assignment' => $assignment->assignid, 'userid' => $assignment->userid]);
-        if(!$grade) {
-           $grade = new \stdClass();
-           $grade->assignment = $assignment->assignid;
-           $grade->userid = $assignment->userid;
-           $gradeid = $DB->insert_record('assign_grades', $grade);
-        } else {
-          $gradeid = $grade->id;
-        }
-        $feedback->grade = $gradeid;
         $DB->insert_record('assignfeedback_aif_feedback', $feedback);
         }
 
