@@ -40,7 +40,6 @@ class process_feedback extends \core\task\scheduled_task {
      * Execute the scheduled task.
      */
     public function execute() {
-              xdebug_break();
 
       /**
        * Equivalent cli
@@ -92,7 +91,7 @@ class process_feedback extends \core\task\scheduled_task {
             aif.prompt AS prompt,
             olt.onlinetext AS onlinetext,
             sub.id AS submission,
-            sub.attemptnumber
+            sub.attemptnumber,
             sub.assignment AS assignid,
             sub.userid AS userid
             FROM {course_modules} cm
