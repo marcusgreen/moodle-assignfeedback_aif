@@ -29,7 +29,11 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string - the name
      */
     public function get_name() {
-        return get_string('pluginname', 'assignfeedback_aif');
+        if(!$this->get_displaytostudent()) {
+            return '';
+        }
+
+       return get_string('pluginname', 'assignfeedback_aif');
     }
 
     /**
@@ -39,7 +43,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return void
      */
     public function get_settings(MoodleQuickForm $mform) {
-
         $defaultprompt = get_config('assignfeedback_aif', 'prompt');
         $mform->addElement('textarea',
                         'assignfeedback_aif_prompt',
@@ -49,17 +52,26 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->setDefault('assignfeedback_aif_prompt', $defaultprompt);
 
         $mform->addHelpButton('assignfeedback_aif_prompt', 'prompt', 'assignfeedback_aif');
-        // Disable Prompt if AI assisted feedback if comment feedback plugin is disabled.
         $mform->hideIf('assignfeedback_aif_prompt', 'assignfeedback_aif_enabled', 'notchecked');
 
         $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
 
+        // Add displaytostudent checkbox
+        $mform->addElement('checkbox',
+                        'assignfeedback_aif_displaytostudent',
+                        get_string('displaytostudent', 'assignfeedback_aif')
+                        );
+        $mform->addHelpButton('assignfeedback_aif_displaytostudent', 'displaytostudent', 'assignfeedback_aif');
+        // $mform->hideIf('assignfeedback_aif_displaytostudent', 'assignfeedback_aif_enabled', 'notchecked');
+
         global $DB;
-        $id = optional_param('update', 0, PARAM_INT);
+        $id = $this->assignment->get_instance()->id;
         $record = $DB->get_record('assignfeedback_aif', ['assignment' => $id]);
         if ($record) {
             $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
+            $mform->setDefault('assignfeedback_aif_displaytostudent', $record->displaytostudent);
+
         }
 
     }
@@ -162,9 +174,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_form_elements_for_user($grade, MoodleQuickForm $mform, stdClass $data, $userid) {
         global $DB;
-        $mform->addElement('text', 'assignfeedbackaif', $this->get_name());
+        $mform->addElement('textarea', 'assignfeedbackaif', $this->get_name(),['cols' => 50, 'rows' => 10, 'disabled' => true]);
         $mform->setType('assignfeedbackaif', PARAM_TEXT);
-        $mform->setDefault('assignfeedbackaif', 'zzzzzz');
         $sql = "
         SELECT aiff.feedback FROM {assignfeedback_aif} aif
         JOIN {assignfeedback_aif_feedback} aiff ON aiff.aif = aif.id
@@ -175,6 +186,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'assignment' => $grade->assignment
         ];
         $record = $DB->get_record_sql($sql, $params);
+        $mform->setDefault('assignfeedbackaif', $record->feedback);
+
 
 
     }
@@ -187,20 +200,24 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function save_settings(stdClass $data) {
         global $DB;
         $prompt = $data->assignfeedback_aif_prompt;
-        $instance = $data->instance;
+       $instance = $this->assignment->get_instance()->id;
         $record = $DB->get_record('assignfeedback_aif', ['assignment' => $instance]);
         if($record) {
             $data = (object) [
                 'id' => $record->id,
                 'prompt' => $prompt,
-                'assignment' => $instance
+                'assignment' => $instance,
+                'displaytostudent' => $data->assignfeedback_aif_displaytostudent
             ];
 
             $DB->update_record('assignfeedback_aif', $data);
         } else {
               $data = (object) [
                 'prompt' => $prompt,
-                'assignment' => $instance
+                'assignment' => $instance,
+                'timecreated' => time(),
+                'displaytostudent' => $data->assignfeedback_aif_displaytostudent
+
             ];
             $DB->insert_record('assignfeedback_aif', $data);
         }
@@ -229,6 +246,18 @@ class assign_feedback_aif extends assign_feedback_plugin {
         return true;
     }
 
+    public function get_displaytostudent() {
+        global $DB;
+        $instanceid = $this->assignment->get_course_module()->instance;
+        $record = $DB->get_record('assignfeedback_aif', ['assignment' => $instanceid]);
+        if($record->displaytostudent) {
+            return true;
+        } else {
+            return false;
+        }
+
+    }
+
     /**
      * Display the comment in the feedback table.
      *
@@ -237,8 +266,16 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string
      */
     public function view_summary(stdClass $grade, & $showviewlink) {
-        xdebug_break();
         global $DB;
+       // Check if user has assignment grading capability
+        $cmid = $this->assignment->get_course_module()->id;
+        $context = context_module::instance($cmid);
+        if (!has_capability('mod/assign:grade', $context)) {
+            if(!$this->get_displaytostudent()) {
+                return '';
+            }
+        }
+
         $sql = "SELECT aiff.feedback
             FROM {course_modules} cm
             JOIN {assignfeedback_aif} aif

@@ -73,15 +73,15 @@ class process_feedback extends \core\task\scheduled_task {
        */
 
         global $DB;
-        //  $sql = "SELECT aif.id AS aifid, aif.prompt AS prompt,olt.onlinetext AS onlinetext, sub.id AS submission, sub.assignment as assignid, sub.userid as userid
-        //         FROM {course_modules} cm
-        //         JOIN {assignfeedback_aif} aif
-        //         ON aif.assignment = cm.instance
-        //         JOIN {assign_submission} sub
-        //         ON sub.assignment = cm.instance
-        //         JOIN {assignsubmission_onlinetext} olt
-        //         ON olt.assignment = cm.instance
-        //         WHERE sub.status='submitted'
+         $sql = "SELECT aif.id AS aifid, aif.prompt AS prompt,olt.onlinetext AS onlinetext, sub.id AS submission, sub.assignment as assignid, sub.userid as userid
+                FROM {course_modules} cm
+                JOIN {assignfeedback_aif} aif
+                ON aif.assignment = cm.instance
+                JOIN {assign_submission} sub
+                ON sub.assignment = cm.instance
+                JOIN {assignsubmission_onlinetext} olt
+                ON olt.assignment = cm.instance
+                WHERE sub.status='submitted'
         //         AND sub.id = NOT IN
         //         (SELECT submission FROM {assignfeedback_aif_feedback} WHERE submission = sub.id)";
           xdebug_break();
@@ -120,3 +120,4 @@ class process_feedback extends \core\task\scheduled_task {
 
     }
 }
+  Memmel (bycs-lp fka mebis-lp)

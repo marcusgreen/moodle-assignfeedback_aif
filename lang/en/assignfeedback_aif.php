@@ -25,8 +25,10 @@
 
 defined('MOODLE_INTERNAL') || die();
 $string['default_help'] = 'The plugin will be enabled by default when a new assignment is created';
+$string['displaytostudent'] = 'Display to student';
+$string['displaytostudent_help'] = 'Display the AI Feedback to the student';
 $string['enabled'] = "Enabled";
-$string['enabled_help'] = 'Enable the AI Feedback plugin';
+$string['enabled_help'] = 'Enable the AI Feedback plugin, only works for onlinetext submissiont type';
 $string['enabledbydefault'] = 'Enabled by default';
 $string['file'] = 'Prompt file';
 $string['file_help'] = 'Uploading prompts through a text file is a long term goal';
