@@ -25,7 +25,7 @@ namespace assignfeedback_aif\event;
  */
 class observer {
 
-          /**
+        /**
          * Listen to events and queue the submission for processing.
          * @param \mod_assign\event\submission_created $event
          */
@@ -46,5 +46,24 @@ class observer {
             //$prompt = $aif->get_prompt();
 
             //$assign->save_grade($USER->id, $data);
+        }
+
+        /**
+         * Listen to events and queue the submission for processing.
+         * @param \mod_assign\event\submission_removed $event
+         */
+        public static function submission_removed(\mod_assign\event\submission_removed $event) {
+            global $DB;
+            $sql = "SELECT aif.id AS aifid FROM {assign} a
+                JOIN {course_modules} cm ON cm.instance = a.id and cm.course = a.course
+                JOIN {context} cx ON cx.instanceid = cm.id
+                JOIN {assignfeedback_aif} aif ON aif.assignment = cm.id
+                WHERE a.id = :aid";
+            $param = ['aid' => $event->get_assign()->get_instance()->id];
+            $aif = $DB->get_field_sql($sql, $param);
+            $DB->delete_records('assignfeedback_aif_feedback', [
+                'submission' => $event->other['submissionid'],
+                'aif' => $aif
+            ]);
         }
 }

@@ -26,6 +26,6 @@ defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'assignfeedback_aif';
 $plugin->release = '0.1.0';
-$plugin->version = 2025061201;
+$plugin->version = 2025070401;
 $plugin->requires = 2022112800;
 $plugin->maturity = MATURITY_ALPHA;

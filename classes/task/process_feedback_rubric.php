@@ -51,45 +51,24 @@ class process_feedback_rubric  extends \core\task\scheduled_task {
         ON sub.assignment = a.id
         JOIN {assignsubmission_onlinetext} olt
         ON olt.assignment = a.id AND olt.submission = sub.id
-        WHERE sub.status='submitted' AND contextlevel = 70";
-        $assignments = $DB->get_records_sql($sql);
+        WHERE sub.status='submitted' AND contextlevel = 70 AND sub.latest = 1";
+        $records = $DB->get_records_sql($sql);
         $aif = new \assignfeedback_aif\aif(\context_system::instance()->id);
-        foreach ($assignments as $assignment) {
-            // If feedback exists then skip.
-            $count = $DB->count_records('assignfeedback_aif_feedback',
-            ['aif'=>$assignment->aifid, 'submission' => $assignment->subid]);
-            if ($count > 0) {
+        foreach ($records as $record) {
+            if (empty($record)) {
                 continue;
             }
-            mtrace("Assignment {$assignment->aid} submission {$assignment->subid}");
-            $rsql = "SELECT * FROM {grading_areas} ga
-                JOIN {grading_definitions} gd ON gd.areaid = ga.id
-                JOIN {gradingform_rubric_criteria} rc ON rc.definitionid = gd.id
-                WHERE ga.contextid = :contextid AND ga.activemethod LIKE :gradingmethod AND ga.areaname = :areaname";
-            $params = ['contextid' => $assignment->contextid,
-            'gradingmethod' => 'rubric',
-            'areaname' => 'submissions'];
-            $records = $DB->get_records_sql($rsql, $params);
-            // If it is not rubric then skip.
-            if (empty($records)) {
+            $prompt =  $aif->get_prompt($record, 'rubric');
+            if (empty($prompt)) {
                 continue;
             }
-            $prompt = $assignment->prompt . ': ';
-            foreach ($records as $record) {
-                $definition = $DB->get_field_sql("SELECT '- ' || string_agg(definition, ' - ')
-                FROM {gradingform_rubric_levels} WHERE criterionid = :rcid",
-                ['rcid' => $record->id]);
-                $prompt .= " ". $record->description. " " . $definition;
-            }
-            $prompt .= " ".strip_tags($assignment->onlinetext);
             $aifeedback =  $aif->perform_request($prompt);
             $data = (object) [
-            'aif' => $assignment->aifid,
+            'aif' => $record->aifid,
             'feedback' => $aifeedback,
             'timecreated' => time(),
-            'submission' => $assignment->subid,
+            'submission' => $record->subid,
             ];
-
             $DB->insert_record('assignfeedback_aif_feedback', $data);
             mtrace($prompt);
         }

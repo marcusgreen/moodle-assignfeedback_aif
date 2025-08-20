@@ -29,5 +29,9 @@ $observers = [
         [
             'eventname'   => '\mod_assign\event\submission_created',
             'callback'    => '\assignfeedback_aif\event\observer::submission_created',
+        ],
+        [
+            'eventname'   => '\mod_assign\event\submission_removed',
+            'callback'    => '\assignfeedback_aif\event\observer::submission_removed',
         ]
     ];

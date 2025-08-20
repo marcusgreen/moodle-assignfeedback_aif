@@ -74,14 +74,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
     }
 
-    public function get_prompt()    {
-        global $DB;
-
-        $id = optional_param('id', 0, PARAM_INT);
-        $prompt = $DB->get_record('assignfeedback_aif', ['assignment' => $id]);
-        return $prompt;
-    }
-
     public function data_preprocessing(&$defaultvalues) {
         global $DB;
         return;
@@ -98,10 +90,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return boolean True if the comment feedback has been modified, else false.
      */
     public function is_feedback_modified(stdClass $grade, stdClass $data) {
-        global $DB;
-        return 'is_feedback_modified function';
-        $feedback = $DB->get_record('assignfeedback_aif', ['grade' => $grade->id]);
-        $oldvalue = $feedback ? $feedback->value : '';
+        $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+        $oldvalue = $record ? $record->feedback : '';
         $newvalue = $data->assignfeedbackaif ?? '';
         return $oldvalue !== $newvalue;
     }
@@ -173,9 +163,11 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_form_elements_for_user($grade, MoodleQuickForm $mform, stdClass $data, $userid) {
         global $DB;
-        $mform->addElement('text', 'assignfeedbackaif', $this->get_name());
-        $mform->setType('assignfeedbackaif', PARAM_TEXT);
-        $mform->setDefault('assignfeedbackaif', 'zzzzzz');
+        $mform->addElement('textarea', 'assignfeedbackaif', $this->get_name(), 'rows="10" cols="65"');
+        $mform->setType('assignfeedbackaif', PARAM_RAW);
+        $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+        $feedback = $record ? $record->feedback : '';
+        $mform->setDefault('assignfeedbackaif', $feedback);
 
         return true;
     }
@@ -210,19 +202,86 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function save(stdClass $grade, stdClass $data) {
         global $DB;
-        return true;
-        $feedback = $DB->get_record('assignfeedback_aif', ['grade' => $grade->id]);
-        if ($feedback) {
-            $feedback->value = $data->assignfeedbackaif;
-            $DB->update_record('assignfeedback_aif', $feedback);
-        } else {
-            $feedback = new stdClass();
-            $feedback->commenttext = $data->assignfeedbackaif;
-            $feedback->grade = $grade->id;
-            $feedback->assignment = $this->assignment->get_instance()->id;
-            $DB->insert_record('assignfeedback_aif', $feedback);
+        $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+        $record->timecreated = time();
+        $record->feedback = $data->assignfeedbackaif;
+        // Update the existing AI generated feedback.
+        if ($record) {
+            $DB->update_record('assignfeedback_aif_feedback', $record);
         }
         return true;
+    }
+
+
+    /**
+     * Return a list of detailed batch grading operations supported by this plugin.
+     *
+     * @return array - An array of objects containing batch operation details. Each object should contain:
+     *                  - 'key': the action identifier (string)
+     *                  - 'label': the button label (string)
+     *                  - 'icon': the button icon (string)
+     *                  - 'confirmationtitle': the title for the confirmation modal (string)
+     *                  - 'confirmationquestion': the question for the confirmation modal (string)
+     */
+    public function get_grading_batch_operation_details() {
+    global $OUTPUT;
+
+    return [
+        (object) [
+            'key' => 'generatefeedbackai',
+            'label' => get_string('batchoperationgeneratefeedbackai', 'assignfeedback_aif'),
+            'icon' => $OUTPUT->pix_icon('i/upload', ''),
+            'confirmationtitle' => get_string('generatefeedbackai', 'assignfeedback_aif'),
+            'confirmationquestion' => get_string('batchoperationconfirmgeneratefeedbackai', 'assignfeedback_aif'),
+        ],
+        (object) [
+            'key' => 'deletefeedbackai',
+            'label' => get_string('batchoperationdeletefeedbackai', 'assignfeedback_aif'),
+            'icon' => $OUTPUT->pix_icon('i/upload', ''),
+            'confirmationtitle' => get_string('deletefeedbackai', 'assignfeedback_aif'),
+            'confirmationquestion' => get_string('batchoperationconfirmdeletefeedbackai', 'assignfeedback_aif'),
+        ],
+    ];
+}
+
+    /**
+     * User has chosen a custom grading batch operation and selected some users.
+     *
+     * @param string $action - The chosen action
+     * @param array $users - An array of user ids
+     * @return string - The response html
+     */
+    public function grading_batch_operation($action, $users) {
+        // Currently only supports rubric grading method.
+        if ($action == 'generatefeedbackai') {
+            return $this->process_feedbackaif($users, 'generate');
+        }
+        if ($action == 'deletefeedbackai') {
+            return $this->process_feedbackaif($users, 'delete');
+        }
+        return '';
+    }
+
+    /**
+     * Generate AI feedback
+     *
+     * @return string The response html
+     */
+    public function process_feedbackaif($users, $action) {
+        // Run an ad-hoc task to generate AI feedback for submission.
+        $task = new \assignfeedback_aif\task\process_feedback_rubric_adhoc();
+        $task->set_custom_data([
+            'assignment' => $this->assignment->get_instance()->id,
+            'users' => $users,
+            'action' => $action,
+        ]);
+        \core\task\manager::queue_adhoc_task($task, true);
+
+        redirect(new moodle_url('view.php', [
+            'id' => $this->assignment->get_course_module()->id,
+            'action'=>'grading'
+            ]
+        ), get_string('processfeedbackainotify', 'assignfeedback_aif'));
     }
 
     /**
@@ -233,8 +292,21 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string
      */
     public function view_summary(stdClass $grade, & $showviewlink) {
+        $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+        $feedback = $record ? format_text($record->feedback) : '';
+        return $feedback;
+    }
+
+    /**
+     * Get AI feedback for a submission.
+     *
+     * @param int $assignment
+     * @param int $userid
+     * @return stdClass
+     */
+    public function get_feedbackaif(int $assignment, int $userid) {
         global $DB;
-        $sql = "SELECT aiff.feedback
+        $sql = "SELECT aiff.*
         FROM {assign} a
         JOIN {course_modules} cm
         ON cm.instance = a.id and cm.course = a.course
@@ -244,11 +316,11 @@ class assign_feedback_aif extends assign_feedback_plugin {
         ON aiff.aif = aif.id
         JOIN {assign_submission} sub
         ON sub.assignment = a.id AND aiff.submission = sub.id
-        WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1 AND sub.status = 'submitted'
+        WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1
         ORDER BY aiff.id";
-        $params = ['assignment' => $grade->assignment, 'userid' => $grade->userid];
+        $params = ['assignment' => $assignment, 'userid' => $userid];
         $record = $DB->get_record_sql($sql, $params);
-        return $record ? format_text($record->feedback) : '';
+        return $record;
     }
 
     /**
@@ -288,6 +360,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function delete_instance() {
         global $DB;
+        $records = $DB->get_records('assignfeedback_aif', array('assignment'=>$this->assignment->get_instance()->id), '', 'id');
+        foreach ($records as $record) {
+            $DB->delete_records('assignfeedback_aif_feedback', ['aif' => $record->id]);
+        }
         $DB->delete_records('assignfeedback_aif',
                             ['assignment' => $this->assignment->get_instance()->id]);
         return true;
