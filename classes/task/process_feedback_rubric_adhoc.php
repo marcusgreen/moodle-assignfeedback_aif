@@ -35,7 +35,7 @@ class process_feedback_rubric_adhoc  extends \core\task\adhoc_task {
         $users = $data->users;
         $action = $data->action;
         foreach ($users as $userid) {
-            $sql = "SELECT sub.id AS subid, cx.id AS contextid, aif.id AS aifid, aif.prompt AS prompt, a.id AS aid, olt.onlinetext AS onlinetext
+            $sql = "SELECT sub.id AS subid, cx.id AS contextid, aif.id AS aifid, aif.prompt AS prompt, a.id AS aid, olt.onlinetext AS onlinetext, sub.userid
             FROM {assign} a
             JOIN {course_modules} cm
             ON cm.instance = a.id and cm.course = a.course
@@ -65,7 +65,7 @@ class process_feedback_rubric_adhoc  extends \core\task\adhoc_task {
                 'submission' => $record->subid,
                 ];
                 $DB->insert_record('assignfeedback_aif_feedback', $data);
-                mtrace($prompt);
+
             }
             if ($action == 'delete') {
                 if ($record->subid) {

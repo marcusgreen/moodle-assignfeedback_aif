@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace assignfeedback_aif;
-
+require_once($CFG->libdir . '/filelib.php');
 /**
  * Class aif
  *
@@ -46,6 +46,8 @@ class aif {
 
     public function get_prompt(stdClass $assignment, string $gradingmethod): string {
         global $DB;
+        $prompt = '';
+        mtrace("Assignment {$assignment->aid} submission {$assignment->subid} user {$assignment->userid}");
         // If feedback exists then skip.
         $count = $DB->count_records('assignfeedback_aif_feedback',
         ['aif'=>$assignment->aifid, 'submission' => $assignment->subid]);
@@ -65,15 +67,25 @@ class aif {
             if (empty($records)) {
                 return '';
             }
-            mtrace("Assignment {$assignment->aid} submission {$assignment->subid}");
-            $prompt = $assignment->prompt . ': ';
+            $rubrics = $assignment->prompt . ': ';
             foreach ($records as $record) {
                 $levels = $DB->get_records('gradingform_rubric_levels', ['criterionid' => $record->id], 'score ASC');
                 $definitions = array_map(function($level) { return $level->definition; }, $levels);
                 $definition = '- ' . implode(' - ', $definitions);
                 $prompt .= " " . $record->description . " " . $definition;
             }
-            $prompt .= " ".strip_tags($assignment->onlinetext);
+
+            // Get prompt from text submissions.
+            if ($onlinetext = $DB->get_field('assignsubmission_onlinetext',
+                'onlinetext', ['submission' => $assignment->subid] )) {
+                mtrace("Content from text submission added to the prompt.");
+                $prompt .= " ".strip_tags($onlinetext);
+            }
+            // Get prompt from files submissions.
+            if ($filetext = self::extract_text_files($assignment)) {
+                $prompt .= " ".strip_tags($filetext);
+            }
+            $prompt = format_text($prompt);
             return $prompt;
         } else {
             $id = optional_param('id', 0, PARAM_INT);
@@ -81,4 +93,60 @@ class aif {
             return $prompt;
         }
     }
+
+
+    /**
+     * This function will extract text from PDF files.
+     *
+     * @param object $assignment
+     * @return string
+     */
+    protected static function extract_text_files($assignment) {
+        global $CFG;
+        $filetext = '';
+        if (isset($CFG->filedir)) {
+            $filedir = $CFG->filedir;
+        } else {
+            $filedir = $CFG->dataroot.'/filedir';
+        }
+        $fs = get_file_storage();
+        $converter = new \core_files\converter();
+        $contextid = $assignment->contextid;
+        $component = 'assignsubmission_file';
+        $filearea = 'submission_files';
+        $itemid = $assignment->subid;
+        $format = 'txt';
+        if ($files = $fs->get_area_files($contextid, $component,
+            $filearea, $itemid, 'itemid, filepath, filename', false)) {
+            foreach($files as $file) {
+                if ($file instanceof \stored_file) {
+                    $loadfile = $file;
+                    $mimetype = $file->get_mimetype();
+                    if ($mimetype === "text/plain" || $mimetype === '') {
+                        $loadfile = $file;
+                    } else {
+                        if (!$converter->can_convert_storedfile_to($file, $format)) {
+                            mtrace("Site document converter do not support file to text conversion.");
+                            break;
+                        }
+                        $conversion = $converter->start_conversion($file, $format);
+                        mtrace("Start process to convert files to TXT");
+                        if ($conversion->get('status') === \core_files\conversion::STATUS_COMPLETE) {
+                            if (!$convertedfile = $conversion->get_destfile()) {
+                                break;
+                            }
+                            $loadfile = $convertedfile;
+                        }
+                    }
+                    $myfile = $loadfile->copy_content_to_temp();
+                    $filetext = file_get_contents($myfile);
+                    unlink($myfile);
+                    mtrace("Content from file submissions added to the prompt.");
+                }
+            }
+        }
+        return $filetext;
+    }
+
+
 }
