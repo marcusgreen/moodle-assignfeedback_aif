@@ -39,7 +39,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return void
      */
     public function get_settings(MoodleQuickForm $mform) {
-        xdebug_break();
 
         $defaultprompt = get_config('assignfeedback_aif', 'prompt');
 

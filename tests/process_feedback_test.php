@@ -39,18 +39,17 @@ final class process_feedback_test extends \advanced_testcase {
     public $generator;
 
     public function setUp(): void{
-        echo 'test_process_feedback';
         $this->resetAfterTest();
 
         parent::setUp();
         set_config('enabled', 1, 'aiprovider_openai');
         set_config('apikey', TEST_LLM_APIKEY, 'aiprovider_openai');
         set_config('summarise_text', 1, 'aiprovider_openai');
-
     }
 
     public function test_execute() :void {
         $this->resetAfterTest();
+        global $DB;
         //Create test data
         $this->course = $this->getDataGenerator()->create_course();
         $this->teacher = $this->getDataGenerator()->create_user();
@@ -85,23 +84,15 @@ final class process_feedback_test extends \advanced_testcase {
          ];
 
         $generator->create_submission($submissiondata);
-        xdebug_break();
         $assignobj->submit_for_grading($this->student, $submissiondata);
 
         $task = new \assignfeedback_aif\task\process_feedback();
+        $recordcount = $DB->count_records('assignfeedback_aif_feedback');
+        $this->assertEquals(0, $recordcount);
         $task->execute();
-
-
-
-        $manager = \core\di::get(\core_ai\manager::class);
-               \core_ai\manager::set_action_state('aiprovider_openai', generate_text::class::get_basename(), 1);
-
-        $actions = [
-            generate_text::class,
-            summarise_text::class,
-        ];
+        $recordcount = $DB->count_records('assignfeedback_aif_feedback');
+        $this->assertEquals(1, $recordcount);
 
     }
-
 
 }
