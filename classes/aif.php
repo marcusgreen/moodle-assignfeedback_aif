@@ -44,7 +44,14 @@ class aif {
         return $responsedata['generatedcontent'];
     }
 
-    public function get_prompt(stdClass $assignment, string $gradingmethod): string {
+    /**
+     * Get prompt for a given assignment submission
+     *
+     * @param \stdClass $assignment
+     * @param string $gradingmethod
+     * @return string
+     */
+    public function get_prompt(\stdClass $assignment, string $gradingmethod): string {
         global $DB;
         $prompt = '';
         mtrace("Assignment {$assignment->aid} submission {$assignment->subid} user {$assignment->userid}");
@@ -67,7 +74,6 @@ class aif {
             if (empty($records)) {
                 return '';
             }
-            $rubrics = $assignment->prompt . ': ';
             foreach ($records as $record) {
                 $levels = $DB->get_records('gradingform_rubric_levels', ['criterionid' => $record->id], 'score ASC');
                 $definitions = array_map(function($level) { return $level->definition; }, $levels);
