@@ -21,6 +21,22 @@
  * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+defined('MOODLE_INTERNAL') || die();
+
+// File component for AI feedback.
+define('ASSIGNFEEDBACK_AIF_COMPONENT', 'assignfeedback_aif');
+
+// File area for AI feedback.
+define('ASSIGNFEEDBACK_AIF_FILEAREA', 'feedback');
+
+/**
+ * Library class for AI feedback plugin extending feedback plugin base class.
+ *
+ * @package   assignfeedback_aif
+ * @copyright 2024 Marcus Green
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class assign_feedback_aif extends assign_feedback_plugin {
 
     /**
@@ -30,6 +46,22 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_name() {
         return get_string('pluginname', 'assignfeedback_aif');
+    }
+
+    /**
+     * Get editor options for the feedback editor.
+     *
+     * @return array
+     */
+    public function get_editor_options() {
+        return [
+            'subdirs' => 1,
+            'maxbytes' => $this->assignment->get_course()->maxbytes,
+            'maxfiles' => -1,
+            'context' => $this->assignment->get_context(),
+            'noclean' => true,
+            'trusttext' => true,
+        ];
     }
 
     /**
@@ -48,6 +80,18 @@ class assign_feedback_aif extends assign_feedback_plugin {
                         ['size' => 70, 'rows' => 10]
                         );
         $mform->setDefault('assignfeedback_aif_prompt', $defaultprompt);
+
+        // Auto-generate on submission checkbox.
+        $mform->addElement('advcheckbox',
+                        'assignfeedback_aif_autogenerate',
+                        get_string('autogenerate', 'assignfeedback_aif'),
+                        ' ',
+                        [],
+                        [0, 1]
+                        );
+        $mform->setDefault('assignfeedback_aif_autogenerate', 0);
+        $mform->addHelpButton('assignfeedback_aif_autogenerate', 'autogenerate', 'assignfeedback_aif');
+        $mform->hideIf('assignfeedback_aif_autogenerate', 'assignfeedback_aif_enabled', 'notchecked');
 
         $mform->addElement('filemanager', // or 'file' for simpler file selection
                         'assignfeedback_aif_file',
@@ -69,6 +113,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $record = $DB->get_record('assignfeedback_aif', ['assignment' => $id]);
         if ($record) {
             $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
+            $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
         }
 
     }
@@ -82,7 +127,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         return $defaultvalues;
     }
     /**
-     * Has the comment feedback been modified   ?
+     * Has the comment feedback been modified?
      *
      * @param stdClass $grade The grade object.
      * @param stdClass $data Data from the form submission.
@@ -91,7 +136,14 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function is_feedback_modified(stdClass $grade, stdClass $data) {
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
         $oldvalue = $record ? $record->feedback : '';
-        $newvalue = $data->assignfeedbackaif ?? '';
+
+        // Get the new value from the editor.
+        if (isset($data->assignfeedbackaif_editor['text'])) {
+            $newvalue = $data->assignfeedbackaif_editor['text'];
+        } else {
+            $newvalue = '';
+        }
+
         return $oldvalue !== $newvalue;
     }
 
@@ -113,41 +165,41 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_editor_text($name, $gradeid) {
         global $DB;
-        xmldb_debug();
-        return 'get_editor_text function';
         if ($name === 'aif') {
-            $feedback = $DB->get_record('assignfeedback_aif', ['grade' => $gradeid]);
-            return $feedback ? $feedback->value : '';
+            // Get the grade to find the assignment and user.
+            $grade = $DB->get_record('assign_grades', ['id' => $gradeid]);
+            if ($grade) {
+                $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+                return $record ? $record->feedback : '';
+            }
         }
         return '';
     }
 
     /**
-     * Get the saved text content from the editor.
+     * Set the saved text content from the editor.
      *
      * @param string $name
      * @param string $value
      * @param int $gradeid
-     * @return string
+     * @return bool
      */
     public function set_editor_text($name, $value, $gradeid) {
         global $DB;
-        return 'set_editor_text function';
         if ($name === 'aif') {
-            $feedback = $DB->get_record('assignfeedback_aif', ['grade' => $gradeid]);
-            if ($feedback) {
-                $feedback->value = $value;
-                $DB->update_record('assignfeedback_aif', $feedback);
-            } else {
-                $feedback = new stdClass();
-                $feedback->value = $value;
-                $feedback->grade = $gradeid;
-                $feedback->assignment = $this->assignment->get_instance()->id;
-                $DB->insert_record('assignfeedback_aif', $feedback);
+            // Get the grade to find the assignment and user.
+            $grade = $DB->get_record('assign_grades', ['id' => $gradeid]);
+            if ($grade) {
+                $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+                if ($record) {
+                    $record->feedback = $value;
+                    $record->feedbackformat = FORMAT_HTML;
+                    $record->timecreated = time();
+                    $DB->update_record('assignfeedback_aif_feedback', $record);
+                    return true;
+                }
             }
-            return true;
         }
-
         return false;
     }
 
@@ -161,12 +213,57 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return bool true if elements were added to the form
      */
     public function get_form_elements_for_user($grade, MoodleQuickForm $mform, stdClass $data, $userid) {
-        global $DB;
-        $mform->addElement('textarea', 'assignfeedbackaif', $this->get_name(), 'rows="10" cols="65"');
-        $mform->setType('assignfeedbackaif', PARAM_RAW);
+        global $PAGE;
+
+        // Get the existing feedback.
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
-        $feedback = $record ? $record->feedback : '';
-        $mform->setDefault('assignfeedbackaif', $feedback);
+
+        // Check first for data from last form submission in case grading validation failed.
+        if (!empty($data->assignfeedbackaif_editor['text'])) {
+            $data->assignfeedbackaif = $data->assignfeedbackaif_editor['text'];
+            $data->assignfeedbackaifformat = $data->assignfeedbackaif_editor['format'];
+        } else if ($record && !empty($record->feedback)) {
+            $data->assignfeedbackaif = $record->feedback;
+            $data->assignfeedbackaifformat = $record->feedbackformat ?? FORMAT_HTML;
+        } else {
+            $data->assignfeedbackaif = '';
+            $data->assignfeedbackaifformat = FORMAT_HTML;
+        }
+
+        // Prepare the editor with files.
+        file_prepare_standard_editor(
+            $data,
+            'assignfeedbackaif',
+            $this->get_editor_options(),
+            $this->assignment->get_context(),
+            ASSIGNFEEDBACK_AIF_COMPONENT,
+            ASSIGNFEEDBACK_AIF_FILEAREA,
+            $grade->id
+        );
+
+        $mform->addElement('editor', 'assignfeedbackaif_editor', $this->get_name(), null, $this->get_editor_options());
+
+        // Add regenerate button.
+        $assignmentid = $this->assignment->get_instance()->id;
+        $buttonhtml = html_writer::tag(
+            'button',
+            get_string('regenerate', 'assignfeedback_aif'),
+            [
+                'type' => 'button',
+                'class' => 'btn btn-secondary mt-2',
+                'data-action' => 'regenerate-aif',
+                'data-assignmentid' => $assignmentid,
+                'data-userid' => $userid,
+            ]
+        );
+        $mform->addElement('html', $buttonhtml);
+
+        // Initialize the AMD module.
+        $PAGE->requires->js_call_amd(
+            'assignfeedback_aif/regenerate',
+            'init',
+            [$assignmentid, $userid]
+        );
 
         return true;
     }
@@ -179,19 +276,24 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function save_settings(stdClass $data) {
         global $DB;
         $prompt = $data->assignfeedback_aif_prompt;
+        $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
         $assignment = $data->coursemodule;
         $feedback = $DB->get_record('assignfeedback_aif', ['assignment' => $assignment]);
-        if($feedback) {
+        if ($feedback) {
             $feedback->prompt = $prompt;
+            $feedback->autogenerate = $autogenerate;
             $DB->update_record('assignfeedback_aif', $feedback);
         } else {
             $feedback = new stdClass();
             $feedback->prompt = $prompt;
+            $feedback->autogenerate = $autogenerate;
             $feedback->assignment = $assignment;
+            $feedback->timecreated = time();
             $DB->insert_record('assignfeedback_aif', $feedback);
         }
         return true;
     }
+
     /**
      * Saving the comment content into database.
      *
@@ -201,12 +303,44 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function save(stdClass $grade, stdClass $data) {
         global $DB;
+
+        // Process the editor files.
+        $data = file_postupdate_standard_editor(
+            $data,
+            'assignfeedbackaif',
+            $this->get_editor_options(),
+            $this->assignment->get_context(),
+            ASSIGNFEEDBACK_AIF_COMPONENT,
+            ASSIGNFEEDBACK_AIF_FILEAREA,
+            $grade->id
+        );
+
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
-        $record->timecreated = time();
-        $record->feedback = $data->assignfeedbackaif;
-        // Update the existing AI generated feedback.
+
         if ($record) {
+            $record->timecreated = time();
+            $record->feedback = $data->assignfeedbackaif;
+            $record->feedbackformat = $data->assignfeedbackaifformat;
             $DB->update_record('assignfeedback_aif_feedback', $record);
+        } else {
+            // Create new record if none exists yet.
+            $aif = $DB->get_record('assignfeedback_aif', [
+                'assignment' => $this->assignment->get_course_module()->id,
+            ]);
+            if ($aif) {
+                $submission = $DB->get_record('assign_submission', [
+                    'assignment' => $grade->assignment,
+                    'userid' => $grade->userid,
+                    'latest' => 1,
+                ]);
+                $newrecord = new stdClass();
+                $newrecord->aif = $aif->id;
+                $newrecord->submission = $submission ? $submission->id : null;
+                $newrecord->feedback = $data->assignfeedbackaif;
+                $newrecord->feedbackformat = $data->assignfeedbackaifformat;
+                $newrecord->timecreated = time();
+                $DB->insert_record('assignfeedback_aif_feedback', $newrecord);
+            }
         }
         return true;
     }
@@ -292,8 +426,13 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function view_summary(stdClass $grade, & $showviewlink) {
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
-        $feedback = $record ? format_text($record->feedback) : '';
-        return $feedback;
+        if (!$record) {
+            return '';
+        }
+        $format = $record->feedbackformat ?? FORMAT_HTML;
+        return format_text($record->feedback, $format, [
+            'context' => $this->assignment->get_context(),
+        ]);
     }
 
     /**

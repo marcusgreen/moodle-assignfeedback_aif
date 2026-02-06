@@ -33,6 +33,55 @@ $settings->add(new admin_setting_configtextarea('assignfeedback_aif/prompt',
                     get_string('prompt', 'assignfeedback_aif'),
                     get_string('prompt_text', 'assignfeedback_aif'),
                     get_string('prompt_setting', 'assignfeedback_aif'),
-
                     PARAM_RAW, 20, 3));
+
+// AI Backend selection.
+$backends = [
+    'local_ai_manager' => get_string('localaimanager', 'assignfeedback_aif'),
+    'core_ai_subsystem' => get_string('coreaisubsystem', 'assignfeedback_aif'),
+];
+$settings->add(new admin_setting_configselect(
+    'assignfeedback_aif/backend',
+    get_string('backends', 'assignfeedback_aif'),
+    get_string('backends_text', 'assignfeedback_aif'),
+    'core_ai_subsystem',
+    $backends
+));
+
+// Purpose configuration for local_ai_manager.
+$settings->add(new admin_setting_configtext(
+    'assignfeedback_aif/purpose',
+    get_string('purpose', 'assignfeedback_aif'),
+    get_string('purpose_text', 'assignfeedback_aif'),
+    'feedback',
+    PARAM_ALPHANUMEXT
+));
+
+// Prompt template.
+$settings->add(new admin_setting_configtextarea(
+    'assignfeedback_aif/prompttemplate',
+    get_string('prompttemplate', 'assignfeedback_aif'),
+    get_string('prompttemplate_text', 'assignfeedback_aif'),
+    get_string('defaultprompttemplate', 'assignfeedback_aif'),
+    PARAM_RAW,
+    80,
+    15
+));
+
+// Disclaimer.
+$settings->add(new admin_setting_configtext(
+    'assignfeedback_aif/disclaimer',
+    get_string('disclaimer', 'assignfeedback_aif'),
+    get_string('disclaimer_text', 'assignfeedback_aif'),
+    get_string('defaultdisclaimer', 'assignfeedback_aif'),
+    PARAM_RAW
+));
+
+// Translate disclaimer to user language.
+$settings->add(new admin_setting_configcheckbox(
+    'assignfeedback_aif/translatedisclaimer',
+    get_string('translatedisclaimer', 'assignfeedback_aif'),
+    get_string('translatedisclaimer_text', 'assignfeedback_aif'),
+    1
+));
 

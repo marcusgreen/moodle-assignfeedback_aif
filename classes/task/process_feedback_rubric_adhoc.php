@@ -16,64 +16,136 @@
 
 namespace assignfeedback_aif\task;
 
+use context_system;
+
 /**
- * Class process_feedback_rubric
+ * Ad-hoc task for processing AI feedback with rubric grading.
  *
  * @package    assignfeedback_aif
  * @copyright  2025 Sumaiya Javed <sumaiya.javed@catalyst.net.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class process_feedback_rubric_adhoc  extends \core\task\adhoc_task {
+class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
+
     /**
-     * Execute task.
+     * Execute the ad-hoc task.
      */
     public function execute() {
         global $DB;
-        $aif = new \assignfeedback_aif\aif(\context_system::instance()->id);
-        $data = $this->get_custom_data();
-        $assignment = $data->assignment;
-        $users = $data->users;
-        $action = $data->action;
+
+        $customdata = $this->get_custom_data();
+        $assignmentid = $customdata->assignment;
+        $users = $customdata->users;
+        $action = $customdata->action;
+
         foreach ($users as $userid) {
-            $sql = "SELECT sub.id AS subid, cx.id AS contextid, aif.id AS aifid, aif.prompt AS prompt, a.id AS aid, olt.onlinetext AS onlinetext, sub.userid
-            FROM {assign} a
-            JOIN {course_modules} cm
-            ON cm.instance = a.id and cm.course = a.course
-            JOIN {context} cx
-            ON cx.instanceid = cm.id
-            JOIN {assignfeedback_aif} aif
-            ON aif.assignment = cm.id
-            JOIN {assign_submission} sub
-            ON sub.assignment = a.id
-            JOIN {assignsubmission_onlinetext} olt
-            ON olt.assignment = a.id AND olt.submission = sub.id
-            WHERE sub.status='submitted' AND contextlevel = 70 AND a.id = :aid AND sub.userid = :userid AND sub.latest = 1";
-            $record = $DB->get_record_sql($sql, ['aid' => $assignment, 'userid' => $userid]);
-            if ($action == 'generate') {
-                if (empty($record)) {
-                    continue;
-                }
-                $prompt =  $aif->get_prompt($record, 'rubric');
-                if (empty($prompt)) {
-                    continue;
-                }
-                $aifeedback =  $aif->perform_request($prompt);
-                $data = (object) [
+            $record = $this->get_submission_record($assignmentid, $userid);
+
+            if ($action === 'generate') {
+                $this->generate_feedback($record);
+            } else if ($action === 'delete') {
+                $this->delete_feedback($record, $assignmentid);
+            }
+        }
+    }
+
+    /**
+     * Get the submission record for a user.
+     *
+     * @param int $assignmentid The assignment ID.
+     * @param int $userid The user ID.
+     * @return object|false The record or false if not found.
+     */
+    private function get_submission_record(int $assignmentid, int $userid) {
+        global $DB;
+
+        $sql = "SELECT sub.id AS subid,
+                       cx.id AS contextid,
+                       aif.id AS aifid,
+                       aif.prompt AS prompt,
+                       a.id AS aid,
+                       a.name AS assignmentname,
+                       sub.userid
+                FROM {assign} a
+                JOIN {course_modules} cm ON cm.instance = a.id AND cm.course = a.course
+                JOIN {context} cx ON cx.instanceid = cm.id
+                JOIN {assignfeedback_aif} aif ON aif.assignment = cm.id
+                JOIN {assign_submission} sub ON sub.assignment = a.id
+                WHERE sub.status = 'submitted'
+                  AND cx.contextlevel = 70
+                  AND a.id = :aid
+                  AND sub.userid = :userid
+                  AND sub.latest = 1";
+
+        return $DB->get_record_sql($sql, ['aid' => $assignmentid, 'userid' => $userid]);
+    }
+
+    /**
+     * Generate AI feedback for a submission.
+     *
+     * @param object|false $record The submission record.
+     */
+    private function generate_feedback($record): void {
+        global $DB;
+
+        if (empty($record)) {
+            return;
+        }
+
+        // Use the context from the submission for proper permission checks.
+        $aif = new \assignfeedback_aif\aif($record->contextid);
+
+        $promptdata = $aif->get_prompt($record, 'rubric');
+        if (empty($promptdata['prompt'])) {
+            return;
+        }
+
+        try {
+            // Determine purpose based on whether we have an image.
+            $purpose = null;
+            if (!empty($promptdata['options']['image'])) {
+                // Use 'itt' (Image To Text) purpose for image analysis.
+                $purpose = 'itt';
+                mtrace("Using 'itt' purpose for image analysis.");
+            }
+
+            $aifeedback = $aif->perform_request($promptdata['prompt'], $purpose, $promptdata['options']);
+
+            // Append disclaimer to feedback.
+            $aifeedback = $aif->append_disclaimer($aifeedback);
+
+            $data = (object) [
                 'aif' => $record->aifid,
                 'feedback' => $aifeedback,
                 'timecreated' => time(),
                 'submission' => $record->subid,
-                ];
-                $DB->insert_record('assignfeedback_aif_feedback', $data);
+            ];
+            $DB->insert_record('assignfeedback_aif_feedback', $data);
 
-            }
-            if ($action == 'delete') {
-                if ($record->subid) {
-                    $DB->delete_records('assignfeedback_aif_feedback',
-                        ['aif'=>$record->aifid, 'submission'=>$record->subid]);
-                    mtrace("AI feedback deleted for assignment {$assignment} submission {$record->subid} ");
-                }
-            }
+            mtrace("AI feedback generated for assignment {$record->aid} submission {$record->subid}");
+        } catch (\Exception $e) {
+            mtrace("Error generating AI feedback: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Delete AI feedback for a submission.
+     *
+     * @param object|false $record The submission record.
+     * @param int $assignmentid The assignment ID.
+     */
+    private function delete_feedback($record, int $assignmentid): void {
+        global $DB;
+
+        if (empty($record) || empty($record->subid)) {
+            return;
+        }
+
+        $DB->delete_records('assignfeedback_aif_feedback', [
+            'aif' => $record->aifid,
+            'submission' => $record->subid,
+        ]);
+
+        mtrace("AI feedback deleted for assignment {$assignmentid} submission {$record->subid}");
     }
 }
