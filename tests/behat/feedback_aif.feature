@@ -35,7 +35,7 @@ Feature: AI Feedback Plugin
           | assignsubmission_file_maxsizebytes  | 1024                 |
           | assignfeedback_comments_enabled     | 1                    |
           | assignfeedback_aif_enabled          | 1                    |
-          | assignfeedback_aif_prompt           | Analyste the grammar |
+          | assignfeedback_aif_prompt           | Analyse the grammar  |
           | maxfilessubmission                  | 2                    |
           | teamsubmission                      | 1                    |
           | submissiondrafts                    | 0                    |

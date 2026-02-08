@@ -26,21 +26,22 @@ defined('MOODLE_INTERNAL') || die();
  * @license     https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class process_feedback extends \core\task\scheduled_task {
-
     /**
      * Get a descriptive name for this task (shown to admins).
      *
      * @return string
      */
-    public function get_name() {
+    public function get_name(): string {
         return get_string('processfeedbacktask', 'assignfeedback_aif');
     }
 
     /**
      * Execute the scheduled task.
      */
-    public function execute() {
+    public function execute(): void {
         global $DB;
+
+        $clock = \core\di::get(\core\clock::class);
 
         $sql = "SELECT aif.id AS aifid,
                        aif.prompt AS prompt,
@@ -89,7 +90,7 @@ class process_feedback extends \core\task\scheduled_task {
                 $data = (object) [
                     'aif' => $submission->aifid,
                     'feedback' => $aifeedback,
-                    'timecreated' => time(),
+                    'timecreated' => $clock->now()->getTimestamp(),
                     'submission' => $submission->subid,
                 ];
                 $DB->insert_record('assignfeedback_aif_feedback', $data);

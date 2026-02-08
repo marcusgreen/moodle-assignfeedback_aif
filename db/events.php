@@ -19,7 +19,7 @@
  *
  * @package    assignfeedback_aif
  * @category   event
- * @copyright  2024 2024 Marcus Green
+ * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 

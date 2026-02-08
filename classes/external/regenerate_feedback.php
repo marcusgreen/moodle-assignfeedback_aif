@@ -21,18 +21,18 @@ use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
 use assignfeedback_aif\task\process_feedback_rubric_adhoc;
-use context_module;
+use core\context\module as context_module;
 use core\task\manager;
 
 /**
  * External function to regenerate AI feedback for a submission.
  *
  * @package    assignfeedback_aif
- * @copyright  2024 Marcus Green
+ * @copyright  2026 ISB Bayern
+ * @author     Dr. Peter Mayer
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class regenerate_feedback extends external_api {
-
     /**
      * Describes the parameters for regenerate_feedback.
      *
@@ -78,6 +78,7 @@ class regenerate_feedback extends external_api {
             'assignment' => $params['assignmentid'],
             'users' => [$params['userid']],
             'action' => 'generate',
+            'triggeredby' => 'manual',
         ]);
         manager::queue_adhoc_task($task, true);
 

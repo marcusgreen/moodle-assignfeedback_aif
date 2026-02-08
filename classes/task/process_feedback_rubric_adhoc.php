@@ -26,23 +26,23 @@ use context_system;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
-
     /**
      * Execute the ad-hoc task.
      */
-    public function execute() {
+    public function execute(): void {
         global $DB;
 
         $customdata = $this->get_custom_data();
         $assignmentid = $customdata->assignment;
         $users = $customdata->users;
         $action = $customdata->action;
+        $triggeredby = $customdata->triggeredby ?? 'manual';
 
         foreach ($users as $userid) {
             $record = $this->get_submission_record($assignmentid, $userid);
 
             if ($action === 'generate') {
-                $this->generate_feedback($record);
+                $this->generate_feedback($record, $triggeredby);
             } else if ($action === 'delete') {
                 $this->delete_feedback($record, $assignmentid);
             }
@@ -84,13 +84,20 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
      * Generate AI feedback for a submission.
      *
      * @param object|false $record The submission record.
+     * @param string $triggeredby How the task was triggered: 'auto' (observer) or 'manual' (teacher).
      */
-    private function generate_feedback($record): void {
-        global $DB;
+    private function generate_feedback($record, string $triggeredby = 'manual'): void {
+        global $DB, $CFG;
 
         if (empty($record)) {
             return;
         }
+
+        // Delete existing feedback for this submission to allow regeneration.
+        $DB->delete_records('assignfeedback_aif_feedback', [
+            'aif' => $record->aifid,
+            'submission' => $record->subid,
+        ]);
 
         // Use the context from the submission for proper permission checks.
         $aif = new \assignfeedback_aif\aif($record->contextid);
@@ -111,21 +118,69 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
 
             $aifeedback = $aif->perform_request($promptdata['prompt'], $purpose, $promptdata['options']);
 
-            // Append disclaimer to feedback.
-            $aifeedback = $aif->append_disclaimer($aifeedback);
+            // Practice mode: only when auto-triggered (not teacher) and no marking workflow.
+            $ispractice = ($triggeredby === 'auto') && $this->is_practice_mode($record->aid);
 
+            // Append the appropriate disclaimer to feedback.
+            $aifeedback = $aif->append_disclaimer($aifeedback, $ispractice);
+
+            $clock = \core\di::get(\core\clock::class);
             $data = (object) [
                 'aif' => $record->aifid,
                 'feedback' => $aifeedback,
-                'timecreated' => time(),
+                'timecreated' => $clock->now()->getTimestamp(),
                 'submission' => $record->subid,
             ];
             $DB->insert_record('assignfeedback_aif_feedback', $data);
+
+            // Ensure a grade record exists so students can see feedback in the submission view.
+            $this->ensure_grade_record($record);
 
             mtrace("AI feedback generated for assignment {$record->aid} submission {$record->subid}");
         } catch (\Exception $e) {
             mtrace("Error generating AI feedback: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Check whether this assignment operates in practice mode.
+     *
+     * Practice mode means autogenerate is enabled and marking workflow is off.
+     * In this mode, students see AI feedback immediately without teacher review,
+     * so a different disclaimer is used.
+     *
+     * @param int $assignmentid The assign instance ID.
+     * @return bool True if practice mode is active.
+     */
+    private function is_practice_mode(int $assignmentid): bool {
+        global $DB;
+
+        $assign = $DB->get_record('assign', ['id' => $assignmentid], 'id, markingworkflow');
+        if (empty($assign)) {
+            return false;
+        }
+
+        // Practice mode: marking workflow is off, so feedback is visible immediately.
+        return empty($assign->markingworkflow);
+    }
+
+    /**
+     * Ensure an assign_grades record exists for the user so feedback is visible.
+     *
+     * The assign module only renders feedback plugins when an assign_grades record
+     * exists. This creates one with grade=-1 (not yet graded) if none exists.
+     *
+     * @param object $record The submission record.
+     */
+    private function ensure_grade_record(object $record): void {
+        global $CFG;
+
+        require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
+        [$course, $cm] = get_course_and_cm_from_instance($record->aid, 'assign');
+        $context = \context_module::instance($cm->id);
+        $assign = new \assign($context, $cm, $course);
+        $assign->get_user_grade($record->userid, true);
     }
 
     /**

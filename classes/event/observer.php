@@ -27,7 +27,6 @@ use core\task\manager;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class observer {
-
     /**
      * Listen to assessable_submitted events and queue AI feedback generation if enabled.
      *
@@ -47,7 +46,8 @@ class observer {
 
         $assign = $event->get_assign();
         $assignmentid = $assign->get_instance()->id;
-        $userid = $event->relateduserid;
+        // Use relateduserid when set (teacher submitting on behalf), otherwise userid (student self-submission).
+        $userid = $event->relateduserid ?? $event->userid;
         $cm = $assign->get_course_module();
 
         // Check if autogenerate is enabled for this assignment.
@@ -76,6 +76,7 @@ class observer {
             'assignment' => $assignmentid,
             'users' => [$userid],
             'action' => 'generate',
+            'triggeredby' => 'auto',
         ]);
         manager::queue_adhoc_task($task, true);
     }

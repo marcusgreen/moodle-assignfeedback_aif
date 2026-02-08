@@ -18,7 +18,8 @@
  * Upgrade script for assignfeedback_aif.
  *
  * @package    assignfeedback_aif
- * @copyright  2024 Marcus Green
+ * @copyright  2026 ISB Bayern
+ * @author     Dr. Peter Mayer
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 

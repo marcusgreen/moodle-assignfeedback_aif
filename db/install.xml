@@ -17,7 +17,7 @@
         <KEY NAME="assignment" TYPE="foreign" FIELDS="assignment" REFTABLE="assign" REFFIELDS="id"/>
       </KEYS>
     </TABLE>
-    <TABLE NAME="assignfeedback_aif_feedback" COMMENT="Default comment for the table, please edit me">
+    <TABLE NAME="assignfeedback_aif_feedback" COMMENT="Stores AI-generated feedback text for individual submissions">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="aif" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>

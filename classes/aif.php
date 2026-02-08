@@ -18,9 +18,6 @@ namespace assignfeedback_aif;
 
 defined('MOODLE_INTERNAL') || die();
 
-global $CFG;
-require_once($CFG->libdir . '/filelib.php');
-
 use cache;
 use stdClass;
 
@@ -125,9 +122,11 @@ class aif {
         $llmresponse = $manager->process_action($action);
         $responsedata = $llmresponse->get_response_data();
 
-        if (is_null($responsedata) || !is_array($responsedata) ||
+        if (
+            is_null($responsedata) || !is_array($responsedata) ||
             !array_key_exists('generatedcontent', $responsedata) ||
-            is_null($responsedata['generatedcontent'])) {
+            is_null($responsedata['generatedcontent'])
+        ) {
             throw new \moodle_exception('err_retrievingfeedback_checkconfig', 'assignfeedback_aif');
         }
 
@@ -149,12 +148,28 @@ class aif {
         string $prompt,
         string $assignmentname
     ): string {
+        $language = $this->get_current_language_name();
+
+        // Expert mode detection: if the teacher's prompt contains {{submission}},
+        // it replaces the admin template entirely.
+        $isexpertmode = strpos($prompt, '{{submission}}') !== false;
+
+        if ($isexpertmode) {
+            // In expert mode, the teacher's prompt IS the complete template.
+            $replacements = [
+                '{{submission}}' => strip_tags($submission),
+                '{{rubric}}' => strip_tags($rubric),
+                '{{assignmentname}}' => strip_tags($assignmentname),
+                '{{language}}' => $language,
+            ];
+            return str_replace(array_keys($replacements), array_values($replacements), $prompt);
+        }
+
+        // Standard mode: inject the teacher's prompt into the admin template.
         $template = get_config('assignfeedback_aif', 'prompttemplate');
         if (empty($template)) {
             $template = get_string('defaultprompttemplate', 'assignfeedback_aif');
         }
-
-        $language = $this->get_current_language_name();
 
         $replacements = [
             '{{submission}}' => strip_tags($submission),
@@ -170,13 +185,24 @@ class aif {
     /**
      * Append the disclaimer to feedback text.
      *
+     * In practice mode (autogenerate without marking workflow), a different
+     * disclaimer is used to indicate the feedback was not reviewed by a teacher.
+     *
      * @param string $feedback The AI-generated feedback.
+     * @param bool $ispractice Whether this is practice mode (no teacher review).
      * @return string The feedback with disclaimer appended.
      */
-    public function append_disclaimer(string $feedback): string {
-        $disclaimer = get_config('assignfeedback_aif', 'disclaimer');
-        if (empty($disclaimer)) {
-            $disclaimer = get_string('defaultdisclaimer', 'assignfeedback_aif');
+    public function append_disclaimer(string $feedback, bool $ispractice = false): string {
+        if ($ispractice) {
+            $disclaimer = get_config('assignfeedback_aif', 'practicedisclaimer');
+            if (empty($disclaimer)) {
+                $disclaimer = get_string('defaultpracticedisclaimer', 'assignfeedback_aif');
+            }
+        } else {
+            $disclaimer = get_config('assignfeedback_aif', 'disclaimer');
+            if (empty($disclaimer)) {
+                $disclaimer = get_string('defaultdisclaimer', 'assignfeedback_aif');
+            }
         }
 
         $translatedisclaimer = get_config('assignfeedback_aif', 'translatedisclaimer');
@@ -226,47 +252,23 @@ class aif {
     /**
      * Get the human-readable name of the current language.
      *
+     * Uses Moodle's string manager to resolve the language name.
+     *
      * @return string The language name (e.g., "German", "English").
      */
     private function get_current_language_name(): string {
         $langcode = current_language();
+        $stringmanager = get_string_manager();
+        $languages = $stringmanager->get_list_of_languages();
 
-        $langnames = [
-            'de' => 'German',
-            'de_du' => 'German',
-            'en' => 'English',
-            'en_us' => 'English',
-            'fr' => 'French',
-            'es' => 'Spanish',
-            'it' => 'Italian',
-            'pt' => 'Portuguese',
-            'nl' => 'Dutch',
-            'pl' => 'Polish',
-            'ru' => 'Russian',
-            'ja' => 'Japanese',
-            'zh_cn' => 'Chinese',
-            'ko' => 'Korean',
-            'ar' => 'Arabic',
-            'tr' => 'Turkish',
-            'cs' => 'Czech',
-            'da' => 'Danish',
-            'fi' => 'Finnish',
-            'el' => 'Greek',
-            'he' => 'Hebrew',
-            'hu' => 'Hungarian',
-            'no' => 'Norwegian',
-            'sv' => 'Swedish',
-            'uk' => 'Ukrainian',
-        ];
-
-        // Try exact match first, then prefix match.
-        if (isset($langnames[$langcode])) {
-            return $langnames[$langcode];
+        if (isset($languages[$langcode])) {
+            return $languages[$langcode];
         }
 
+        // Try prefix match (e.g., 'de_du' -> 'de').
         $prefix = substr($langcode, 0, 2);
-        if (isset($langnames[$prefix])) {
-            return $langnames[$prefix];
+        if (isset($languages[$prefix])) {
+            return $languages[$prefix];
         }
 
         return 'English';
@@ -283,16 +285,6 @@ class aif {
         global $DB;
 
         mtrace("Assignment {$assignment->aid} submission {$assignment->subid} user {$assignment->userid}");
-
-        // If feedback exists then skip.
-        $count = $DB->count_records('assignfeedback_aif_feedback', [
-            'aif' => $assignment->aifid,
-            'submission' => $assignment->subid,
-        ]);
-        if ($count > 0) {
-            mtrace("Skipping as feedback exists");
-            return ['prompt' => '', 'options' => []];
-        }
 
         $rubrictext = '';
         $submissiontext = '';
@@ -372,7 +364,7 @@ class aif {
         $rubrictext = '';
         foreach ($records as $record) {
             $levels = $DB->get_records('gradingform_rubric_levels', ['criterionid' => $record->id], 'score ASC');
-            $definitions = array_map(function($level) {
+            $definitions = array_map(function ($level) {
                 return $level->definition;
             }, $levels);
             $definition = implode(' | ', $definitions);
