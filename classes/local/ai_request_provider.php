@@ -61,15 +61,19 @@ class ai_request_provider {
         global $USER;
         $aiconfig = \local_ai_manager\ai_manager_utils::get_ai_config($USER, $contextid, null, [$purpose]);
 
-        if (empty($aiconfig['availability']) ||
-            $aiconfig['availability']['available'] !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
+        if (
+            empty($aiconfig['availability']) ||
+            $aiconfig['availability']['available'] !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
+        ) {
             return false;
         }
 
         // Check specific purpose availability.
         foreach ($aiconfig['purposes'] as $purposeconfig) {
-            if ($purposeconfig['purpose'] === $purpose &&
-                $purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
+            if (
+                $purposeconfig['purpose'] === $purpose &&
+                $purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
+            ) {
                 return true;
             }
         }

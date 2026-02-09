@@ -14,13 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace assignfeedback_aif;
-
-use assignfeedback_aif\task\process_feedback;
-use assignfeedback_aif\task\process_feedback_rubric;
-use assignfeedback_aif\task\process_feedback_rubric_adhoc;
-use assignfeedback_aif\external\regenerate_feedback;
-
 /**
  * Tests for AI feedback tasks, observer and external API.
  *
@@ -29,6 +22,13 @@ use assignfeedback_aif\external\regenerate_feedback;
  * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+namespace assignfeedback_aif;
+
+use assignfeedback_aif\task\process_feedback;
+use assignfeedback_aif\task\process_feedback_rubric;
+use assignfeedback_aif\task\process_feedback_rubric_adhoc;
+use assignfeedback_aif\external\regenerate_feedback;
 
 require_once(__DIR__ . '/../../../tests/generator.php');
 
@@ -42,7 +42,6 @@ require_once(__DIR__ . '/../../../tests/generator.php');
  * @covers \assignfeedback_aif\external\regenerate_feedback
  */
 final class process_feedback_test extends \advanced_testcase {
-
     /**
      * Set up the DI mock for the AI request provider before each test.
      */
@@ -284,8 +283,11 @@ final class process_feedback_test extends \advanced_testcase {
         ], 'id DESC', '*', 0, 1);
         $task = reset($task);
         $customdata = json_decode($task->customdata);
-        $this->assertContains($env->student->id, $customdata->users,
-            'Adhoc task must contain the submitting student userid, not null');
+        $this->assertContains(
+            $env->student->id,
+            $customdata->users,
+            'Adhoc task must contain the submitting student userid, not null'
+        );
     }
 
     /**
@@ -298,7 +300,7 @@ final class process_feedback_test extends \advanced_testcase {
         global $DB;
         $this->resetAfterTest();
 
-        // --- Setup: assignment with submissiondrafts=1 and autogenerate enabled ---
+        // Setup: assignment with submissiondrafts=1 and autogenerate enabled.
         $env = $this->create_test_environment([
             'assignfeedback_aif_autogenerate' => 1,
             'submissiondrafts' => 1,
@@ -306,9 +308,11 @@ final class process_feedback_test extends \advanced_testcase {
 
         // CP1: AIF config record exists with autogenerate=1.
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $env->cm->id]);
-        $this->assertNotEmpty($aifconfig,
+        $this->assertNotEmpty(
+            $aifconfig,
             'CP1a: assignfeedback_aif record must exist for cm.id=' . $env->cm->id
-            . '. All records: ' . json_encode($DB->get_records('assignfeedback_aif')));
+            . '. All records: ' . json_encode($DB->get_records('assignfeedback_aif'))
+        );
         $this->assertEquals(1, (int) $aifconfig->autogenerate, 'CP1b: autogenerate must be 1');
 
         // CP2: AIF plugin enabled on assignment.
@@ -321,7 +325,7 @@ final class process_feedback_test extends \advanced_testcase {
         }
         $this->assertTrue($aifenabled, 'CP2: AIF feedback plugin must be enabled');
 
-        // --- Student creates a draft submission ---
+        // Student creates a draft submission.
         $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
         $this->setUser($env->student);
         $generator->create_submission([
@@ -342,26 +346,35 @@ final class process_feedback_test extends \advanced_testcase {
         $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
         $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
 
-        // --- submit_for_grading fires assessable_submitted, observer runs, task queued ---
-        // Only redirect messages (notifications) — NOT events, so the observer runs.
+        // Submit_for_grading fires assessable_submitted, observer runs, task queued.
+        // Only redirect messages (notifications), NOT events, so the observer runs.
         $msgsink = $this->redirectMessages();
         $env->assignobj->submit_for_grading((object) ['userid' => $env->student->id], []);
         $msgsink->close();
 
         // CP4: Adhoc task was queued by the observer.
         $tasksafter = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
-        $this->assertGreaterThan($tasksbefore, $tasksafter,
+        $this->assertGreaterThan(
+            $tasksbefore,
+            $tasksafter,
             'CP4: Adhoc task must be queued after submit_for_grading. '
-            . "Before={$tasksbefore}, After={$tasksafter}");
+            . "Before={$tasksbefore}, After={$tasksafter}"
+        );
 
         // CP5: Task has correct custom data.
         $task = $DB->get_records('task_adhoc', ['classname' => $taskclass], 'id DESC', '*', 0, 1);
         $task = reset($task);
         $customdata = json_decode($task->customdata);
-        $this->assertContains($env->student->id, $customdata->users,
-            'CP5a: Task users must contain the student. customdata=' . $task->customdata);
-        $this->assertEquals($env->assign->id, $customdata->assignment,
-            'CP5b: Task assignment must be the assign instance id');
+        $this->assertContains(
+            $env->student->id,
+            $customdata->users,
+            'CP5a: Task users must contain the student. customdata=' . $task->customdata
+        );
+        $this->assertEquals(
+            $env->assign->id,
+            $customdata->assignment,
+            'CP5b: Task assignment must be the assign instance id'
+        );
         $this->assertEquals('generate', $customdata->action, 'CP5c: Task action must be generate');
 
         // CP6: Execute the adhoc task — feedback is created.
@@ -371,8 +384,11 @@ final class process_feedback_test extends \advanced_testcase {
         $adhoctask->execute();
         ob_end_clean();
 
-        $this->assertGreaterThan(0, $DB->count_records('assignfeedback_aif_feedback'),
-            'CP6: Feedback record must be created after task execution');
+        $this->assertGreaterThan(
+            0,
+            $DB->count_records('assignfeedback_aif_feedback'),
+            'CP6: Feedback record must be created after task execution'
+        );
     }
 
     /**
@@ -386,7 +402,7 @@ final class process_feedback_test extends \advanced_testcase {
         global $DB;
         $this->resetAfterTest();
 
-        // --- Setup: submissiondrafts=0 (default) with autogenerate enabled ---
+        // Setup: submissiondrafts=0 (default) with autogenerate enabled.
         $env = $this->create_test_environment([
             'assignfeedback_aif_autogenerate' => 1,
             'submissiondrafts' => 0,
@@ -401,7 +417,7 @@ final class process_feedback_test extends \advanced_testcase {
         $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
         $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
 
-        // --- Student saves a submission — when submissiondrafts=0, this auto-submits ---
+        // Student saves a submission. When submissiondrafts=0, this auto-submits.
         // save_submission() fires assessable_submitted at line 7871 of mod/assign/locallib.php.
         $this->setUser($env->student);
         $msgsink = $this->redirectMessages();
@@ -425,21 +441,30 @@ final class process_feedback_test extends \advanced_testcase {
             'latest' => 1,
         ]);
         $this->assertNotEmpty($submission, 'CP2a: Submission must exist');
-        $this->assertEquals(ASSIGN_SUBMISSION_STATUS_SUBMITTED, $submission->status,
-            'CP2b: Submission status must be SUBMITTED when submissiondrafts=0');
+        $this->assertEquals(
+            ASSIGN_SUBMISSION_STATUS_SUBMITTED,
+            $submission->status,
+            'CP2b: Submission status must be SUBMITTED when submissiondrafts=0'
+        );
 
         // CP3: Adhoc task was queued.
         $tasksafter = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
-        $this->assertGreaterThan($tasksbefore, $tasksafter,
+        $this->assertGreaterThan(
+            $tasksbefore,
+            $tasksafter,
             'CP3: Adhoc task must be queued via save_submission path. '
-            . "Before={$tasksbefore}, After={$tasksafter}");
+            . "Before={$tasksbefore}, After={$tasksafter}"
+        );
 
         // CP4: Task has correct data and execution creates feedback.
         $task = $DB->get_records('task_adhoc', ['classname' => $taskclass], 'id DESC', '*', 0, 1);
         $task = reset($task);
         $customdata = json_decode($task->customdata);
-        $this->assertContains($env->student->id, $customdata->users,
-            'CP4a: Task users must contain the student');
+        $this->assertContains(
+            $env->student->id,
+            $customdata->users,
+            'CP4a: Task users must contain the student'
+        );
 
         $adhoctask = new process_feedback_rubric_adhoc();
         $adhoctask->set_custom_data($customdata);
@@ -447,8 +472,11 @@ final class process_feedback_test extends \advanced_testcase {
         $adhoctask->execute();
         ob_end_clean();
 
-        $this->assertGreaterThan(0, $DB->count_records('assignfeedback_aif_feedback'),
-            'CP4b: Feedback record must be created');
+        $this->assertGreaterThan(
+            0,
+            $DB->count_records('assignfeedback_aif_feedback'),
+            'CP4b: Feedback record must be created'
+        );
     }
 
     /**

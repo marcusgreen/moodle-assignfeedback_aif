@@ -22,8 +22,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 // File component for AI feedback.
 define('ASSIGNFEEDBACK_AIF_COMPONENT', 'assignfeedback_aif');
 
@@ -113,10 +111,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->hideIf('assignfeedback_aif_autogenerate', 'assignfeedback_aif_enabled', 'notchecked');
 
         $mform->addElement(
-            'filemanager', // or 'file' for simpler file selection
+            'filemanager',
             'assignfeedback_aif_file',
-            get_string('file', 'assignfeedback_aif'), // label for file selection
-            ['maxfiles' => 1, 'maxfilesize' => '10MB'] // adjust as needed
+            get_string('file', 'assignfeedback_aif'),
+            ['maxfiles' => 1, 'maxfilesize' => '10MB']
         );
 
         $mform->addHelpButton('assignfeedback_aif_prompt', 'prompt', 'assignfeedback_aif');

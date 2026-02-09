@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace assignfeedback_aif;
-
 /**
  * Tests for the AI handler class.
  *
@@ -27,10 +25,11 @@ namespace assignfeedback_aif;
  * @covers     \assignfeedback_aif\aif
  */
 
+namespace assignfeedback_aif;
+
 require_once(__DIR__ . '/../../../tests/generator.php');
 
 final class aif_test extends \advanced_testcase {
-
     /**
      * Test that build_prompt_from_template replaces all placeholders and strips HTML.
      */

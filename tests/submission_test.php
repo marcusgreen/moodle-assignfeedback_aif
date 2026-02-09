@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace assignfeedback_aif;
-
 /**
  * Tests for the AI feedback plugin class (locallib).
  *
@@ -26,10 +24,11 @@ namespace assignfeedback_aif;
  * @covers     \assign_feedback_aif
  */
 
+namespace assignfeedback_aif;
+
 require_once(__DIR__ . '/../../../tests/generator.php');
 
 final class submission_test extends \advanced_testcase {
-
     /**
      * Test that the plugin can be enabled on an assignment instance.
      */
