@@ -22,13 +22,21 @@
  * @copyright  2026 ISB Bayern
  * @author     Dr. Peter Mayer
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \assignfeedback_aif\aif
  */
 
 namespace assignfeedback_aif;
 
 require_once(__DIR__ . '/../../../tests/generator.php');
 
+/**
+ * Tests for the AI handler class.
+ *
+ * @package    assignfeedback_aif
+ * @copyright  2026 ISB Bayern
+ * @author     Dr. Peter Mayer
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \assignfeedback_aif\aif
+ */
 final class aif_test extends \advanced_testcase {
     /**
      * Test that build_prompt_from_template replaces all placeholders and strips HTML.

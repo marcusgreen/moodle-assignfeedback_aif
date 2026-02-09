@@ -25,6 +25,8 @@
 
 /**
  * Custom code to be run on installing the plugin.
+ *
+ * @return bool
  */
 function xmldb_assignfeedback_aif_install() {
 

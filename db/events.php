@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Event observers for AI Assisted Feedback
+ * Event observers for AI Assisted Feedback.
  *
  * @package    assignfeedback_aif
  * @category   event

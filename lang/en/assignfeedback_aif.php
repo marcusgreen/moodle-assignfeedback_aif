@@ -63,7 +63,7 @@ Respond in {{language}}.';
 $string['deletefeedbackai'] = 'Delete AI feedback';
 $string['disclaimer'] = 'Disclaimer';
 $string['disclaimer_text'] = 'Text appended to each AI response indicating feedback is from a Large Language Model and not a human.';
-$string['enabled'] = "Enabled";
+$string['enabled'] = 'Enabled';
 $string['enabled_help'] = 'Enable the AI Feedback plugin. <br>
 Note: To generate AI feedback from file submissions, please enable a document converter supporting text conversions like Google Drive.';
 $string['enabledbydefault'] = 'Enabled by default';
@@ -82,8 +82,8 @@ $string['pluginname'] = 'AI Assisted Feedback';
 $string['practicedisclaimer'] = 'Practice mode disclaimer';
 $string['practicedisclaimer_text'] = 'Disclaimer appended to AI feedback in practice mode (autogenerate without marking workflow). This text indicates the feedback was not reviewed by a teacher.';
 $string['privacy:aipath'] = 'AI Feedback';
-$string['privacy:metadata:assignmentid'] = 'Assignment ID';
 $string['privacy:metadata:aitext'] = 'AI Feedback text.';
+$string['privacy:metadata:assignmentid'] = 'Assignment ID';
 $string['privacy:metadata:tablesummary'] = 'This stores AI feedback made by the AI proivders as feedback for the student on their submission.';
 $string['processfeedbactask'] = 'Process AI feedback task';
 $string['processfeedbackainotify'] = 'Please wait for the cron to run to process the AI Feedback';

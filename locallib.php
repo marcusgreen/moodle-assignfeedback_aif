@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Main class for AI Feedback feedback plugin
+ * Main class for AI Feedback feedback plugin.
  *
  * @package    assignfeedback_aif
  * @copyright  2024 Marcus Green
@@ -402,10 +402,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function grading_batch_operation($action, $users): string {
         // Currently only supports rubric grading method.
         if ($action == 'generatefeedbackai') {
-            return $this->process_feedbackaif($users, 'generate');
+            $this->process_feedbackaif($users, 'generate');
         }
         if ($action == 'deletefeedbackai') {
-            return $this->process_feedbackaif($users, 'delete');
+            $this->process_feedbackaif($users, 'delete');
         }
         return '';
     }

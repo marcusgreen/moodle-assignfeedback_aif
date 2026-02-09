@@ -31,8 +31,9 @@ class observer {
      * Listen to assessable_submitted events and queue AI feedback generation if enabled.
      *
      * @param \mod_assign\event\assessable_submitted $event The event object.
+     * @return void
      */
-    public static function assessable_submitted(\mod_assign\event\assessable_submitted $event) {
+    public static function assessable_submitted(\mod_assign\event\assessable_submitted $event): void {
         self::queue_feedback_generation($event);
     }
 
@@ -40,8 +41,9 @@ class observer {
      * Queue AI feedback generation for a submission if autogenerate is enabled.
      *
      * @param \mod_assign\event\assessable_submitted $event The event object.
+     * @return void
      */
-    private static function queue_feedback_generation(\mod_assign\event\assessable_submitted $event) {
+    private static function queue_feedback_generation(\mod_assign\event\assessable_submitted $event): void {
         global $DB;
 
         $assign = $event->get_assign();
@@ -85,8 +87,9 @@ class observer {
      * Listen to submission_removed events and delete associated AI feedback.
      *
      * @param \mod_assign\event\submission_removed $event The event object.
+     * @return void
      */
-    public static function submission_removed(\mod_assign\event\submission_removed $event) {
+    public static function submission_removed(\mod_assign\event\submission_removed $event): void {
         global $DB;
 
         $sql = "SELECT aif.id AS aifid

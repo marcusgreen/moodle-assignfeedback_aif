@@ -21,13 +21,20 @@
  * @category   test
  * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \assign_feedback_aif
  */
 
 namespace assignfeedback_aif;
 
 require_once(__DIR__ . '/../../../tests/generator.php');
 
+/**
+ * Tests for the AI feedback plugin class (locallib).
+ *
+ * @package    assignfeedback_aif
+ * @copyright  2024 Marcus Green
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \assign_feedback_aif
+ */
 final class submission_test extends \advanced_testcase {
     /**
      * Test that the plugin can be enabled on an assignment instance.

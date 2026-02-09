@@ -56,6 +56,12 @@ class aif {
     public function perform_request(string $prompt, ?string $purpose = null, array $options = []): string {
         global $USER;
 
+        // During Behat testing, return a mock response since no real AI backend is configured.
+        // PHPUnit tests use proper DI mocking via \core\di::set() instead.
+        if (defined('BEHAT_SITE_RUNNING')) {
+            return 'AI Feedback';
+        }
+
         $provider = \core\di::get(ai_request_provider::class);
 
         // Get purpose from config if not provided.

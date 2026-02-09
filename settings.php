@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Settings for aif assign feedback plugin
+ * Settings for aif assign feedback plugin.
  *
  * @package    assignfeedback_aif
  * @copyright  2024 Marcus Green
