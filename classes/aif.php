@@ -19,6 +19,7 @@ namespace assignfeedback_aif;
 defined('MOODLE_INTERNAL') || die();
 
 use assignfeedback_aif\local\ai_request_provider;
+use assignfeedback_editpdf\pdf;
 use stdClass;
 
 /**
@@ -49,7 +50,7 @@ class aif {
      *
      * @param string $prompt The prompt to send to the AI.
      * @param string|null $purpose The purpose of the request (for local_ai_manager). If null, uses config.
-     * @param array $options Additional options (e.g., 'image' for base64 encoded image).
+     * @param array $options Additional options (e.g., 'image' for ITT requests).
      * @return string The AI response.
      * @throws \moodle_exception
      */
@@ -181,9 +182,13 @@ class aif {
     /**
      * Get prompt for a given assignment submission.
      *
+     * Extracts text from all submitted content (online text, documents, images, PDFs)
+     * and builds a combined prompt. Images and PDFs are converted to text via AI (ITT purpose)
+     * before being included in the final prompt.
+     *
      * @param stdClass $assignment The assignment data object.
      * @param string $gradingmethod The grading method (e.g., 'rubric').
-     * @return array Array with 'prompt' string and 'options' array (may contain 'image' key).
+     * @return array Array with 'prompt' string and 'options' array.
      */
     public function get_prompt(stdClass $assignment, string $gradingmethod): array {
         global $DB;
@@ -206,25 +211,15 @@ class aif {
             $submissiontext .= $onlinetext;
         }
 
-        // Get submission content from files (text or images).
-        $fileresult = self::extract_content_from_files($assignment);
-        if (!empty($fileresult['text'])) {
-            $submissiontext .= ' ' . $fileresult['text'];
-        }
-        if (!empty($fileresult['image'])) {
-            $options['image'] = $fileresult['image'];
-            mtrace("Image file encoded as base64 for AI analysis.");
+        // Get submission content from files (all files converted to text).
+        $filetext = $this->extract_content_from_files($assignment);
+        if (!empty($filetext)) {
+            $submissiontext .= ' ' . $filetext;
         }
 
-        // If no text but we have an image, use a default description prompt.
-        if (empty($submissiontext) && empty($options['image'])) {
-            mtrace("No submission text or image found");
+        if (empty($submissiontext)) {
+            mtrace("No submission text found");
             return ['prompt' => '', 'options' => []];
-        }
-
-        // If we only have an image, add a placeholder for submission text.
-        if (empty($submissiontext) && !empty($options['image'])) {
-            $submissiontext = '[Image submission - see attached image]';
         }
 
         // Use the template system to build the full prompt.
@@ -279,32 +274,37 @@ class aif {
     }
 
     /**
-     * Image MIME types that can be sent to AI for analysis.
+     * Image MIME types that can be sent to AI for text extraction.
      */
     private const IMAGE_MIMETYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
     /**
-     * Extract content from submitted files (text and images).
+     * Extract text content from all submitted files.
+     *
+     * All file types are converted to text:
+     * - Text files: read directly.
+     * - Documents (PDF, DOCX...): converted via core_files converter or PDF-to-images + ITT.
+     * - Images (PNG, JPEG, WebP, GIF): converted to text via AI ITT (image-to-text) requests.
+     * - PDFs: each page rendered as image, then converted to text via ITT.
+     *
+     * Results are cached by content hash to avoid repeated expensive AI calls.
      *
      * @param stdClass $assignment The assignment data object.
-     * @return array Array with 'text' (string) and 'image' (base64 data URL or null).
+     * @return string The combined extracted text from all files.
      */
-    protected static function extract_content_from_files(stdClass $assignment): array {
-        global $CFG;
-
-        $result = ['text' => '', 'image' => null];
+    protected function extract_content_from_files(stdClass $assignment): string {
         $fs = get_file_storage();
-        $converter = new \core_files\converter();
         $contextid = $assignment->contextid;
         $component = 'assignsubmission_file';
         $filearea = 'submission_files';
         $itemid = $assignment->subid;
-        $format = 'txt';
 
         $files = $fs->get_area_files($contextid, $component, $filearea, $itemid, 'itemid, filepath, filename', false);
         if (!$files) {
-            return $result;
+            return '';
         }
+
+        $alltext = '';
 
         foreach ($files as $file) {
             if (!$file instanceof \stored_file) {
@@ -312,50 +312,249 @@ class aif {
             }
 
             $mimetype = $file->get_mimetype();
+            $filename = $file->get_filename();
 
-            // Check if it's an image file - encode as base64.
+            // Plain text files: read directly.
+            if ($mimetype === 'text/plain') {
+                $tempfile = $file->copy_content_to_temp();
+                $alltext .= file_get_contents($tempfile) . "\n";
+                unlink($tempfile);
+                mtrace("Text content from '{$filename}' added to the prompt.");
+                continue;
+            }
+
+            // Images: convert to text via ITT.
             if (in_array($mimetype, self::IMAGE_MIMETYPES)) {
-                // Only use the first image found (AI APIs typically only support one image per request).
-                if ($result['image'] === null) {
-                    $content = $file->get_content();
-                    $base64 = base64_encode($content);
-                    $result['image'] = 'data:' . $mimetype . ';base64,' . $base64;
-                    mtrace("Image file '{$file->get_filename()}' encoded as base64 for AI analysis.");
-                } else {
-                    mtrace("Skipping additional image '{$file->get_filename()}' - only first image is used.");
+                $extractedtext = $this->extract_content_from_image($file);
+                if (!empty($extractedtext)) {
+                    $alltext .= $extractedtext . "\n";
+                    mtrace("Text extracted from image '{$filename}' via ITT.");
                 }
                 continue;
             }
 
-            // Try to extract text from non-image files.
-            $loadfile = $file;
-
-            if ($mimetype !== 'text/plain' && $mimetype !== '') {
-                if (!$converter->can_convert_storedfile_to($file, $format)) {
-                    mtrace("Site document converter does not support conversion for: {$mimetype}");
-                    continue;
+            // PDFs: render pages as images, then extract text via ITT.
+            if ($mimetype === 'application/pdf') {
+                $extractedtext = $this->extract_content_from_pdf($file);
+                if (!empty($extractedtext)) {
+                    $alltext .= $extractedtext . "\n";
+                    mtrace("Text extracted from PDF '{$filename}' via page-by-page ITT.");
                 }
-
-                $conversion = $converter->start_conversion($file, $format);
-                mtrace("Start process to convert file to TXT");
-
-                if ($conversion->get('status') === \core_files\conversion::STATUS_COMPLETE) {
-                    $convertedfile = $conversion->get_destfile();
-                    if (!$convertedfile) {
-                        continue;
-                    }
-                    $loadfile = $convertedfile;
-                } else {
-                    continue;
-                }
+                continue;
             }
 
-            $tempfile = $loadfile->copy_content_to_temp();
-            $result['text'] .= file_get_contents($tempfile) . "\n";
-            unlink($tempfile);
-            mtrace("Content from file '{$file->get_filename()}' added to the prompt.");
+            // Other document types: try core_files converter (e.g., DOCX → TXT).
+            $extractedtext = $this->extract_content_via_converter($file);
+            if (!empty($extractedtext)) {
+                $alltext .= $extractedtext . "\n";
+                mtrace("Content from file '{$filename}' converted and added to the prompt.");
+            }
         }
 
-        return $result;
+        return trim($alltext);
+    }
+
+    /**
+     * Extract text from an image file using AI image-to-text (ITT).
+     *
+     * Results are cached by content hash to avoid repeated AI calls.
+     *
+     * @param \stored_file $file The image file.
+     * @return string The extracted text, or empty string on failure.
+     */
+    protected function extract_content_from_image(\stored_file $file): string {
+        // Check cache first.
+        $cached = $this->get_from_cache($file->get_contenthash());
+        if ($cached !== null) {
+            mtrace("Using cached content for '{$file->get_filename()}'.");
+            return $cached;
+        }
+
+        $encodedimage = 'data:' . $file->get_mimetype() . ';base64,' . base64_encode($file->get_content());
+
+        try {
+            $content = $this->retrieve_text_from_ai($encodedimage);
+            $this->store_to_cache($file->get_contenthash(), $content);
+            return $content;
+        } catch (\Exception $e) {
+            mtrace("Failed to extract text from image '{$file->get_filename()}': " . $e->getMessage());
+            return '';
+        }
+    }
+
+    /**
+     * Extract text from a PDF by rendering each page as an image and sending to ITT.
+     *
+     * Uses ghostscript/pdftoppm (via assignfeedback_editpdf) to render pages.
+     * Results are cached by content hash to avoid repeated AI calls.
+     *
+     * @param \stored_file $file The PDF file.
+     * @return string The combined extracted text from all pages.
+     */
+    protected function extract_content_from_pdf(\stored_file $file): string {
+        // Check cache first.
+        $cached = $this->get_from_cache($file->get_contenthash());
+        if ($cached !== null) {
+            mtrace("Using cached content for PDF '{$file->get_filename()}'.");
+            return $cached;
+        }
+
+        try {
+            $encodedimages = $this->convert_pdf_to_images($file);
+        } catch (\Exception $e) {
+            mtrace("Failed to convert PDF '{$file->get_filename()}' to images: " . $e->getMessage());
+            // Fallback: try core_files converter.
+            return $this->extract_content_via_converter($file);
+        }
+
+        $content = '';
+        $pagenum = 0;
+        foreach ($encodedimages as $encodedimage) {
+            $pagenum++;
+            try {
+                $pagetext = $this->retrieve_text_from_ai($encodedimage);
+                $content .= $pagetext . "\n";
+                mtrace("Extracted text from PDF page {$pagenum}/{" . count($encodedimages) . "}.");
+            } catch (\Exception $e) {
+                mtrace("Failed to extract text from PDF page {$pagenum}: " . $e->getMessage());
+            }
+        }
+
+        $content = trim($content);
+        if (!empty($content)) {
+            $this->store_to_cache($file->get_contenthash(), $content);
+        }
+
+        return $content;
+    }
+
+    /**
+     * Convert a PDF file into an array of base64-encoded page images.
+     *
+     * Uses assignfeedback_editpdf's PDF class (ghostscript/pdftoppm) to render pages.
+     *
+     * @param \stored_file $file The PDF file.
+     * @return string[] Array of base64-encoded data URLs, one per page.
+     * @throws \moodle_exception If the PDF cannot be processed.
+     */
+    protected function convert_pdf_to_images(\stored_file $file): array {
+        $tmpdir = \make_request_directory();
+        $tmpfilename = 'assignfeedback_aif_tmp_' . uniqid() . '.pdf';
+        file_put_contents($tmpdir . '/' . $tmpfilename, $file->get_content());
+
+        $pdf = new pdf();
+        $pdf->set_image_folder($tmpdir);
+        $pdf->set_pdf($tmpdir . '/' . $tmpfilename);
+        $images = $pdf->get_images();
+
+        $imagearray = [];
+        foreach ($images as $image) {
+            $imagepath = $tmpdir . '/' . $image;
+            $imagecontent = file_get_contents($imagepath);
+            $imagemime = mime_content_type($imagepath);
+            $imagearray[] = 'data:' . $imagemime . ';base64,' . base64_encode($imagecontent);
+        }
+
+        return $imagearray;
+    }
+
+    /**
+     * Send an encoded image to the AI backend for text extraction (ITT purpose).
+     *
+     * @param string $encodedimage Base64-encoded data URL of the image.
+     * @return string The extracted text from the AI response.
+     * @throws \moodle_exception If the AI request fails.
+     */
+    protected function retrieve_text_from_ai(string $encodedimage): string {
+        $imageprompt = 'Return the text that is written on the image/document. '
+            . 'Do not wrap any explanatory text around. Return only the bare content.';
+
+        return $this->perform_request($imageprompt, 'itt', ['image' => $encodedimage]);
+    }
+
+    /**
+     * Extract text from a file using the core_files converter (e.g., DOCX to TXT).
+     *
+     * @param \stored_file $file The file to convert.
+     * @return string The extracted text, or empty string if conversion fails.
+     */
+    protected function extract_content_via_converter(\stored_file $file): string {
+        $converter = new \core_files\converter();
+        $format = 'txt';
+
+        if (!$converter->can_convert_storedfile_to($file, $format)) {
+            mtrace("Site document converter does not support conversion for: {$file->get_mimetype()}");
+            return '';
+        }
+
+        $conversion = $converter->start_conversion($file, $format);
+        mtrace("Start process to convert file to TXT");
+
+        if ($conversion->get('status') !== \core_files\conversion::STATUS_COMPLETE) {
+            return '';
+        }
+
+        $convertedfile = $conversion->get_destfile();
+        if (!$convertedfile) {
+            return '';
+        }
+
+        $tempfile = $convertedfile->copy_content_to_temp();
+        $text = file_get_contents($tempfile);
+        unlink($tempfile);
+
+        return $text;
+    }
+
+    /**
+     * Get cached extracted content for a file by its content hash.
+     *
+     * @param string $contenthash The SHA1 content hash of the file.
+     * @return string|null The cached content, or null if not found.
+     */
+    protected function get_from_cache(string $contenthash): ?string {
+        global $DB;
+
+        $record = $DB->get_record('assignfeedback_aif_rescache', ['contenthash' => $contenthash]);
+        if (!$record) {
+            return null;
+        }
+
+        // Update last accessed time.
+        $clock = \core\di::get(\core\clock::class);
+        $record->timelastaccessed = $clock->now()->getTimestamp();
+        $DB->update_record('assignfeedback_aif_rescache', $record);
+
+        return $record->extractedcontent;
+    }
+
+    /**
+     * Store extracted content in the cache indexed by content hash.
+     *
+     * @param string $contenthash The SHA1 content hash of the file.
+     * @param string $extractedcontent The extracted text content.
+     */
+    protected function store_to_cache(string $contenthash, string $extractedcontent): void {
+        global $DB;
+
+        $clock = \core\di::get(\core\clock::class);
+        $now = $clock->now()->getTimestamp();
+
+        $existing = $DB->get_record('assignfeedback_aif_rescache', ['contenthash' => $contenthash]);
+        if ($existing) {
+            $existing->extractedcontent = $extractedcontent;
+            $existing->timemodified = $now;
+            $existing->timelastaccessed = $now;
+            $DB->update_record('assignfeedback_aif_rescache', $existing);
+            return;
+        }
+
+        $record = new stdClass();
+        $record->contenthash = $contenthash;
+        $record->extractedcontent = $extractedcontent;
+        $record->timecreated = $now;
+        $record->timemodified = $now;
+        $record->timelastaccessed = $now;
+        $DB->insert_record('assignfeedback_aif_rescache', $record);
     }
 }

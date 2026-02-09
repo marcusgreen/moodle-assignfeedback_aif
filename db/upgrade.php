@@ -57,5 +57,23 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026020605, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026020901) {
+        // Add resource cache table for extracted file content.
+        $table = new xmldb_table('assignfeedback_aif_rescache');
+        if (!$dbman->table_exists($table)) {
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $table->add_field('contenthash', XMLDB_TYPE_CHAR, '40', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('extractedcontent', XMLDB_TYPE_TEXT, null, null, null, null, null);
+            $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timelastaccessed', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $table->add_index('contenthash', XMLDB_INDEX_UNIQUE, ['contenthash']);
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026020901, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

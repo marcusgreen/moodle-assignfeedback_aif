@@ -106,23 +106,16 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
         }
 
         try {
-            // Determine purpose based on whether we have an image.
-            $purpose = null;
-            if (!empty($promptdata['options']['image'])) {
-                // Use 'itt' (Image To Text) purpose for image analysis.
-                $purpose = 'itt';
-                mtrace("Using 'itt' purpose for image analysis.");
-            }
-
-            // Check availability before performing the request.
+            // All content (including images and PDFs) is now converted to text during
+            // prompt building, so we always use the default feedback purpose.
             $provider = \core\di::get(\assignfeedback_aif\local\ai_request_provider::class);
-            $checkpurpose = $purpose ?? (get_config('assignfeedback_aif', 'purpose') ?: 'feedback');
-            if (!$provider->is_available($checkpurpose, $record->contextid)) {
-                mtrace("AI backend not available for purpose '{$checkpurpose}', skipping submission {$record->subid}.");
+            $purpose = get_config('assignfeedback_aif', 'purpose') ?: 'feedback';
+            if (!$provider->is_available($purpose, $record->contextid)) {
+                mtrace("AI backend not available for purpose '{$purpose}', skipping submission {$record->subid}.");
                 return;
             }
 
-            $aifeedback = $aif->perform_request($promptdata['prompt'], $purpose, $promptdata['options']);
+            $aifeedback = $aif->perform_request($promptdata['prompt'], null, $promptdata['options']);
 
             // Practice mode: only when auto-triggered (not teacher) and no marking workflow.
             $ispractice = ($triggeredby === 'auto') && $this->is_practice_mode($record->aid);

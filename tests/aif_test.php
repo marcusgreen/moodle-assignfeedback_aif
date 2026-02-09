@@ -424,6 +424,188 @@ final class aif_test extends \advanced_testcase {
     }
 
     /**
+     * Test get_prompt no longer returns image options (all files converted to text now).
+     */
+    public function test_get_prompt_returns_no_image_options(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        // Mock the AI provider so ITT calls return extracted text.
+        $mock = $this->createMock(\assignfeedback_aif\local\ai_request_provider::class);
+        $mock->method('perform_request_core_ai')->willReturn('Mocked AI Response');
+        $mock->method('perform_request_local_ai_manager')->willReturn('Text from image');
+        $mock->method('is_available')->willReturn(true);
+        \core\di::set(\assignfeedback_aif\local\ai_request_provider::class, $mock);
+
+        $env = $this->create_test_environment();
+        $aifid = $this->create_aif_config($env, 'Analyse');
+
+        $clock = \core\di::get(\core\clock::class);
+        $subid = $DB->insert_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'status' => 'submitted',
+            'latest' => 1,
+            'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
+            'attemptnumber' => 0,
+        ]);
+
+        $DB->insert_record('assignsubmission_onlinetext', [
+            'assignment' => $env->assign->id,
+            'submission' => $subid,
+            'onlinetext' => 'My text submission',
+            'onlineformat' => FORMAT_HTML,
+        ]);
+
+        $record = (object) [
+            'aid' => $env->assign->id,
+            'subid' => $subid,
+            'userid' => $env->student->id,
+            'aifid' => $aifid,
+            'prompt' => 'Analyse',
+            'contextid' => $env->context->id,
+            'assignmentname' => $env->assign->name,
+        ];
+
+        $aif = new aif($env->context->id);
+        ob_start();
+        $result = $aif->get_prompt($record, 'simple');
+        ob_end_clean();
+
+        $this->assertNotEmpty($result['prompt']);
+        // The options should never contain 'image' anymore — all files become text.
+        $this->assertArrayNotHasKey('image', $result['options']);
+    }
+
+    /**
+     * Test that the resource cache stores and retrieves extracted content.
+     */
+    public function test_cache_stores_and_retrieves_content(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $context = \core\context\system::instance();
+        $aif = new aif($context->id);
+
+        // Use reflection to access protected methods.
+        $storemethod = new \ReflectionMethod($aif, 'store_to_cache');
+        $getmethod = new \ReflectionMethod($aif, 'get_from_cache');
+
+        // Initially no cache entry.
+        $result = $getmethod->invoke($aif, 'abc123hash');
+        $this->assertNull($result);
+
+        // Store content.
+        $storemethod->invoke($aif, 'abc123hash', 'Extracted text from file.');
+
+        // Retrieve.
+        $result = $getmethod->invoke($aif, 'abc123hash');
+        $this->assertEquals('Extracted text from file.', $result);
+
+        // Verify DB record.
+        $record = $DB->get_record('assignfeedback_aif_rescache', ['contenthash' => 'abc123hash']);
+        $this->assertNotFalse($record);
+        $this->assertEquals('Extracted text from file.', $record->extractedcontent);
+    }
+
+    /**
+     * Test that the cache updates existing entries on store.
+     */
+    public function test_cache_updates_existing_entry(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $context = \core\context\system::instance();
+        $aif = new aif($context->id);
+
+        $storemethod = new \ReflectionMethod($aif, 'store_to_cache');
+        $getmethod = new \ReflectionMethod($aif, 'get_from_cache');
+
+        $storemethod->invoke($aif, 'hash1', 'Version 1');
+        $storemethod->invoke($aif, 'hash1', 'Version 2');
+
+        $result = $getmethod->invoke($aif, 'hash1');
+        $this->assertEquals('Version 2', $result);
+
+        // Only one record should exist.
+        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_rescache', ['contenthash' => 'hash1']));
+    }
+
+    /**
+     * Test the cleanup cache task deletes expired entries.
+     */
+    public function test_cleanup_cache_task(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        set_config('cachecleanupdelay', 7, 'assignfeedback_aif');
+
+        $clock = $this->mock_clock_with_frozen(time());
+
+        // Insert an old cache entry (accessed 10 days ago).
+        $oldtime = $clock->now()->getTimestamp() - (10 * DAYSECS);
+        $DB->insert_record('assignfeedback_aif_rescache', [
+            'contenthash' => 'oldhash',
+            'extractedcontent' => 'Old content',
+            'timecreated' => $oldtime,
+            'timemodified' => $oldtime,
+            'timelastaccessed' => $oldtime,
+        ]);
+
+        // Insert a recent cache entry (accessed 2 days ago).
+        $recenttime = $clock->now()->getTimestamp() - (2 * DAYSECS);
+        $DB->insert_record('assignfeedback_aif_rescache', [
+            'contenthash' => 'recenthash',
+            'extractedcontent' => 'Recent content',
+            'timecreated' => $recenttime,
+            'timemodified' => $recenttime,
+            'timelastaccessed' => $recenttime,
+        ]);
+
+        $this->assertEquals(2, $DB->count_records('assignfeedback_aif_rescache'));
+
+        $task = new \assignfeedback_aif\task\cleanup_cache();
+        ob_start();
+        $task->execute();
+        ob_end_clean();
+
+        // Old entry should be deleted, recent should remain.
+        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_rescache'));
+        $this->assertTrue($DB->record_exists('assignfeedback_aif_rescache', ['contenthash' => 'recenthash']));
+        $this->assertFalse($DB->record_exists('assignfeedback_aif_rescache', ['contenthash' => 'oldhash']));
+    }
+
+    /**
+     * Test the cleanup cache task does nothing when disabled.
+     */
+    public function test_cleanup_cache_task_disabled(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        set_config('cachecleanupdelay', 0, 'assignfeedback_aif');
+
+        $this->mock_clock_with_frozen(time());
+
+        $oldtime = time() - (100 * DAYSECS);
+        $DB->insert_record('assignfeedback_aif_rescache', [
+            'contenthash' => 'hash1',
+            'extractedcontent' => 'Content',
+            'timecreated' => $oldtime,
+            'timemodified' => $oldtime,
+            'timelastaccessed' => $oldtime,
+        ]);
+
+        $task = new \assignfeedback_aif\task\cleanup_cache();
+        ob_start();
+        $task->execute();
+        ob_end_clean();
+
+        // Nothing should be deleted when disabled.
+        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_rescache'));
+    }
+
+    /**
      * Create a standard test environment with course, users, and assignment.
      *
      * @param array $assignparams Additional assignment parameters.
