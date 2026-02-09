@@ -16,8 +16,6 @@
 
 namespace assignfeedback_aif\task;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * A scheduled task for processing AI feedback.
  *

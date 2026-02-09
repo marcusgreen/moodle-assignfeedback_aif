@@ -25,6 +25,8 @@
 
 namespace assignfeedback_aif;
 
+defined('MOODLE_INTERNAL') || die();
+
 use assignfeedback_aif\task\process_feedback;
 use assignfeedback_aif\task\process_feedback_rubric;
 use assignfeedback_aif\task\process_feedback_rubric_adhoc;

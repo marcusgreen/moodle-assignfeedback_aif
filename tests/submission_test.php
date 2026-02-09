@@ -25,6 +25,8 @@
 
 namespace assignfeedback_aif;
 
+defined('MOODLE_INTERNAL') || die();
+
 require_once(__DIR__ . '/../../../tests/generator.php');
 
 /**
@@ -381,10 +383,10 @@ final class submission_test extends \advanced_testcase {
             'timecreated' => $clock->now()->getTimestamp(),
         ]);
 
-        // get_editor_text should return the current feedback.
+        // Get_editor_text should return the current feedback.
         $this->assertEquals('Original text', $plugin->get_editor_text('aif', $grade->id));
 
-        // set_editor_text should update it.
+        // Set_editor_text should update it.
         $result = $plugin->set_editor_text('aif', 'Updated via import', $grade->id);
         $this->assertTrue($result);
         $this->assertEquals('Updated via import', $plugin->get_editor_text('aif', $grade->id));

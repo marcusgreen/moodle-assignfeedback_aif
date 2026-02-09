@@ -16,8 +16,6 @@
 
 namespace assignfeedback_aif;
 
-defined('MOODLE_INTERNAL') || die();
-
 use assignfeedback_aif\local\ai_request_provider;
 use assignfeedback_editpdf\pdf;
 use stdClass;

@@ -26,6 +26,8 @@
 
 namespace assignfeedback_aif;
 
+defined('MOODLE_INTERNAL') || die();
+
 require_once(__DIR__ . '/../../../tests/generator.php');
 
 /**
