@@ -57,9 +57,9 @@ final class aif_test extends \advanced_testcase {
         $this->assertStringContainsString('Teacher instructions', $result);
         $this->assertStringContainsString('My Assignment', $result);
 
-        // HTML tags should be stripped.
-        $this->assertStringNotContainsString('<p>', $result);
-        $this->assertStringNotContainsString('<b>', $result);
+        // HTML tags should be preserved (submission may contain source code).
+        $this->assertStringContainsString('<p>', $result);
+        $this->assertStringContainsString('<b>', $result);
 
         // No placeholders should remain.
         $this->assertStringNotContainsString('{{submission}}', $result);
@@ -253,17 +253,22 @@ final class aif_test extends \advanced_testcase {
     }
 
     /**
-     * Test that perform_request returns mock response in test environment.
+     * Test that perform_request uses DI-injectable provider.
      */
-    public function test_perform_request_returns_mock_in_test(): void {
+    public function test_perform_request_uses_di_provider(): void {
         $this->resetAfterTest();
+
+        $mock = $this->createMock(\assignfeedback_aif\local\ai_request_provider::class);
+        $mock->method('perform_request_core_ai')->willReturn('Mocked AI Response');
+        $mock->method('perform_request_local_ai_manager')->willReturn('Mocked AI Response');
+        \core\di::set(\assignfeedback_aif\local\ai_request_provider::class, $mock);
 
         $context = \core\context\system::instance();
         $aif = new aif($context->id);
 
         $result = $aif->perform_request('Test prompt');
 
-        $this->assertEquals('AI Feedback', $result);
+        $this->assertEquals('Mocked AI Response', $result);
     }
 
     /**

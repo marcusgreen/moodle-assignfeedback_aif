@@ -18,7 +18,7 @@ namespace assignfeedback_aif;
 
 defined('MOODLE_INTERNAL') || die();
 
-use cache;
+use assignfeedback_aif\local\ai_request_provider;
 use stdClass;
 
 /**
@@ -44,6 +44,9 @@ class aif {
     /**
      * Perform AI request using the configured backend.
      *
+     * Uses the DI-injectable ai_request_provider. In tests, replace it
+     * via \core\di::set(ai_request_provider::class, $mock).
+     *
      * @param string $prompt The prompt to send to the AI.
      * @param string|null $purpose The purpose of the request (for local_ai_manager). If null, uses config.
      * @param array $options Additional options (e.g., 'image' for base64 encoded image).
@@ -53,10 +56,7 @@ class aif {
     public function perform_request(string $prompt, ?string $purpose = null, array $options = []): string {
         global $USER;
 
-        // Skip in test environments.
-        if (defined('BEHAT_SITE_RUNNING') || (defined('PHPUNIT_TEST') && PHPUNIT_TEST)) {
-            return "AI Feedback";
-        }
+        $provider = \core\di::get(ai_request_provider::class);
 
         // Get purpose from config if not provided.
         if ($purpose === null) {
@@ -66,71 +66,10 @@ class aif {
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
 
         if ($backend === 'local_ai_manager') {
-            return $this->perform_request_local_ai_manager($prompt, $purpose, $options);
+            return $provider->perform_request_local_ai_manager($prompt, $purpose, $this->contextid, $options);
         } else {
-            return $this->perform_request_core_ai($prompt);
+            return $provider->perform_request_core_ai($prompt, $this->contextid, $USER->id);
         }
-    }
-
-    /**
-     * Perform request using local_ai_manager.
-     *
-     * @param string $prompt The prompt text.
-     * @param string $purpose The purpose identifier.
-     * @param array $options Additional options (e.g., 'image').
-     * @return string The AI response.
-     * @throws \moodle_exception
-     */
-    private function perform_request_local_ai_manager(string $prompt, string $purpose, array $options = []): string {
-        if (!class_exists('\local_ai_manager\manager')) {
-            throw new \moodle_exception('err_retrievingfeedback_checkconfig', 'assignfeedback_aif');
-        }
-
-        $manager = new \local_ai_manager\manager($purpose);
-        $llmresponse = $manager->perform_request($prompt, 'assignfeedback_aif', $this->contextid, $options);
-
-        if ($llmresponse->get_code() !== 200) {
-            throw new \moodle_exception(
-                'err_retrievingfeedback',
-                'assignfeedback_aif',
-                '',
-                $llmresponse->get_errormessage(),
-                $llmresponse->get_debuginfo()
-            );
-        }
-
-        return $llmresponse->get_content();
-    }
-
-    /**
-     * Perform request using Moodle Core AI subsystem (4.5+).
-     *
-     * @param string $prompt The prompt text.
-     * @return string The AI response.
-     * @throws \moodle_exception
-     */
-    private function perform_request_core_ai(string $prompt): string {
-        global $USER;
-
-        $manager = \core\di::get(\core_ai\manager::class);
-        $action = new \core_ai\aiactions\generate_text(
-            contextid: $this->contextid,
-            userid: $USER->id,
-            prompttext: $prompt
-        );
-
-        $llmresponse = $manager->process_action($action);
-        $responsedata = $llmresponse->get_response_data();
-
-        if (
-            is_null($responsedata) || !is_array($responsedata) ||
-            !array_key_exists('generatedcontent', $responsedata) ||
-            is_null($responsedata['generatedcontent'])
-        ) {
-            throw new \moodle_exception('err_retrievingfeedback_checkconfig', 'assignfeedback_aif');
-        }
-
-        return $responsedata['generatedcontent'];
     }
 
     /**
@@ -157,9 +96,9 @@ class aif {
         if ($isexpertmode) {
             // In expert mode, the teacher's prompt IS the complete template.
             $replacements = [
-                '{{submission}}' => strip_tags($submission),
-                '{{rubric}}' => strip_tags($rubric),
-                '{{assignmentname}}' => strip_tags($assignmentname),
+                '{{submission}}' => $submission,
+                '{{rubric}}' => $rubric,
+                '{{assignmentname}}' => $assignmentname,
                 '{{language}}' => $language,
             ];
             return str_replace(array_keys($replacements), array_values($replacements), $prompt);
@@ -172,10 +111,10 @@ class aif {
         }
 
         $replacements = [
-            '{{submission}}' => strip_tags($submission),
-            '{{rubric}}' => strip_tags($rubric),
-            '{{prompt}}' => strip_tags($prompt),
-            '{{assignmentname}}' => strip_tags($assignmentname),
+            '{{submission}}' => $submission,
+            '{{rubric}}' => $rubric,
+            '{{prompt}}' => $prompt,
+            '{{assignmentname}}' => $assignmentname,
             '{{language}}' => $language,
         ];
 
@@ -205,48 +144,7 @@ class aif {
             }
         }
 
-        $translatedisclaimer = get_config('assignfeedback_aif', 'translatedisclaimer');
-        if ($translatedisclaimer && current_language() !== 'en') {
-            $disclaimer = $this->translate_text($disclaimer);
-        }
-
         return $feedback . "\n\n" . $disclaimer;
-    }
-
-    /**
-     * Translate text to the current user's language using AI.
-     *
-     * @param string $text The text to translate.
-     * @return string The translated text.
-     */
-    private function translate_text(string $text): string {
-        $language = current_language();
-
-        // Check cache first.
-        $cache = cache::make('assignfeedback_aif', 'translations');
-        $cachekey = $language . '_' . md5($text);
-
-        $cached = $cache->get($cachekey);
-        if ($cached !== false) {
-            return $cached;
-        }
-
-        try {
-            $languagename = $this->get_current_language_name();
-            $translationprompt = 'Translate the following text to ' . $languagename . '. ' .
-                'Return only the translated text, nothing else: "' . $text . '"';
-
-            $translation = $this->perform_request($translationprompt, 'translate');
-            $translation = trim($translation, '"\'');
-
-            // Cache the translation.
-            $cache->set($cachekey, $translation);
-
-            return $translation;
-        } catch (\Exception $e) {
-            debugging('Translation failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
-            return $text;
-        }
     }
 
     /**
@@ -299,13 +197,13 @@ class aif {
         // Get submission text from online text.
         if ($onlinetext = $DB->get_field('assignsubmission_onlinetext', 'onlinetext', ['submission' => $assignment->subid])) {
             mtrace("Content from text submission added to the prompt.");
-            $submissiontext .= strip_tags($onlinetext);
+            $submissiontext .= $onlinetext;
         }
 
         // Get submission content from files (text or images).
         $fileresult = self::extract_content_from_files($assignment);
         if (!empty($fileresult['text'])) {
-            $submissiontext .= ' ' . strip_tags($fileresult['text']);
+            $submissiontext .= ' ' . $fileresult['text'];
         }
         if (!empty($fileresult['image'])) {
             $options['image'] = $fileresult['image'];

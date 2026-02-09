@@ -92,14 +92,6 @@ $settings->add(new admin_setting_configtext(
     PARAM_RAW
 ));
 
-// Translate disclaimer to user language.
-$settings->add(new admin_setting_configcheckbox(
-    'assignfeedback_aif/translatedisclaimer',
-    get_string('translatedisclaimer', 'assignfeedback_aif'),
-    get_string('translatedisclaimer_text', 'assignfeedback_aif'),
-    1
-));
-
 // Practice mode disclaimer (used when autogenerate is on and marking workflow is off).
 $settings->add(new admin_setting_configtext(
     'assignfeedback_aif/practicedisclaimer',

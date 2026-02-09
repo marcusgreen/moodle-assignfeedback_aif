@@ -26,11 +26,4 @@
 defined('MOODLE_INTERNAL') || die();
 
 $definitions = [
-    'translations' => [
-        'mode' => cache_store::MODE_APPLICATION,
-        'simplekeys' => true,
-        'simpledata' => true,
-        'staticacceleration' => true,
-        'staticaccelerationsize' => 100,
-    ],
 ];

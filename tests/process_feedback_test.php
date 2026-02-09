@@ -44,6 +44,27 @@ require_once(__DIR__ . '/../../../tests/generator.php');
 final class process_feedback_test extends \advanced_testcase {
 
     /**
+     * Set up the DI mock for the AI request provider before each test.
+     */
+    protected function setUp(): void {
+        parent::setUp();
+        $this->setup_ai_mock();
+    }
+
+    /**
+     * Register a mock AI request provider in the DI container.
+     *
+     * @param string $response The response to return from the mock.
+     */
+    private function setup_ai_mock(string $response = 'AI Feedback'): void {
+        $mock = $this->createMock(\assignfeedback_aif\local\ai_request_provider::class);
+        $mock->method('perform_request_core_ai')->willReturn($response);
+        $mock->method('perform_request_local_ai_manager')->willReturn($response);
+        $mock->method('is_available')->willReturn(true);
+        \core\di::set(\assignfeedback_aif\local\ai_request_provider::class, $mock);
+    }
+
+    /**
      * Test that the process_feedback scheduled task generates feedback for unprocessed submissions.
      */
     public function test_scheduled_task_generates_feedback(): void {

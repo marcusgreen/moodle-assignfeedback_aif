@@ -77,7 +77,7 @@ class process_feedback extends \core\task\scheduled_task {
                     $submission->assignmentname ?? ''
                 );
 
-                if (empty(trim(strip_tags($submission->onlinetext ?? '')))) {
+                if (empty(trim($submission->onlinetext ?? ''))) {
                     mtrace("Skipping submission {$submission->subid}: No text content.");
                     continue;
                 }

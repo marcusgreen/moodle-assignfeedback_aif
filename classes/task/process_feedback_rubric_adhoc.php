@@ -16,8 +16,6 @@
 
 namespace assignfeedback_aif\task;
 
-use context_system;
-
 /**
  * Ad-hoc task for processing AI feedback with rubric grading.
  *
@@ -114,6 +112,14 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
                 // Use 'itt' (Image To Text) purpose for image analysis.
                 $purpose = 'itt';
                 mtrace("Using 'itt' purpose for image analysis.");
+            }
+
+            // Check availability before performing the request.
+            $provider = \core\di::get(\assignfeedback_aif\local\ai_request_provider::class);
+            $checkpurpose = $purpose ?? (get_config('assignfeedback_aif', 'purpose') ?: 'feedback');
+            if (!$provider->is_available($checkpurpose, $record->contextid)) {
+                mtrace("AI backend not available for purpose '{$checkpurpose}', skipping submission {$record->subid}.");
+                return;
             }
 
             $aifeedback = $aif->perform_request($promptdata['prompt'], $purpose, $promptdata['options']);
