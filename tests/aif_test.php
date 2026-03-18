@@ -681,7 +681,7 @@ final class aif_test extends \advanced_testcase {
         global $DB;
         $clock = \core\di::get(\core\clock::class);
         return $DB->insert_record('assignfeedback_aif', [
-            'assignment' => $env->cm->id,
+            'assignment' => $env->assign->id,
             'prompt' => $prompt,
             'autogenerate' => $autogenerate,
             'timecreated' => $clock->now()->getTimestamp(),

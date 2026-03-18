@@ -125,9 +125,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
 
         global $DB;
-        $id = optional_param('update', 0, PARAM_INT);
 
-        $record = $DB->get_record('assignfeedback_aif', ['assignment' => $id]);
+        $record = $DB->get_record('assignfeedback_aif', ['assignment' => $this->assignment->get_instance()->id]);
         if ($record) {
             $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
             $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
@@ -294,7 +293,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         global $DB;
         $prompt = $data->assignfeedback_aif_prompt;
         $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
-        $assignment = $data->coursemodule;
+        $assignment = $this->assignment->get_instance()->id;
         $feedback = $DB->get_record('assignfeedback_aif', ['assignment' => $assignment]);
         if ($feedback) {
             $feedback->prompt = $prompt;
@@ -345,7 +344,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         } else {
             // Create new record if none exists yet.
             $aif = $DB->get_record('assignfeedback_aif', [
-                'assignment' => $this->assignment->get_course_module()->id,
+                'assignment' => $this->assignment->get_instance()->id,
             ]);
             if ($aif) {
                 $submission = $DB->get_record('assign_submission', [
@@ -462,20 +461,13 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function get_feedbackaif(int $assignment, int $userid): stdClass|false {
         global $DB;
         $sql = "SELECT aiff.*
-        FROM {assign} a
-        JOIN {course_modules} cm
-        ON cm.instance = a.id and cm.course = a.course
-        JOIN {assignfeedback_aif} aif
-        ON aif.assignment = cm.id
-        JOIN {assignfeedback_aif_feedback} aiff
-        ON aiff.aif = aif.id
-        JOIN {assign_submission} sub
-        ON sub.assignment = a.id AND aiff.submission = sub.id
-        WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1
-        ORDER BY aiff.id";
+                  FROM {assign} a
+                  JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
+                  JOIN {assignfeedback_aif_feedback} aiff ON aiff.aif = aif.id
+                  JOIN {assign_submission} sub ON sub.assignment = a.id AND aiff.submission = sub.id
+                 WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1";
         $params = ['assignment' => $assignment, 'userid' => $userid];
-        $record = $DB->get_record_sql($sql, $params);
-        return $record;
+        return $DB->get_record_sql($sql, $params);
     }
 
     /**
@@ -520,14 +512,14 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function delete_instance(): bool {
         global $DB;
-        $cmid = $this->assignment->get_course_module()->id;
-        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $cmid], '', 'id');
+        $assignmentid = $this->assignment->get_instance()->id;
+        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $assignmentid], '', 'id');
         foreach ($records as $record) {
             $DB->delete_records('assignfeedback_aif_feedback', ['aif' => $record->id]);
         }
         $DB->delete_records(
             'assignfeedback_aif',
-            ['assignment' => $cmid]
+            ['assignment' => $assignmentid]
         );
         return true;
     }

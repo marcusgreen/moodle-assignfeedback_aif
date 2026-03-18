@@ -52,7 +52,7 @@ class process_feedback_rubric extends \core\task\scheduled_task {
                   FROM {assign} a
                   JOIN {course_modules} cm ON cm.instance = a.id AND cm.course = a.course
                   JOIN {context} cx ON cx.instanceid = cm.id AND cx.contextlevel = :contextlevel
-                  JOIN {assignfeedback_aif} aif ON aif.assignment = cm.id
+                  JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
                   JOIN {assign_submission} sub ON sub.assignment = a.id
              LEFT JOIN {assignsubmission_onlinetext} olt ON olt.assignment = a.id AND olt.submission = sub.id
                  WHERE sub.status = :status

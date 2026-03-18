@@ -75,5 +75,24 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026020901, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026031801) {
+        // Migrate assignfeedback_aif.assignment from cmid (course_modules.id) to assign.id.
+        // The FK in install.xml already references assign.id, but the stored values were cmids.
+        $sql = "UPDATE {assignfeedback_aif} aif
+                   SET aif.assignment = (
+                       SELECT cm.instance
+                         FROM {course_modules} cm
+                        WHERE cm.id = aif.assignment
+                   )
+                 WHERE EXISTS (
+                       SELECT 1
+                         FROM {course_modules} cm
+                        WHERE cm.id = aif.assignment
+                   )";
+        $DB->execute($sql);
+
+        upgrade_plugin_savepoint(true, 2026031801, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

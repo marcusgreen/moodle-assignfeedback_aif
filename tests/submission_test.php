@@ -69,7 +69,7 @@ final class submission_test extends \advanced_testcase {
         $data->coursemodule = $env->cm->id;
         $plugin->save_settings($data);
 
-        $record = $DB->get_record('assignfeedback_aif', ['assignment' => $env->cm->id]);
+        $record = $DB->get_record('assignfeedback_aif', ['assignment' => $env->assign->id]);
         $this->assertNotFalse($record);
         $this->assertEquals('Analyse the grammar', $record->prompt);
         $this->assertEquals(1, (int) $record->autogenerate);
@@ -79,7 +79,7 @@ final class submission_test extends \advanced_testcase {
         $data->assignfeedback_aif_autogenerate = 0;
         $plugin->save_settings($data);
 
-        $updated = $DB->get_record('assignfeedback_aif', ['assignment' => $env->cm->id]);
+        $updated = $DB->get_record('assignfeedback_aif', ['assignment' => $env->assign->id]);
         $this->assertEquals($record->id, $updated->id); // Same record, not a new one.
         $this->assertEquals('Updated prompt instructions', $updated->prompt);
         $this->assertEquals(0, (int) $updated->autogenerate);
@@ -285,7 +285,7 @@ final class submission_test extends \advanced_testcase {
         $this->create_and_submit($env);
 
         // The AIF config record was already created by save_settings during create_instance.
-        $aifrecord = $DB->get_record('assignfeedback_aif', ['assignment' => $env->cm->id]);
+        $aifrecord = $DB->get_record('assignfeedback_aif', ['assignment' => $env->assign->id]);
         $this->assertNotFalse($aifrecord);
         $aifid = $aifrecord->id;
 
@@ -304,7 +304,7 @@ final class submission_test extends \advanced_testcase {
         ]);
 
         // Verify records exist.
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif', ['assignment' => $env->cm->id]));
+        $this->assertEquals(1, $DB->count_records('assignfeedback_aif', ['assignment' => $env->assign->id]));
         $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
 
         // Delete instance.
@@ -312,7 +312,7 @@ final class submission_test extends \advanced_testcase {
         $result = $plugin->delete_instance();
 
         $this->assertTrue($result);
-        $this->assertEquals(0, $DB->count_records('assignfeedback_aif', ['assignment' => $env->cm->id]));
+        $this->assertEquals(0, $DB->count_records('assignfeedback_aif', ['assignment' => $env->assign->id]));
         $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
     }
 
@@ -470,7 +470,7 @@ final class submission_test extends \advanced_testcase {
         global $DB;
         $clock = \core\di::get(\core\clock::class);
         return $DB->insert_record('assignfeedback_aif', [
-            'assignment' => $env->cm->id,
+            'assignment' => $env->assign->id,
             'prompt' => $prompt,
             'autogenerate' => $autogenerate,
             'timecreated' => $clock->now()->getTimestamp(),

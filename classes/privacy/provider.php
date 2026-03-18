@@ -119,14 +119,14 @@ class provider implements
      */
     public static function delete_feedback_for_grade(assign_plugin_request_data $requestdata) {
         global $DB;
-        $cmid = $requestdata->get_assign()->get_course_module()->id;
-        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $cmid], '', 'id');
+        $assignmentid = $requestdata->get_assign()->get_instance()->id;
+        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $assignmentid], '', 'id');
         foreach ($records as $record) {
             $DB->delete_records('assignfeedback_aif_feedback', ['aif' => $record->id]);
         }
         $DB->delete_records(
             'assignfeedback_aif',
-            ['assignment' => $cmid]
+            ['assignment' => $assignmentid]
         );
     }
 
@@ -142,8 +142,8 @@ class provider implements
         }
 
         // Delete feedback records linked to the assignment.
-        $cmid = $deletedata->get_assign()->get_course_module()->id;
-        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $cmid], '', 'id');
+        $assignmentid = $deletedata->get_assign()->get_instance()->id;
+        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $assignmentid], '', 'id');
         foreach ($records as $record) {
             $DB->delete_records('assignfeedback_aif_feedback', ['aif' => $record->id]);
         }
