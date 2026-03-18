@@ -133,8 +133,11 @@ class provider implements
             );
 
             $data = (object) [
-                'feedback' => format_text($feedback->feedback, $feedback->feedbackformat,
-                    ['context' => $exportdata->get_context()]),
+                'feedback' => format_text(
+                    $feedback->feedback,
+                    $feedback->feedbackformat,
+                    ['context' => $exportdata->get_context()]
+                ),
                 'timecreated' => $feedback->timecreated ?
                     \core_privacy\local\request\transform::datetime($feedback->timecreated) : '',
             ];

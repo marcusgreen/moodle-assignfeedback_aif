@@ -24,7 +24,6 @@ namespace assignfeedback_aif;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 trait aif_test_helper {
-
     /**
      * Create a test environment with course, teacher, student and assign instance.
      *

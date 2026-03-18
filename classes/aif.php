@@ -29,7 +29,8 @@ use stdClass;
  */
 class aif {
     /** @var int The context ID for AI requests. */
-    public int $contextid;
+    /** @var int The context ID for AI requests. */
+    protected int $contextid;
 
     /**
      * Constructor.

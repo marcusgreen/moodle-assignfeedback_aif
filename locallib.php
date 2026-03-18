@@ -22,12 +22,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-// File component for AI feedback.
-define('ASSIGNFEEDBACK_AIF_COMPONENT', 'assignfeedback_aif');
-
-// File area for AI feedback.
-define('ASSIGNFEEDBACK_AIF_FILEAREA', 'feedback');
-
 /**
  * Library class for AI feedback plugin extending feedback plugin base class.
  *
@@ -36,6 +30,11 @@ define('ASSIGNFEEDBACK_AIF_FILEAREA', 'feedback');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class assign_feedback_aif extends assign_feedback_plugin {
+    /** @var string File component for AI feedback. */
+    const COMPONENT = 'assignfeedback_aif';
+
+    /** @var string File area for AI feedback. */
+    const FILEAREA = 'feedback';
     /**
      * Should return the name of this plugin type.
      *
@@ -132,15 +131,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
             $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
         }
-    }
-
-    /**
-     * Preprocessing data for the form.
-     *
-     * @param array $defaultvalues The default values for the form.
-     * @return void
-     */
-    public function data_preprocessing(&$defaultvalues): void {
     }
     /**
      * Has the AI feedback been modified?
@@ -253,8 +243,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'assignfeedbackaif',
             $this->get_editor_options(),
             $this->assignment->get_context(),
-            ASSIGNFEEDBACK_AIF_COMPONENT,
-            ASSIGNFEEDBACK_AIF_FILEAREA,
+            self::COMPONENT,
+            self::FILEAREA,
             $grade->id
         );
 
@@ -330,8 +320,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'assignfeedbackaif',
             $this->get_editor_options(),
             $this->assignment->get_context(),
-            ASSIGNFEEDBACK_AIF_COMPONENT,
-            ASSIGNFEEDBACK_AIF_FILEAREA,
+            self::COMPONENT,
+            self::FILEAREA,
             $grade->id
         );
 
@@ -360,6 +350,11 @@ class assign_feedback_aif extends assign_feedback_plugin {
                 $newrecord->feedbackformat = $data->assignfeedbackaifformat;
                 $newrecord->timecreated = $clock->now()->getTimestamp();
                 $DB->insert_record('assignfeedback_aif_feedback', $newrecord);
+            } else {
+                debugging(
+                    'assignfeedback_aif: No config record found for assignment, cannot save feedback.',
+                    DEBUG_DEVELOPER
+                );
             }
         }
         return true;
@@ -378,14 +373,14 @@ class assign_feedback_aif extends assign_feedback_plugin {
             (object) [
                 'key' => 'generatefeedbackai',
                 'label' => get_string('batchoperationgeneratefeedbackai', 'assignfeedback_aif'),
-                'icon' => $OUTPUT->pix_icon('i/upload', ''),
+                'icon' => $OUTPUT->pix_icon('i/completion-auto-y', ''),
                 'confirmationtitle' => get_string('generatefeedbackai', 'assignfeedback_aif'),
                 'confirmationquestion' => get_string('batchoperationconfirmgeneratefeedbackai', 'assignfeedback_aif'),
             ],
             (object) [
                 'key' => 'deletefeedbackai',
                 'label' => get_string('batchoperationdeletefeedbackai', 'assignfeedback_aif'),
-                'icon' => $OUTPUT->pix_icon('i/upload', ''),
+                'icon' => $OUTPUT->pix_icon('t/delete', ''),
                 'confirmationtitle' => get_string('deletefeedbackai', 'assignfeedback_aif'),
                 'confirmationquestion' => get_string('batchoperationconfirmdeletefeedbackai', 'assignfeedback_aif'),
             ],

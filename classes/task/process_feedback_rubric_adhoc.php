@@ -188,10 +188,12 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
     private function ensure_grade_record(object $record, \assign $assign): void {
         global $DB;
 
-        if (!$DB->record_exists('assign_grades', [
+        if (
+            !$DB->record_exists('assign_grades', [
             'assignment' => $record->aid,
             'userid' => $record->userid,
-        ])) {
+            ])
+        ) {
             $assign->get_user_grade($record->userid, true);
         }
     }
