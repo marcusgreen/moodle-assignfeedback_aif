@@ -115,7 +115,12 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
                 return;
             }
 
-            $aifeedback = $aif->perform_request($promptdata['prompt'], null, $promptdata['options']);
+            $aifeedback = $aif->perform_request(
+                $promptdata['prompt'],
+                null,
+                $promptdata['options'],
+                $this->get_userid() ?: get_admin()->id
+            );
 
             // Practice mode: only when auto-triggered (not teacher) and no marking workflow.
             $ispractice = ($triggeredby === 'auto') && $this->is_practice_mode($record->aid);

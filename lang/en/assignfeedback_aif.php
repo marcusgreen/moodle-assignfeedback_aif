@@ -89,7 +89,6 @@ $string['privacy:metadata:assignmentid'] = 'Assignment ID';
 $string['privacy:metadata:tablesummary'] = 'This stores AI feedback made by the AI proivders as feedback for the student on their submission.';
 $string['processfeedbackainotify'] = 'Please wait for the cron to run to process the AI Feedback';
 $string['processfeedbacktask'] = 'Process AI feedback';
-$string['processfeedbactask'] = 'Process AI feedback task';
 $string['prompt'] = 'Prompt';
 $string['prompt_help'] = 'Prompt that will be sent to the remote LLM (E.G ChatGPT)';
 $string['prompt_setting'] = 'Analyse the grammar in this text';

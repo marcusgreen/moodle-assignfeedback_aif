@@ -77,14 +77,17 @@ final class process_feedback_test extends \advanced_testcase {
         $this->create_and_submit($env, 'My essay about renewable energy');
         $this->create_aif_config($env, 'Evaluate based on rubric');
 
-        $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback'));
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
+        $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
 
         $task = new process_feedback_rubric();
         ob_start();
         $task->execute();
         ob_end_clean();
 
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback'));
+        // Dispatcher should have enqueued an adhoc task.
+        $tasksafter = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
+        $this->assertGreaterThan($tasksbefore, $tasksafter);
     }
 
     /**
@@ -113,13 +116,17 @@ final class process_feedback_test extends \advanced_testcase {
             'timecreated' => $clock->now()->getTimestamp(),
         ]);
 
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
+        $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
+
         $task = new process_feedback_rubric();
         ob_start();
         $task->execute();
         ob_end_clean();
 
-        // No new feedback created.
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback'));
+        // No new adhoc task should be enqueued.
+        $tasksafter = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
+        $this->assertEquals($tasksbefore, $tasksafter);
     }
 
     /**

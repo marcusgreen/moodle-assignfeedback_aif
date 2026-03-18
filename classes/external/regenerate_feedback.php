@@ -80,6 +80,8 @@ class regenerate_feedback extends external_api {
             'action' => 'generate',
             'triggeredby' => 'manual',
         ]);
+        global $USER;
+        $task->set_userid($USER->id);
         manager::queue_adhoc_task($task, true);
 
         return [

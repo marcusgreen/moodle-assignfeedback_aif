@@ -49,11 +49,15 @@ class aif {
      * @param string $prompt The prompt to send to the AI.
      * @param string|null $purpose The purpose of the request (for local_ai_manager). If null, uses config.
      * @param array $options Additional options (e.g., 'image' for ITT requests).
+     * @param int $userid The user to attribute the AI request to. Defaults to current $USER.
      * @return string The AI response.
      * @throws \moodle_exception
      */
-    public function perform_request(string $prompt, ?string $purpose = null, array $options = []): string {
-        global $USER;
+    public function perform_request(string $prompt, ?string $purpose = null, array $options = [], int $userid = 0): string {
+        if ($userid === 0) {
+            global $USER;
+            $userid = $USER->id;
+        }
 
         // During Behat testing, return a mock response since no real AI backend is configured.
         // PHPUnit tests use proper DI mocking via \core\di::set() instead.
@@ -73,7 +77,7 @@ class aif {
         if ($backend === 'local_ai_manager') {
             return $provider->perform_request_local_ai_manager($prompt, $purpose, $this->contextid, $options);
         } else {
-            return $provider->perform_request_core_ai($prompt, $this->contextid, $USER->id);
+            return $provider->perform_request_core_ai($prompt, $this->contextid, $userid);
         }
     }
 

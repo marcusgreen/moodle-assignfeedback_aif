@@ -80,6 +80,7 @@ class observer {
             'action' => 'generate',
             'triggeredby' => 'auto',
         ]);
+        $task->set_userid(get_admin()->id);
         manager::queue_adhoc_task($task, true);
     }
 

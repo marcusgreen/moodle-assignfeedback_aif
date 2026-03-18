@@ -425,6 +425,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'action' => $action,
             'triggeredby' => 'manual',
         ]);
+        global $USER;
+        $task->set_userid($USER->id);
         \core\task\manager::queue_adhoc_task($task, true);
 
         redirect(new moodle_url('view.php', [
