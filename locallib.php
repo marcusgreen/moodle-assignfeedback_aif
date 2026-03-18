@@ -78,6 +78,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             ['size' => 70, 'rows' => 10]
         );
         $mform->setDefault('assignfeedback_aif_prompt', $defaultprompt);
+        $mform->setType('assignfeedback_aif_prompt', PARAM_RAW);
 
         // Expert mode template button (only shown when admin setting is enabled).
         if (get_config('assignfeedback_aif', 'enableexpertmode')) {
@@ -428,11 +429,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
         global $USER;
         $task->set_userid($USER->id);
         \core\task\manager::queue_adhoc_task($task, true);
-
-        redirect(new moodle_url('view.php', [
-            'id' => $this->assignment->get_course_module()->id,
-            'action' => 'grading',
-        ]), get_string('processfeedbackainotify', 'assignfeedback_aif'));
     }
 
     /**

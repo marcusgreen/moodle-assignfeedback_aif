@@ -28,7 +28,9 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
      * Execute the ad-hoc task.
      */
     public function execute(): void {
-        global $DB;
+        global $DB, $CFG;
+
+        require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
         $customdata = $this->get_custom_data();
         $assignmentid = $customdata->assignment;
@@ -36,11 +38,16 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
         $action = $customdata->action;
         $triggeredby = $customdata->triggeredby ?? 'manual';
 
+        // Create the assign instance once for all users in this batch.
+        [$course, $cm] = get_course_and_cm_from_instance($assignmentid, 'assign');
+        $context = \context_module::instance($cm->id);
+        $assign = new \assign($context, $cm, $course);
+
         foreach ($users as $userid) {
             $record = $this->get_submission_record($assignmentid, $userid);
 
             if ($action === 'generate') {
-                $this->generate_feedback($record, $triggeredby);
+                $this->generate_feedback($record, $triggeredby, $assign);
             } else if ($action === 'delete') {
                 $this->delete_feedback($record, $assignmentid);
             }
@@ -83,8 +90,9 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
      *
      * @param object|false $record The submission record.
      * @param string $triggeredby How the task was triggered: 'auto' (observer) or 'manual' (teacher).
+     * @param \assign $assign The assign instance.
      */
-    private function generate_feedback($record, string $triggeredby = 'manual'): void {
+    private function generate_feedback($record, string $triggeredby = 'manual', ?\assign $assign = null): void {
         global $DB, $CFG;
 
         if (empty($record)) {
@@ -138,7 +146,7 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
             $DB->insert_record('assignfeedback_aif_feedback', $data);
 
             // Ensure a grade record exists so students can see feedback in the submission view.
-            $this->ensure_grade_record($record);
+            $this->ensure_grade_record($record, $assign);
 
             mtrace("AI feedback generated for assignment {$record->aid} submission {$record->subid}");
         } catch (\Exception $e) {
@@ -175,16 +183,17 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
      * exists. This creates one with grade=-1 (not yet graded) if none exists.
      *
      * @param object $record The submission record.
+     * @param \assign $assign The assign instance.
      */
-    private function ensure_grade_record(object $record): void {
-        global $CFG;
+    private function ensure_grade_record(object $record, \assign $assign): void {
+        global $DB;
 
-        require_once($CFG->dirroot . '/mod/assign/locallib.php');
-
-        [$course, $cm] = get_course_and_cm_from_instance($record->aid, 'assign');
-        $context = \context_module::instance($cm->id);
-        $assign = new \assign($context, $cm, $course);
-        $assign->get_user_grade($record->userid, true);
+        if (!$DB->record_exists('assign_grades', [
+            'assignment' => $record->aid,
+            'userid' => $record->userid,
+        ])) {
+            $assign->get_user_grade($record->userid, true);
+        }
     }
 
     /**

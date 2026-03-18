@@ -58,20 +58,6 @@ class observer {
             return;
         }
 
-        // Check if AI feedback plugin is enabled for this assignment.
-        $feedbackplugins = $assign->get_feedback_plugins();
-        $aifenabled = false;
-        foreach ($feedbackplugins as $plugin) {
-            if ($plugin->get_type() === 'aif' && $plugin->is_enabled()) {
-                $aifenabled = true;
-                break;
-            }
-        }
-
-        if (!$aifenabled) {
-            return;
-        }
-
         // Queue the ad-hoc task.
         $task = new process_feedback_rubric_adhoc();
         $task->set_custom_data([
