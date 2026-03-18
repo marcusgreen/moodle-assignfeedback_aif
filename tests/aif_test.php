@@ -29,6 +29,7 @@ namespace assignfeedback_aif;
 defined('MOODLE_INTERNAL') || die();
 
 require_once(__DIR__ . '/../../../tests/generator.php');
+require_once(__DIR__ . '/generator_trait.php');
 
 /**
  * Tests for the AI handler class.
@@ -40,6 +41,8 @@ require_once(__DIR__ . '/../../../tests/generator.php');
  * @covers     \assignfeedback_aif\aif
  */
 final class aif_test extends \advanced_testcase {
+    use aif_test_helper;
+
     /**
      * Test that build_prompt_from_template replaces all placeholders and strips HTML.
      */
@@ -605,86 +608,5 @@ final class aif_test extends \advanced_testcase {
 
         // Nothing should be deleted when disabled.
         $this->assertEquals(1, $DB->count_records('assignfeedback_aif_rescache'));
-    }
-
-    /**
-     * Create a standard test environment with course, users, and assignment.
-     *
-     * @param array $assignparams Additional assignment parameters.
-     * @return \stdClass Environment object with course, teacher, student, assign, cm, context, assignobj.
-     */
-    private function create_test_environment(array $assignparams = []): \stdClass {
-        $course = $this->getDataGenerator()->create_course();
-        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
-        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $defaults = [
-            'course' => $course->id,
-            'assignsubmission_onlinetext_enabled' => 1,
-            'assignfeedback_aif_enabled' => 1,
-            'assignfeedback_aif_prompt' => 'Default test prompt',
-        ];
-        $params = array_merge($defaults, $assignparams);
-
-        $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
-        $assign = $generator->create_instance($params);
-        $cm = get_coursemodule_from_instance('assign', $assign->id);
-        $context = \context_module::instance($cm->id);
-        $assignobj = new \mod_assign_testable_assign($context, $cm, $course);
-
-        return (object) [
-            'course' => $course,
-            'teacher' => $teacher,
-            'student' => $student,
-            'assign' => $assign,
-            'cm' => $cm,
-            'context' => $context,
-            'assignobj' => $assignobj,
-        ];
-    }
-
-    /**
-     * Create and submit a student submission with online text.
-     *
-     * @param \stdClass $env The test environment.
-     * @param string $text The submission text.
-     */
-    private function create_and_submit(\stdClass $env, string $text = 'Test submission'): void {
-        $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
-        $this->setUser($env->student);
-
-        $submissiondata = [
-            'cmid' => $env->cm->id,
-            'course' => $env->course->id,
-            'userid' => $env->student->id,
-            'onlinetext_editor' => [
-                'text' => $text,
-                'format' => FORMAT_HTML,
-            ],
-        ];
-        $generator->create_submission($submissiondata);
-
-        $sink = $this->redirectMessages();
-        $env->assignobj->submit_for_grading((object) ['userid' => $env->student->id], []);
-        $sink->close();
-    }
-
-    /**
-     * Create an AIF configuration record for the assignment.
-     *
-     * @param \stdClass $env The test environment.
-     * @param string $prompt The prompt text.
-     * @param int $autogenerate Whether to auto-generate feedback.
-     * @return int The AIF config record ID.
-     */
-    private function create_aif_config(\stdClass $env, string $prompt = 'Test prompt', int $autogenerate = 0): int {
-        global $DB;
-        $clock = \core\di::get(\core\clock::class);
-        return $DB->insert_record('assignfeedback_aif', [
-            'assignment' => $env->assign->id,
-            'prompt' => $prompt,
-            'autogenerate' => $autogenerate,
-            'timecreated' => $clock->now()->getTimestamp(),
-        ]);
     }
 }

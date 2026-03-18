@@ -94,7 +94,7 @@ class aif {
 
         // Expert mode detection: if the teacher's prompt contains {{submission}},
         // it replaces the admin template entirely.
-        $isexpertmode = strpos($prompt, '{{submission}}') !== false;
+        $isexpertmode = str_contains($prompt, '{{submission}}');
 
         if ($isexpertmode) {
             // In expert mode, the teacher's prompt IS the complete template.

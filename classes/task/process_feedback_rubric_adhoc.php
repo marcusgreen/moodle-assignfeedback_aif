@@ -40,7 +40,7 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
 
         // Create the assign instance once for all users in this batch.
         [$course, $cm] = get_course_and_cm_from_instance($assignmentid, 'assign');
-        $context = \context_module::instance($cm->id);
+        $context = \core\context\module::instance($cm->id);
         $assign = new \assign($context, $cm, $course);
 
         foreach ($users as $userid) {
@@ -77,7 +77,7 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
                 JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
                 JOIN {assign_submission} sub ON sub.assignment = a.id
                 WHERE sub.status = 'submitted'
-                  AND cx.contextlevel = 70
+                  AND cx.contextlevel = " . CONTEXT_MODULE . "
                   AND a.id = :aid
                   AND sub.userid = :userid
                   AND sub.latest = 1";

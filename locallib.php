@@ -62,7 +62,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Get the default setting for feedback comments plugin.
+     * Get the settings for AI feedback plugin.
      *
      * @param MoodleQuickForm $mform The form to add elements to.
      * @return void
@@ -119,7 +119,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         );
 
         $mform->addHelpButton('assignfeedback_aif_prompt', 'prompt', 'assignfeedback_aif');
-        // Disable Prompt if AI assisted feedback if comment feedback plugin is disabled.
+        // Disable prompt if AI assisted feedback plugin is disabled.
         $mform->hideIf('assignfeedback_aif_prompt', 'assignfeedback_aif_enabled', 'notchecked');
 
         $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
@@ -143,11 +143,11 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function data_preprocessing(&$defaultvalues): void {
     }
     /**
-     * Has the comment feedback been modified?
+     * Has the AI feedback been modified?
      *
      * @param stdClass $grade The grade object.
      * @param stdClass $data Data from the form submission.
-     * @return boolean True if the comment feedback has been modified, else false.
+     * @return boolean True if the AI feedback has been modified, else false.
      */
     public function is_feedback_modified(stdClass $grade, stdClass $data): bool {
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
@@ -285,7 +285,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         return true;
     }
     /**
-     * Save the settings for feedback comments plugin.
+     * Save the settings for AI feedback plugin.
      *
      * @param stdClass $data The form data.
      * @return bool
@@ -313,7 +313,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Saving the comment content into database.
+     * Save the AI feedback to the database.
      *
      * @param stdClass $grade The grade object.
      * @param stdClass $data The form data.
@@ -432,7 +432,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Display the comment in the feedback table.
+     * Display the AI feedback in the feedback table.
      *
      * @param stdClass $grade The grade object.
      * @param bool $showviewlink Set to true to show a link to view the full feedback.
@@ -486,10 +486,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * If this plugin adds to the gradebook comments field, it must format the text
-     * of the comment.
+     * If this plugin adds to the gradebook, it must format the text
+     * of the AI feedback.
      *
-     * Only one feedback plugin can push comments to the gradebook and that is chosen by the assignment
+     * Only one feedback plugin can push feedback to the gradebook and that is chosen by the assignment
      * settings page.
      *
      * @param stdClass $grade The grade object.
@@ -523,7 +523,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Returns true if there are no feedback comments for the given grade.
+     * Returns true if there are no AI feedback entries for the given grade.
      *
      * @param stdClass $grade The grade object.
      * @return bool True if no feedback exists.
@@ -533,7 +533,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Return a description of external params suitable for uploading an feedback comment from a webservice.
+     * Return a description of external params suitable for uploading AI feedback from a webservice.
      *
      * Used in WebServices mod_assign_save_grade and mod_assign_save_grades.
      *
