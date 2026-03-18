@@ -49,22 +49,16 @@ export const init = (template) => {
     button.addEventListener('click', async(e) => {
         e.preventDefault();
 
-        const currentValue = promptTextarea.value.trim();
-
-        if (currentValue) {
-            const confirmMessage = await get_string('expertmodeconfirm', 'assignfeedback_aif');
-            Notification.confirm(
-                await get_string('useexpertmodetemplate', 'assignfeedback_aif'),
-                confirmMessage,
-                await get_string('yes', 'core'),
-                await get_string('no', 'core'),
-                () => {
-                    insertTemplate(promptTextarea, template);
-                }
-            );
-        } else {
-            insertTemplate(promptTextarea, template);
-        }
+        const confirmMessage = await get_string('expertmodeconfirm', 'assignfeedback_aif');
+        Notification.confirm(
+            await get_string('useexpertmodetemplate', 'assignfeedback_aif'),
+            confirmMessage,
+            await get_string('yes', 'core'),
+            await get_string('no', 'core'),
+            () => {
+                insertTemplate(promptTextarea, template);
+            }
+        );
     });
 };
 

@@ -126,10 +126,13 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
         global $DB;
 
-        $record = $DB->get_record('assignfeedback_aif', ['assignment' => $this->assignment->get_instance()->id]);
-        if ($record) {
-            $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
-            $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
+        $instance = $this->assignment->get_default_instance();
+        if ($instance && !empty($instance->id)) {
+            $record = $DB->get_record('assignfeedback_aif', ['assignment' => $instance->id]);
+            if ($record) {
+                $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
+                $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
+            }
         }
     }
     /**
