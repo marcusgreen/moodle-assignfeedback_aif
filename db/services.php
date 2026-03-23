@@ -15,23 +15,22 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Event observers for AI Assisted Feedback.
+ * External functions and service definitions for assignfeedback_aif.
  *
  * @package    assignfeedback_aif
- * @category   event
- * @copyright  2024 Marcus Green
+ * @copyright  2026 ISB Bayern
+ * @author     Dr. Peter Mayer
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$observers = [
-        [
-            'eventname'   => '\mod_assign\event\assessable_submitted',
-            'callback'    => '\assignfeedback_aif\event\observer::assessable_submitted',
-        ],
-        [
-            'eventname'   => '\mod_assign\event\submission_removed',
-            'callback'    => '\assignfeedback_aif\event\observer::submission_removed',
-        ],
-    ];
+$functions = [
+    'assignfeedback_aif_regenerate_feedback' => [
+        'classname' => 'assignfeedback_aif\external\regenerate_feedback',
+        'description' => 'Regenerate AI feedback for a single submission',
+        'type' => 'write',
+        'ajax' => true,
+        'capabilities' => 'mod/assign:grade',
+    ],
+];

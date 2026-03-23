@@ -1,5 +1,5 @@
 <?php
-// This file is part of Moodle - https://moodle.org/
+// This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -12,20 +12,22 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Plugin version and other meta-data are defined here.
+ * Hook callbacks for assignfeedback_aif.
  *
- * @package     assignfeedback_aif
- * @copyright   2024 Marcus Green
- * @license     https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package    assignfeedback_aif
+ * @copyright  2026 ISB Bayern
+ * @author     Dr. Peter Mayer
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'assignfeedback_aif';
-$plugin->release = '0.4.0';
-$plugin->version = 2026020901;
-$plugin->requires = 2024100700; // Moodle 4.5 for Core AI subsystem.
-$plugin->maturity = MATURITY_BETA;
+$callbacks = [
+    [
+        'hook' => \local_ai_manager\hook\purpose_usage::class,
+        'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::handle_purpose_usage',
+    ],
+];

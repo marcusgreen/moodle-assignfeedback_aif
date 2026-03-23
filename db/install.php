@@ -17,13 +17,16 @@
 /**
  * Code to be executed after the plugin's database scheme has been installed is defined here.
  *
- * @package     assignfeedback_aif * @category    upgrade
+ * @package     assignfeedback_aif
+ * @category    upgrade
  * @copyright   2024 Marcus Green
  * @license     https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 /**
  * Custom code to be run on installing the plugin.
+ *
+ * @return bool
  */
 function xmldb_assignfeedback_aif_install() {
 

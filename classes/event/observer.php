@@ -16,54 +16,95 @@
 
 namespace assignfeedback_aif\event;
 
+use assignfeedback_aif\task\process_feedback_rubric_adhoc;
+use core\task\manager;
+
 /**
- * Event observer
+ * Event observer for AI Assisted Feedback.
  *
  * @package    assignfeedback_aif
- * @copyright  2024 2024 Marcus Green
+ * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class observer {
+    /**
+     * Listen to assessable_submitted events and queue AI feedback generation if enabled.
+     *
+     * @param \mod_assign\event\assessable_submitted $event The event object.
+     * @return void
+     */
+    public static function assessable_submitted(\mod_assign\event\assessable_submitted $event): void {
+        self::queue_feedback_generation($event);
+    }
 
-        /**
-         * Listen to events and queue the submission for processing.
-         * @param \mod_assign\event\submission_created $event
-         */
-        public static function submission_created(\mod_assign\event\submission_created $event) {
-            self::somefunc($event);
+    /**
+     * Queue AI feedback generation for a submission if autogenerate is enabled.
+     *
+     * @param \mod_assign\event\assessable_submitted $event The event object.
+     * @return void
+     */
+    private static function queue_feedback_generation(\mod_assign\event\assessable_submitted $event): void {
+        global $DB;
+
+        $assign = $event->get_assign();
+        $assignmentid = $assign->get_instance()->id;
+        // Use relateduserid when set (teacher submitting on behalf), otherwise userid (student self-submission).
+        $userid = $event->relateduserid ?? $event->userid;
+        $cm = $assign->get_course_module();
+
+        // Check if autogenerate is enabled for this assignment.
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $cm->id]);
+        if (!$aifconfig || empty($aifconfig->autogenerate)) {
+            return;
         }
 
-        public static function somefunc($event) {
-            global $USER;
-            $grade = '3.14';
-            $teachercommenttext = 'This is FABULOUS!.';
-            $data = new \stdClass();
-            $data->attemptnumber = 1;
-            $data->grade = $grade;
-            $data->assignfeedbackcomments_editor = ['text' => $teachercommenttext, 'format' => FORMAT_MOODLE];
-            $assign = $event->get_assign();
-            $aif = $assign->get_feedback_plugins()[0];
-            //$prompt = $aif->get_prompt();
-
-            //$assign->save_grade($USER->id, $data);
+        // Check if AI feedback plugin is enabled for this assignment.
+        $feedbackplugins = $assign->get_feedback_plugins();
+        $aifenabled = false;
+        foreach ($feedbackplugins as $plugin) {
+            if ($plugin->get_type() === 'aif' && $plugin->is_enabled()) {
+                $aifenabled = true;
+                break;
+            }
         }
 
-        /**
-         * Listen to events and queue the submission for processing.
-         * @param \mod_assign\event\submission_removed $event
-         */
-        public static function submission_removed(\mod_assign\event\submission_removed $event) {
-            global $DB;
-            $sql = "SELECT aif.id AS aifid FROM {assign} a
-                JOIN {course_modules} cm ON cm.instance = a.id and cm.course = a.course
-                JOIN {context} cx ON cx.instanceid = cm.id
+        if (!$aifenabled) {
+            return;
+        }
+
+        // Queue the ad-hoc task.
+        $task = new process_feedback_rubric_adhoc();
+        $task->set_custom_data([
+            'assignment' => $assignmentid,
+            'users' => [$userid],
+            'action' => 'generate',
+            'triggeredby' => 'auto',
+        ]);
+        manager::queue_adhoc_task($task, true);
+    }
+
+    /**
+     * Listen to submission_removed events and delete associated AI feedback.
+     *
+     * @param \mod_assign\event\submission_removed $event The event object.
+     * @return void
+     */
+    public static function submission_removed(\mod_assign\event\submission_removed $event): void {
+        global $DB;
+
+        $sql = "SELECT aif.id AS aifid
+                FROM {assign} a
+                JOIN {course_modules} cm ON cm.instance = a.id AND cm.course = a.course
                 JOIN {assignfeedback_aif} aif ON aif.assignment = cm.id
                 WHERE a.id = :aid";
-            $param = ['aid' => $event->get_assign()->get_instance()->id];
-            $aif = $DB->get_field_sql($sql, $param);
+        $param = ['aid' => $event->get_assign()->get_instance()->id];
+        $aifid = $DB->get_field_sql($sql, $param);
+
+        if ($aifid && !empty($event->other['submissionid'])) {
             $DB->delete_records('assignfeedback_aif_feedback', [
                 'submission' => $event->other['submissionid'],
-                'aif' => $aif
+                'aif' => $aifid,
             ]);
         }
+    }
 }
