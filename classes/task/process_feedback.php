@@ -88,6 +88,7 @@ class process_feedback extends \core\task\scheduled_task {
                 $data = (object) [
                     'aif' => $submission->aifid,
                     'feedback' => $aifeedback,
+                    'feedbackformat' => FORMAT_MARKDOWN,
                     'timecreated' => $clock->now()->getTimestamp(),
                     'submission' => $submission->subid,
                 ];

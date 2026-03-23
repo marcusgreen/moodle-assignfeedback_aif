@@ -102,8 +102,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'advcheckbox',
             'assignfeedback_aif_autogenerate',
             get_string('autogenerate', 'assignfeedback_aif'),
-            ' ',
-            [],
+            '',
+            ['id' => 'id_assignfeedback_aif_autogenerate'],
             [0, 1]
         );
         $mform->setDefault('assignfeedback_aif_autogenerate', 0);

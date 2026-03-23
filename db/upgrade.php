@@ -94,5 +94,13 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026031801, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026031901) {
+        // Change feedbackformat from FORMAT_HTML (1) to FORMAT_MARKDOWN (4) for AI-generated feedback.
+        // AI responses are Markdown, not HTML. FORMAT_MARKDOWN ensures proper rendering.
+        $DB->set_field('assignfeedback_aif_feedback', 'feedbackformat', FORMAT_MARKDOWN);
+
+        upgrade_plugin_savepoint(true, 2026031901, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

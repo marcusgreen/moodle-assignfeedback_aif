@@ -60,6 +60,14 @@ Provide detailed, constructive feedback that helps the student improve.
 Focus on both strengths and areas for improvement.
 Be encouraging but honest.
 
+Format your response in strict Markdown:
+- Use ## for section headings.
+- Use "1. " for numbered lists (NOT "1)").
+- Use "- " for bullet lists.
+- Always leave a blank line before and after headings, lists, and code/math blocks.
+- Use **bold** and *italic* for emphasis.
+- For math equations use LaTeX: inline with $$ ... $$ and display blocks with \\[ ... \\].
+
 === LANGUAGE ===
 Respond in {{language}}.';
 $string['deletefeedbackai'] = 'Delete AI feedback';
