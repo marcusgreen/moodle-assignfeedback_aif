@@ -29,7 +29,8 @@ use stdClass;
  */
 class aif {
     /** @var int The context ID for AI requests. */
-    public int $contextid;
+    /** @var int The context ID for AI requests. */
+    protected int $contextid;
 
     /**
      * Constructor.
@@ -49,16 +50,14 @@ class aif {
      * @param string $prompt The prompt to send to the AI.
      * @param string|null $purpose The purpose of the request (for local_ai_manager). If null, uses config.
      * @param array $options Additional options (e.g., 'image' for ITT requests).
+     * @param int $userid The user to attribute the AI request to. Defaults to current $USER.
      * @return string The AI response.
      * @throws \moodle_exception
      */
-    public function perform_request(string $prompt, ?string $purpose = null, array $options = []): string {
-        global $USER;
-
-        // During Behat testing, return a mock response since no real AI backend is configured.
-        // PHPUnit tests use proper DI mocking via \core\di::set() instead.
-        if (defined('BEHAT_SITE_RUNNING')) {
-            return 'AI Feedback';
+    public function perform_request(string $prompt, ?string $purpose = null, array $options = [], int $userid = 0): string {
+        if ($userid === 0) {
+            global $USER;
+            $userid = $USER->id;
         }
 
         $provider = \core\di::get(ai_request_provider::class);
@@ -73,7 +72,7 @@ class aif {
         if ($backend === 'local_ai_manager') {
             return $provider->perform_request_local_ai_manager($prompt, $purpose, $this->contextid, $options);
         } else {
-            return $provider->perform_request_core_ai($prompt, $this->contextid, $USER->id);
+            return $provider->perform_request_core_ai($prompt, $this->contextid, $userid);
         }
     }
 
@@ -96,7 +95,7 @@ class aif {
 
         // Expert mode detection: if the teacher's prompt contains {{submission}},
         // it replaces the admin template entirely.
-        $isexpertmode = strpos($prompt, '{{submission}}') !== false;
+        $isexpertmode = str_contains($prompt, '{{submission}}');
 
         if ($isexpertmode) {
             // In expert mode, the teacher's prompt IS the complete template.

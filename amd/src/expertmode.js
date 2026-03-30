@@ -25,7 +25,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-import {get_string} from 'core/str';
+import {getString} from 'core/str';
 import Notification from 'core/notification';
 
 /**
@@ -41,25 +41,24 @@ export const init = (template) => {
         return;
     }
 
+    if (button.dataset.listenerAttached) {
+        return;
+    }
+    button.dataset.listenerAttached = 'true';
+
     button.addEventListener('click', async(e) => {
         e.preventDefault();
 
-        const currentValue = promptTextarea.value.trim();
-
-        if (currentValue) {
-            const confirmMessage = await get_string('expertmodeconfirm', 'assignfeedback_aif');
-            Notification.confirm(
-                await get_string('useexpertmodetemplate', 'assignfeedback_aif'),
-                confirmMessage,
-                await get_string('yes', 'core'),
-                await get_string('no', 'core'),
-                () => {
-                    insertTemplate(promptTextarea, template);
-                }
-            );
-        } else {
-            insertTemplate(promptTextarea, template);
-        }
+        const confirmMessage = await getString('expertmodeconfirm', 'assignfeedback_aif');
+        Notification.confirm(
+            await getString('useexpertmodetemplate', 'assignfeedback_aif'),
+            confirmMessage,
+            await getString('yes', 'core'),
+            await getString('no', 'core'),
+            () => {
+                insertTemplate(promptTextarea, template);
+            }
+        );
     });
 };
 

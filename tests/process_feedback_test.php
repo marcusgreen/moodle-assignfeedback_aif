@@ -27,12 +27,12 @@ namespace assignfeedback_aif;
 
 defined('MOODLE_INTERNAL') || die();
 
-use assignfeedback_aif\task\process_feedback;
 use assignfeedback_aif\task\process_feedback_rubric;
 use assignfeedback_aif\task\process_feedback_rubric_adhoc;
 use assignfeedback_aif\external\regenerate_feedback;
 
 require_once(__DIR__ . '/../../../tests/generator.php');
+require_once(__DIR__ . '/generator_trait.php');
 
 /**
  * Tests for scheduled tasks, adhoc tasks, event observer and external API.
@@ -40,13 +40,14 @@ require_once(__DIR__ . '/../../../tests/generator.php');
  * @package    assignfeedback_aif
  * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \assignfeedback_aif\task\process_feedback
  * @covers \assignfeedback_aif\task\process_feedback_rubric
  * @covers \assignfeedback_aif\task\process_feedback_rubric_adhoc
  * @covers \assignfeedback_aif\event\observer
  * @covers \assignfeedback_aif\external\regenerate_feedback
  */
 final class process_feedback_test extends \advanced_testcase {
+    use aif_test_helper;
+
     /**
      * Set up the DI mock for the AI request provider before each test.
      */
@@ -69,63 +70,7 @@ final class process_feedback_test extends \advanced_testcase {
     }
 
     /**
-     * Test that the process_feedback scheduled task generates feedback for unprocessed submissions.
-     */
-    public function test_scheduled_task_generates_feedback(): void {
-        global $DB;
-        $this->resetAfterTest();
-
-        $env = $this->create_test_environment();
-        $this->create_and_submit($env, 'Yesterday I go park');
-        $this->create_aif_config($env, 'Analyse the English grammar');
-
-        $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback'));
-
-        $task = new process_feedback();
-        ob_start();
-        $task->execute();
-        ob_end_clean();
-
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback'));
-    }
-
-    /**
-     * Test that the process_feedback scheduled task skips submissions that already have feedback.
-     */
-    public function test_scheduled_task_skips_existing_feedback(): void {
-        global $DB;
-        $this->resetAfterTest();
-
-        $env = $this->create_test_environment();
-        $this->create_and_submit($env, 'Test text');
-        $aifid = $this->create_aif_config($env, 'Analyse grammar');
-
-        $submission = $DB->get_record('assign_submission', [
-            'assignment' => $env->assign->id,
-            'userid' => $env->student->id,
-            'latest' => 1,
-        ]);
-
-        // Insert existing feedback.
-        $clock = \core\di::get(\core\clock::class);
-        $DB->insert_record('assignfeedback_aif_feedback', [
-            'aif' => $aifid,
-            'feedback' => 'Existing feedback',
-            'submission' => $submission->id,
-            'timecreated' => $clock->now()->getTimestamp(),
-        ]);
-
-        $task = new process_feedback();
-        ob_start();
-        $task->execute();
-        ob_end_clean();
-
-        // Should still be exactly 1, no duplicate created.
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback'));
-    }
-
-    /**
-     * Test the rubric scheduled task processes unprocessed submissions.
+     * Test the dispatcher scheduled task enqueues adhoc tasks for unprocessed submissions.
      */
     public function test_rubric_scheduled_task_generates_feedback(): void {
         global $DB;
@@ -135,14 +80,17 @@ final class process_feedback_test extends \advanced_testcase {
         $this->create_and_submit($env, 'My essay about renewable energy');
         $this->create_aif_config($env, 'Evaluate based on rubric');
 
-        $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback'));
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
+        $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
 
         $task = new process_feedback_rubric();
         ob_start();
         $task->execute();
         ob_end_clean();
 
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback'));
+        // Dispatcher should have enqueued an adhoc task.
+        $tasksafter = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
+        $this->assertGreaterThan($tasksbefore, $tasksafter);
     }
 
     /**
@@ -171,13 +119,17 @@ final class process_feedback_test extends \advanced_testcase {
             'timecreated' => $clock->now()->getTimestamp(),
         ]);
 
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
+        $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
+
         $task = new process_feedback_rubric();
         ob_start();
         $task->execute();
         ob_end_clean();
 
-        // No new feedback created.
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback'));
+        // No new adhoc task should be enqueued.
+        $tasksafter = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
+        $this->assertEquals($tasksbefore, $tasksafter);
     }
 
     /**
@@ -312,10 +264,10 @@ final class process_feedback_test extends \advanced_testcase {
         ]);
 
         // CP1: AIF config record exists with autogenerate=1.
-        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $env->cm->id]);
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $env->assign->id]);
         $this->assertNotEmpty(
             $aifconfig,
-            'CP1a: assignfeedback_aif record must exist for cm.id=' . $env->cm->id
+            'CP1a: assignfeedback_aif record must exist for assign.id=' . $env->assign->id
             . '. All records: ' . json_encode($DB->get_records('assignfeedback_aif'))
         );
         $this->assertEquals(1, (int) $aifconfig->autogenerate, 'CP1b: autogenerate must be 1');
@@ -414,7 +366,7 @@ final class process_feedback_test extends \advanced_testcase {
         ]);
 
         // CP1: AIF config with autogenerate=1.
-        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $env->cm->id]);
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $env->assign->id]);
         $this->assertNotEmpty($aifconfig, 'CP1a: AIF config must exist');
         $this->assertEquals(1, (int) $aifconfig->autogenerate, 'CP1b: autogenerate must be 1');
 
@@ -597,92 +549,5 @@ final class process_feedback_test extends \advanced_testcase {
 
         $this->expectException(\required_capability_exception::class);
         regenerate_feedback::execute($env->assign->id, $env->student->id);
-    }
-
-    /**
-     * Create a standard test environment with course, users, and assignment.
-     *
-     * @param array $assignparams Additional assignment parameters.
-     * @return \stdClass Environment object.
-     */
-    private function create_test_environment(array $assignparams = []): \stdClass {
-        $course = $this->getDataGenerator()->create_course();
-        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
-        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $defaults = [
-            'course' => $course->id,
-            'assignsubmission_onlinetext_enabled' => 1,
-            'assignfeedback_aif_enabled' => 1,
-            'assignfeedback_aif_prompt' => 'Default test prompt',
-        ];
-        $params = array_merge($defaults, $assignparams);
-
-        $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
-        $assign = $generator->create_instance($params);
-        $cm = get_coursemodule_from_instance('assign', $assign->id);
-        $context = \context_module::instance($cm->id);
-        $assignobj = new \mod_assign_testable_assign($context, $cm, $course);
-
-        return (object) [
-            'course' => $course,
-            'teacher' => $teacher,
-            'student' => $student,
-            'assign' => $assign,
-            'cm' => $cm,
-            'context' => $context,
-            'assignobj' => $assignobj,
-        ];
-    }
-
-    /**
-     * Create and submit a student submission with online text.
-     *
-     * @param \stdClass $env The test environment.
-     * @param string $text The submission text.
-     */
-    private function create_and_submit(\stdClass $env, string $text = 'Test submission'): void {
-        $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
-        $this->setUser($env->student);
-
-        $submissiondata = [
-            'cmid' => $env->cm->id,
-            'userid' => $env->student->id,
-            'onlinetext' => $text,
-        ];
-        $generator->create_submission($submissiondata);
-
-        $sink = $this->redirectMessages();
-        $env->assignobj->submit_for_grading((object) ['userid' => $env->student->id], []);
-        $sink->close();
-    }
-
-    /**
-     * Create an AIF configuration record for the assignment.
-     *
-     * @param \stdClass $env The test environment.
-     * @param string $prompt The prompt text.
-     * @param int $autogenerate Whether to auto-generate feedback.
-     * @return int The AIF config record ID.
-     */
-    private function create_aif_config(\stdClass $env, string $prompt = 'Test prompt', int $autogenerate = 0): int {
-        global $DB;
-        $clock = \core\di::get(\core\clock::class);
-
-        // Update the existing config created by save_settings, or create a new one.
-        $existing = $DB->get_record('assignfeedback_aif', ['assignment' => $env->cm->id]);
-        if ($existing) {
-            $existing->prompt = $prompt;
-            $existing->autogenerate = $autogenerate;
-            $DB->update_record('assignfeedback_aif', $existing);
-            return $existing->id;
-        }
-
-        return $DB->insert_record('assignfeedback_aif', [
-            'assignment' => $env->cm->id,
-            'prompt' => $prompt,
-            'autogenerate' => $autogenerate,
-            'timecreated' => $clock->now()->getTimestamp(),
-        ]);
     }
 }

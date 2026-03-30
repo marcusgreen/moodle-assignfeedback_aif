@@ -60,6 +60,14 @@ Provide detailed, constructive feedback that helps the student improve.
 Focus on both strengths and areas for improvement.
 Be encouraging but honest.
 
+Format your response in strict Markdown:
+- Use ## for section headings.
+- Use "1. " for numbered lists (NOT "1)").
+- Use "- " for bullet lists.
+- Always leave a blank line before and after headings, lists, and code/math blocks.
+- Use **bold** and *italic* for emphasis.
+- For math equations use LaTeX: inline with $$ ... $$ and display blocks with \\[ ... \\].
+
 === LANGUAGE ===
 Respond in {{language}}.';
 $string['deletefeedbackai'] = 'Delete AI feedback';
@@ -86,10 +94,9 @@ $string['practicedisclaimer_text'] = 'Disclaimer appended to AI feedback in prac
 $string['privacy:aipath'] = 'AI Feedback';
 $string['privacy:metadata:aitext'] = 'AI Feedback text.';
 $string['privacy:metadata:assignmentid'] = 'Assignment ID';
-$string['privacy:metadata:tablesummary'] = 'This stores AI feedback made by the AI proivders as feedback for the student on their submission.';
+$string['privacy:metadata:tablesummary'] = 'This stores AI feedback made by the AI providers as feedback for the student on their submission.';
 $string['processfeedbackainotify'] = 'Please wait for the cron to run to process the AI Feedback';
 $string['processfeedbacktask'] = 'Process AI feedback';
-$string['processfeedbactask'] = 'Process AI feedback task';
 $string['prompt'] = 'Prompt';
 $string['prompt_help'] = 'Prompt that will be sent to the remote LLM (E.G ChatGPT)';
 $string['prompt_setting'] = 'Analyse the grammar in this text';

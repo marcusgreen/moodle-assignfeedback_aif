@@ -53,22 +53,8 @@ class observer {
         $cm = $assign->get_course_module();
 
         // Check if autogenerate is enabled for this assignment.
-        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $cm->id]);
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
         if (!$aifconfig || empty($aifconfig->autogenerate)) {
-            return;
-        }
-
-        // Check if AI feedback plugin is enabled for this assignment.
-        $feedbackplugins = $assign->get_feedback_plugins();
-        $aifenabled = false;
-        foreach ($feedbackplugins as $plugin) {
-            if ($plugin->get_type() === 'aif' && $plugin->is_enabled()) {
-                $aifenabled = true;
-                break;
-            }
-        }
-
-        if (!$aifenabled) {
             return;
         }
 
@@ -80,6 +66,7 @@ class observer {
             'action' => 'generate',
             'triggeredby' => 'auto',
         ]);
+        $task->set_userid(get_admin()->id);
         manager::queue_adhoc_task($task, true);
     }
 
@@ -93,10 +80,8 @@ class observer {
         global $DB;
 
         $sql = "SELECT aif.id AS aifid
-                FROM {assign} a
-                JOIN {course_modules} cm ON cm.instance = a.id AND cm.course = a.course
-                JOIN {assignfeedback_aif} aif ON aif.assignment = cm.id
-                WHERE a.id = :aid";
+                  FROM {assignfeedback_aif} aif
+                 WHERE aif.assignment = :aid";
         $param = ['aid' => $event->get_assign()->get_instance()->id];
         $aifid = $DB->get_field_sql($sql, $param);
 

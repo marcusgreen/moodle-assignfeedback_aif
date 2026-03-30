@@ -39,6 +39,11 @@ export const init = (assignmentId, userId) => {
         return;
     }
 
+    if (button.dataset.listenerAttached) {
+        return;
+    }
+    button.dataset.listenerAttached = 'true';
+
     button.addEventListener('click', async(e) => {
         e.preventDefault();
 

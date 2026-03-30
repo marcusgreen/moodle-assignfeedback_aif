@@ -22,12 +22,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-// File component for AI feedback.
-define('ASSIGNFEEDBACK_AIF_COMPONENT', 'assignfeedback_aif');
-
-// File area for AI feedback.
-define('ASSIGNFEEDBACK_AIF_FILEAREA', 'feedback');
-
 /**
  * Library class for AI feedback plugin extending feedback plugin base class.
  *
@@ -36,6 +30,11 @@ define('ASSIGNFEEDBACK_AIF_FILEAREA', 'feedback');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class assign_feedback_aif extends assign_feedback_plugin {
+    /** @var string File component for AI feedback. */
+    const COMPONENT = 'assignfeedback_aif';
+
+    /** @var string File area for AI feedback. */
+    const FILEAREA = 'feedback';
     /**
      * Should return the name of this plugin type.
      *
@@ -62,7 +61,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Get the default setting for feedback comments plugin.
+     * Get the settings for AI feedback plugin.
      *
      * @param MoodleQuickForm $mform The form to add elements to.
      * @return void
@@ -78,6 +77,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             ['size' => 70, 'rows' => 10]
         );
         $mform->setDefault('assignfeedback_aif_prompt', $defaultprompt);
+        $mform->setType('assignfeedback_aif_prompt', PARAM_RAW);
 
         // Expert mode template button (only shown when admin setting is enabled).
         if (get_config('assignfeedback_aif', 'enableexpertmode')) {
@@ -102,8 +102,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'advcheckbox',
             'assignfeedback_aif_autogenerate',
             get_string('autogenerate', 'assignfeedback_aif'),
-            ' ',
-            [],
+            '',
+            ['id' => 'id_assignfeedback_aif_autogenerate'],
             [0, 1]
         );
         $mform->setDefault('assignfeedback_aif_autogenerate', 0);
@@ -118,36 +118,29 @@ class assign_feedback_aif extends assign_feedback_plugin {
         );
 
         $mform->addHelpButton('assignfeedback_aif_prompt', 'prompt', 'assignfeedback_aif');
-        // Disable Prompt if AI assisted feedback if comment feedback plugin is disabled.
+        // Disable prompt if AI assisted feedback plugin is disabled.
         $mform->hideIf('assignfeedback_aif_prompt', 'assignfeedback_aif_enabled', 'notchecked');
 
         $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
 
         global $DB;
-        $id = optional_param('update', 0, PARAM_INT);
 
-        $record = $DB->get_record('assignfeedback_aif', ['assignment' => $id]);
-        if ($record) {
-            $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
-            $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
+        $instance = $this->assignment->get_default_instance();
+        if ($instance && !empty($instance->id)) {
+            $record = $DB->get_record('assignfeedback_aif', ['assignment' => $instance->id]);
+            if ($record) {
+                $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
+                $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
+            }
         }
     }
-
     /**
-     * Preprocessing data for the form.
-     *
-     * @param array $defaultvalues The default values for the form.
-     * @return void
-     */
-    public function data_preprocessing(&$defaultvalues): void {
-    }
-    /**
-     * Has the comment feedback been modified?
+     * Has the AI feedback been modified?
      *
      * @param stdClass $grade The grade object.
      * @param stdClass $data Data from the form submission.
-     * @return boolean True if the comment feedback has been modified, else false.
+     * @return boolean True if the AI feedback has been modified, else false.
      */
     public function is_feedback_modified(stdClass $grade, stdClass $data): bool {
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
@@ -253,8 +246,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'assignfeedbackaif',
             $this->get_editor_options(),
             $this->assignment->get_context(),
-            ASSIGNFEEDBACK_AIF_COMPONENT,
-            ASSIGNFEEDBACK_AIF_FILEAREA,
+            self::COMPONENT,
+            self::FILEAREA,
             $grade->id
         );
 
@@ -285,7 +278,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         return true;
     }
     /**
-     * Save the settings for feedback comments plugin.
+     * Save the settings for AI feedback plugin.
      *
      * @param stdClass $data The form data.
      * @return bool
@@ -294,7 +287,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         global $DB;
         $prompt = $data->assignfeedback_aif_prompt;
         $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
-        $assignment = $data->coursemodule;
+        $assignment = $this->assignment->get_instance()->id;
         $feedback = $DB->get_record('assignfeedback_aif', ['assignment' => $assignment]);
         if ($feedback) {
             $feedback->prompt = $prompt;
@@ -313,7 +306,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Saving the comment content into database.
+     * Save the AI feedback to the database.
      *
      * @param stdClass $grade The grade object.
      * @param stdClass $data The form data.
@@ -330,8 +323,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'assignfeedbackaif',
             $this->get_editor_options(),
             $this->assignment->get_context(),
-            ASSIGNFEEDBACK_AIF_COMPONENT,
-            ASSIGNFEEDBACK_AIF_FILEAREA,
+            self::COMPONENT,
+            self::FILEAREA,
             $grade->id
         );
 
@@ -345,7 +338,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         } else {
             // Create new record if none exists yet.
             $aif = $DB->get_record('assignfeedback_aif', [
-                'assignment' => $this->assignment->get_course_module()->id,
+                'assignment' => $this->assignment->get_instance()->id,
             ]);
             if ($aif) {
                 $submission = $DB->get_record('assign_submission', [
@@ -360,6 +353,11 @@ class assign_feedback_aif extends assign_feedback_plugin {
                 $newrecord->feedbackformat = $data->assignfeedbackaifformat;
                 $newrecord->timecreated = $clock->now()->getTimestamp();
                 $DB->insert_record('assignfeedback_aif_feedback', $newrecord);
+            } else {
+                debugging(
+                    'assignfeedback_aif: No config record found for assignment, cannot save feedback.',
+                    DEBUG_DEVELOPER
+                );
             }
         }
         return true;
@@ -378,14 +376,14 @@ class assign_feedback_aif extends assign_feedback_plugin {
             (object) [
                 'key' => 'generatefeedbackai',
                 'label' => get_string('batchoperationgeneratefeedbackai', 'assignfeedback_aif'),
-                'icon' => $OUTPUT->pix_icon('i/upload', ''),
+                'icon' => $OUTPUT->pix_icon('i/completion-auto-y', ''),
                 'confirmationtitle' => get_string('generatefeedbackai', 'assignfeedback_aif'),
                 'confirmationquestion' => get_string('batchoperationconfirmgeneratefeedbackai', 'assignfeedback_aif'),
             ],
             (object) [
                 'key' => 'deletefeedbackai',
                 'label' => get_string('batchoperationdeletefeedbackai', 'assignfeedback_aif'),
-                'icon' => $OUTPUT->pix_icon('i/upload', ''),
+                'icon' => $OUTPUT->pix_icon('t/delete', ''),
                 'confirmationtitle' => get_string('deletefeedbackai', 'assignfeedback_aif'),
                 'confirmationquestion' => get_string('batchoperationconfirmdeletefeedbackai', 'assignfeedback_aif'),
             ],
@@ -426,16 +424,13 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'action' => $action,
             'triggeredby' => 'manual',
         ]);
+        global $USER;
+        $task->set_userid($USER->id);
         \core\task\manager::queue_adhoc_task($task, true);
-
-        redirect(new moodle_url('view.php', [
-            'id' => $this->assignment->get_course_module()->id,
-            'action' => 'grading',
-        ]), get_string('processfeedbackainotify', 'assignfeedback_aif'));
     }
 
     /**
-     * Display the comment in the feedback table.
+     * Display the AI feedback in the feedback table.
      *
      * @param stdClass $grade The grade object.
      * @param bool $showviewlink Set to true to show a link to view the full feedback.
@@ -462,20 +457,13 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function get_feedbackaif(int $assignment, int $userid): stdClass|false {
         global $DB;
         $sql = "SELECT aiff.*
-        FROM {assign} a
-        JOIN {course_modules} cm
-        ON cm.instance = a.id and cm.course = a.course
-        JOIN {assignfeedback_aif} aif
-        ON aif.assignment = cm.id
-        JOIN {assignfeedback_aif_feedback} aiff
-        ON aiff.aif = aif.id
-        JOIN {assign_submission} sub
-        ON sub.assignment = a.id AND aiff.submission = sub.id
-        WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1
-        ORDER BY aiff.id";
+                  FROM {assign} a
+                  JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
+                  JOIN {assignfeedback_aif_feedback} aiff ON aiff.aif = aif.id
+                  JOIN {assign_submission} sub ON sub.assignment = a.id AND aiff.submission = sub.id
+                 WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1";
         $params = ['assignment' => $assignment, 'userid' => $userid];
-        $record = $DB->get_record_sql($sql, $params);
-        return $record;
+        return $DB->get_record_sql($sql, $params);
     }
 
     /**
@@ -496,10 +484,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * If this plugin adds to the gradebook comments field, it must format the text
-     * of the comment.
+     * If this plugin adds to the gradebook, it must format the text
+     * of the AI feedback.
      *
-     * Only one feedback plugin can push comments to the gradebook and that is chosen by the assignment
+     * Only one feedback plugin can push feedback to the gradebook and that is chosen by the assignment
      * settings page.
      *
      * @param stdClass $grade The grade object.
@@ -520,20 +508,20 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function delete_instance(): bool {
         global $DB;
-        $cmid = $this->assignment->get_course_module()->id;
-        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $cmid], '', 'id');
+        $assignmentid = $this->assignment->get_instance()->id;
+        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $assignmentid], '', 'id');
         foreach ($records as $record) {
             $DB->delete_records('assignfeedback_aif_feedback', ['aif' => $record->id]);
         }
         $DB->delete_records(
             'assignfeedback_aif',
-            ['assignment' => $cmid]
+            ['assignment' => $assignmentid]
         );
         return true;
     }
 
     /**
-     * Returns true if there are no feedback comments for the given grade.
+     * Returns true if there are no AI feedback entries for the given grade.
      *
      * @param stdClass $grade The grade object.
      * @return bool True if no feedback exists.
@@ -543,7 +531,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Return a description of external params suitable for uploading an feedback comment from a webservice.
+     * Return a description of external params suitable for uploading AI feedback from a webservice.
      *
      * Used in WebServices mod_assign_save_grade and mod_assign_save_grades.
      *

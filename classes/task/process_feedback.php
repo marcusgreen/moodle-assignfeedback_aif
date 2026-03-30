@@ -51,7 +51,7 @@ class process_feedback extends \core\task\scheduled_task {
                 FROM {assign} a
                 JOIN {course_modules} cm ON cm.instance = a.id
                 JOIN {context} cx ON cx.instanceid = cm.id AND cx.contextlevel = 70
-                JOIN {assignfeedback_aif} aif ON aif.assignment = cm.id
+                JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
                 JOIN {assign_submission} sub ON sub.assignment = a.id
                 LEFT JOIN {assignsubmission_onlinetext} olt ON olt.assignment = a.id AND olt.submission = sub.id
                 WHERE sub.status = 'submitted'
@@ -88,6 +88,7 @@ class process_feedback extends \core\task\scheduled_task {
                 $data = (object) [
                     'aif' => $submission->aifid,
                     'feedback' => $aifeedback,
+                    'feedbackformat' => FORMAT_MARKDOWN,
                     'timecreated' => $clock->now()->getTimestamp(),
                     'submission' => $submission->subid,
                 ];

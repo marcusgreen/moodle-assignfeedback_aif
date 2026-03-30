@@ -17,7 +17,11 @@
 namespace assignfeedback_aif\task;
 
 /**
- * Scheduled task for processing AI feedback with rubric grading.
+ * Scheduled task dispatcher for AI feedback generation.
+ *
+ * This task finds submissions without AI feedback and enqueues
+ * adhoc tasks for each one. The actual feedback generation
+ * happens exclusively in the adhoc worker task.
  *
  * @package    assignfeedback_aif
  * @copyright  2025 Sumaiya Javed <sumaiya.javed@catalyst.net.nz>
@@ -35,26 +39,22 @@ class process_feedback_rubric extends \core\task\scheduled_task {
 
     /**
      * Execute the scheduled task.
+     *
+     * Finds all submitted assignments with AIF enabled that have no feedback yet,
+     * and enqueues an adhoc task for each.
      */
     public function execute(): void {
         global $DB;
 
-        $clock = \core\di::get(\core\clock::class);
-
         $sql = "SELECT sub.id AS subid,
-                       cx.id AS contextid,
                        aif.id AS aifid,
-                       aif.prompt AS prompt,
                        a.id AS aid,
-                       a.name AS assignmentname,
-                       olt.onlinetext AS onlinetext,
                        sub.userid
                   FROM {assign} a
                   JOIN {course_modules} cm ON cm.instance = a.id AND cm.course = a.course
                   JOIN {context} cx ON cx.instanceid = cm.id AND cx.contextlevel = :contextlevel
-                  JOIN {assignfeedback_aif} aif ON aif.assignment = cm.id
+                  JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
                   JOIN {assign_submission} sub ON sub.assignment = a.id
-             LEFT JOIN {assignsubmission_onlinetext} olt ON olt.assignment = a.id AND olt.submission = sub.id
                  WHERE sub.status = :status
                    AND sub.latest = 1
                    AND NOT EXISTS (
@@ -67,36 +67,28 @@ class process_feedback_rubric extends \core\task\scheduled_task {
         ];
         $records = $DB->get_records_sql($sql, $params);
 
+        if (empty($records)) {
+            mtrace('No unprocessed submissions found.');
+            return;
+        }
+
+        // Group by assignment to enqueue one adhoc task per assignment.
+        $byassignment = [];
         foreach ($records as $record) {
-            if (empty($record)) {
-                continue;
-            }
+            $byassignment[$record->aid][] = $record->userid;
+        }
 
-            try {
-                // Use the correct context for each submission.
-                $aif = new \assignfeedback_aif\aif($record->contextid);
-                $promptdata = $aif->get_prompt($record, 'rubric');
-                if (empty($promptdata['prompt'])) {
-                    continue;
-                }
-
-                $aifeedback = $aif->perform_request($promptdata['prompt'], null, $promptdata['options']);
-
-                // Append disclaimer to feedback.
-                $aifeedback = $aif->append_disclaimer($aifeedback);
-
-                $data = (object) [
-                    'aif' => $record->aifid,
-                    'feedback' => $aifeedback,
-                    'timecreated' => $clock->now()->getTimestamp(),
-                    'submission' => $record->subid,
-                ];
-                $DB->insert_record('assignfeedback_aif_feedback', $data);
-
-                mtrace("AI feedback generated for submission {$record->subid}");
-            } catch (\Exception $e) {
-                mtrace("Error processing submission {$record->subid}: " . $e->getMessage());
-            }
+        foreach ($byassignment as $assignmentid => $userids) {
+            $task = new process_feedback_rubric_adhoc();
+            $task->set_custom_data([
+                'assignment' => $assignmentid,
+                'users' => $userids,
+                'action' => 'generate',
+                'triggeredby' => 'auto',
+            ]);
+            $task->set_userid(get_admin()->id);
+            \core\task\manager::queue_adhoc_task($task, true);
+            mtrace('Enqueued adhoc task for assignment ' . $assignmentid . ' with ' . count($userids) . ' user(s).');
         }
     }
 }
