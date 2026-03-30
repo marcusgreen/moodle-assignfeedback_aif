@@ -102,5 +102,12 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026031901, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026033001) {
+        // Clean up removed 'purpose' admin setting.
+        unset_config('purpose', 'assignfeedback_aif');
+
+        upgrade_plugin_savepoint(true, 2026033001, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

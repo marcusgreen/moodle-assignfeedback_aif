@@ -16,7 +16,7 @@
 
 namespace assignfeedback_aif\event;
 
-use assignfeedback_aif\task\process_feedback_rubric_adhoc;
+use assignfeedback_aif\task\process_feedback_adhoc;
 use core\task\manager;
 
 /**
@@ -59,14 +59,15 @@ class observer {
         }
 
         // Queue the ad-hoc task.
-        $task = new process_feedback_rubric_adhoc();
+        $task = new process_feedback_adhoc();
         $task->set_custom_data([
             'assignment' => $assignmentid,
             'users' => [$userid],
             'action' => 'generate',
             'triggeredby' => 'auto',
         ]);
-        $task->set_userid(get_admin()->id);
+        // Run as the submitting user so quota and availability checks are correct.
+        $task->set_userid($userid);
         manager::queue_adhoc_task($task, true);
     }
 

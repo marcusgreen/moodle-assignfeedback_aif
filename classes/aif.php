@@ -29,7 +29,6 @@ use stdClass;
  */
 class aif {
     /** @var int The context ID for AI requests. */
-    /** @var int The context ID for AI requests. */
     protected int $contextid;
 
     /**
@@ -48,7 +47,7 @@ class aif {
      * via \core\di::set(ai_request_provider::class, $mock).
      *
      * @param string $prompt The prompt to send to the AI.
-     * @param string|null $purpose The purpose of the request (for local_ai_manager). If null, uses config.
+     * @param string|null $purpose The purpose of the request (for local_ai_manager). Defaults to 'feedback'.
      * @param array $options Additional options (e.g., 'image' for ITT requests).
      * @param int $userid The user to attribute the AI request to. Defaults to current $USER.
      * @return string The AI response.
@@ -62,9 +61,8 @@ class aif {
 
         $provider = \core\di::get(ai_request_provider::class);
 
-        // Get purpose from config if not provided.
         if ($purpose === null) {
-            $purpose = get_config('assignfeedback_aif', 'purpose') ?: 'feedback';
+            $purpose = 'feedback';
         }
 
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';

@@ -24,6 +24,7 @@
 
 import Ajax from 'core/ajax';
 import Notification from 'core/notification';
+import {add as addToast} from 'core/toast';
 import {get_string as getString} from 'core/str';
 import Pending from 'core/pending';
 
@@ -64,15 +65,9 @@ export const init = (assignmentId, userId) => {
             }])[0];
 
             if (result.success) {
-                Notification.addNotification({
-                    message: result.message,
-                    type: 'success',
-                });
+                addToast(result.message, {type: 'success'});
             } else {
-                Notification.addNotification({
-                    message: result.message,
-                    type: 'error',
-                });
+                addToast(result.message, {type: 'danger'});
             }
         } catch (error) {
             Notification.exception(error);

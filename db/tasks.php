@@ -27,7 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 
 $tasks = [
     [
-        'classname' => 'assignfeedback_aif\task\process_feedback_rubric',
+        'classname' => 'assignfeedback_aif\task\process_feedback',
         'blocking' => 0,
         'minute' => '*',
         'hour' => '*',
