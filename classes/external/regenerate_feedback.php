@@ -20,7 +20,7 @@ use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
-use assignfeedback_aif\task\process_feedback_rubric_adhoc;
+use assignfeedback_aif\task\process_feedback_adhoc;
 use core\context\module as context_module;
 use core\task\manager;
 
@@ -73,7 +73,7 @@ class regenerate_feedback extends external_api {
         require_capability('mod/assign:grade', $context);
 
         // Queue the ad-hoc task for this single user.
-        $task = new process_feedback_rubric_adhoc();
+        $task = new process_feedback_adhoc();
         $task->set_custom_data([
             'assignment' => $params['assignmentid'],
             'users' => [$params['userid']],

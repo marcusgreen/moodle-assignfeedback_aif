@@ -41,11 +41,6 @@ class hook_callbacks {
             get_string('purposeplacedescription_feedback', 'assignfeedback_aif')
         );
         $hook->add_purpose_usage_description(
-            'translate',
-            'assignfeedback_aif',
-            get_string('purposeplacedescription_translate', 'assignfeedback_aif')
-        );
-        $hook->add_purpose_usage_description(
             'itt',
             'assignfeedback_aif',
             get_string('purposeplacedescription_itt', 'assignfeedback_aif')

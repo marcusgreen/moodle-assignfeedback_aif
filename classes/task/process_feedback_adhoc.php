@@ -17,13 +17,13 @@
 namespace assignfeedback_aif\task;
 
 /**
- * Ad-hoc task for processing AI feedback with rubric grading.
+ * Ad-hoc task for processing AI feedback.
  *
  * @package    assignfeedback_aif
  * @copyright  2025 Sumaiya Javed <sumaiya.javed@catalyst.net.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
+class process_feedback_adhoc extends \core\task\adhoc_task {
     /**
      * Execute the ad-hoc task.
      */
@@ -88,10 +88,9 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
     /**
      * Generate AI feedback for a submission.
      *
-     * @param mixed $record  The submission record.
+     * @param object|false $record The submission record.
      * @param string $triggeredby How the task was triggered: 'auto' (observer) or 'manual' (teacher).
-     * @param null|assign $assign The assign instance.
-     * @return void
+     * @param \assign $assign The assign instance.
      */
     private function generate_feedback($record, string $triggeredby = 'manual', ?\assign $assign = null): void {
         global $DB, $CFG;
@@ -117,22 +116,26 @@ class process_feedback_rubric_adhoc extends \core\task\adhoc_task {
         // All content (including images and PDFs) is now converted to text during
         // prompt building, so we always use the default feedback purpose.
         $provider = \core\di::get(\assignfeedback_aif\local\ai_request_provider::class);
-        $purpose = get_config('assignfeedback_aif', 'purpose') ?: 'feedback';
-        if (!$provider->is_available($purpose, $record->contextid)) {
-            mtrace("AI backend not available for purpose '{$purpose}', skipping submission {$record->subid}.");
-            return;
-        }
+        $purpose = 'feedback';
+
+        // Set up the user context for the submission owner so that quota and
+        // availability checks are performed against the correct user.
+        $submissionuser = \core_user::get_user($record->userid);
+        \core\cron::setup_user($submissionuser);
 
         try {
+            if (!$provider->is_available($purpose, $record->contextid)) {
+                mtrace("AI backend not available for user {$record->userid}, skipping submission {$record->subid}.");
+                return;
+            }
+
             $aifeedback = $aif->perform_request(
                 $promptdata['prompt'],
                 null,
-                $promptdata['options'],
-                $this->get_userid() ?: get_admin()->id
+                $promptdata['options']
             );
-        } catch (\moodle_exception $e) {
-            mtrace("AI request failed for submission {$record->subid}: " . $e->getMessage());
-            return;
+        } finally {
+            \core\cron::setup_user();
         }
 
         // Practice mode: only when auto-triggered (not teacher) and no marking workflow.

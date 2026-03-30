@@ -55,15 +55,6 @@ $settings->add(new admin_setting_configselect(
     $backends
 ));
 
-// Purpose configuration for local_ai_manager.
-$settings->add(new admin_setting_configtext(
-    'assignfeedback_aif/purpose',
-    get_string('purpose', 'assignfeedback_aif'),
-    get_string('purpose_text', 'assignfeedback_aif'),
-    'feedback',
-    PARAM_ALPHANUMEXT
-));
-
 // Expert mode.
 $settings->add(new admin_setting_configcheckbox(
     'assignfeedback_aif/enableexpertmode',

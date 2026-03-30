@@ -68,6 +68,17 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_settings(MoodleQuickForm $mform): void {
 
+        // ai_manager infobox: data sharing notice for teachers configuring the prompt.
+        if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
+            global $PAGE, $USER;
+            $mform->addElement('html', '<div data-aif="aisettingsinfo"></div>');
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/infobox',
+                'renderInfoBox',
+                ['assignfeedback_aif', $USER->id, '[data-aif="aisettingsinfo"]', ['feedback']]
+            );
+        }
+
         $defaultprompt = get_config('assignfeedback_aif', 'prompt');
 
         $mform->addElement(
@@ -223,7 +234,23 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return bool true if elements were added to the form
      */
     public function get_form_elements_for_user($grade, MoodleQuickForm $mform, stdClass $data, $userid): bool {
-        global $PAGE;
+        global $PAGE, $USER;
+
+        // ai_manager widgets: infobox (data sharing notice) and quota.
+        if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
+            $mform->addElement('html', '<div data-aif="aiinfo"></div>');
+            $mform->addElement('html', '<div data-aif="aiuserquota" class="mb-2"></div>');
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/infobox',
+                'renderInfoBox',
+                ['assignfeedback_aif', $USER->id, '[data-aif="aiinfo"]', ['feedback']]
+            );
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/userquota',
+                'renderUserQuota',
+                ['[data-aif="aiuserquota"]', ['feedback']]
+            );
+        }
 
         // Get the existing feedback.
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
@@ -260,7 +287,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             get_string('regenerate', 'assignfeedback_aif'),
             [
                 'type' => 'button',
-                'class' => 'btn btn-secondary mt-2',
+                'class' => 'btn btn-secondary mt-2 mb-3',
                 'data-action' => 'regenerate-aif',
                 'data-assignmentid' => $assignmentid,
                 'data-userid' => $userid,
@@ -403,7 +430,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $this->process_feedbackaif($users, 'generate');
         }
         if ($action == 'deletefeedbackai') {
-            $this->process_feedbackaif($users, 'delete');
+            $this->delete_feedbackaif($users);
         }
         return '';
     }
@@ -417,7 +444,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function process_feedbackaif(array $users, string $action): void {
         // Run an ad-hoc task to generate AI feedback for submission.
-        $task = new \assignfeedback_aif\task\process_feedback_rubric_adhoc();
+        $task = new \assignfeedback_aif\task\process_feedback_adhoc();
         $task->set_custom_data([
             'assignment' => $this->assignment->get_instance()->id,
             'users' => $users,
@@ -427,6 +454,40 @@ class assign_feedback_aif extends assign_feedback_plugin {
         global $USER;
         $task->set_userid($USER->id);
         \core\task\manager::queue_adhoc_task($task, true);
+    }
+
+    /**
+     * Delete AI feedback synchronously for the given users.
+     *
+     * Unlike generate, delete is a fast DB operation that does not need
+     * background processing. Running it synchronously ensures the grading
+     * table reflects the deletion immediately after the batch operation.
+     *
+     * @param array $users The user IDs to delete feedback for.
+     * @return void
+     */
+    private function delete_feedbackaif(array $users): void {
+        global $DB;
+
+        $assignmentid = $this->assignment->get_instance()->id;
+        $aifrecord = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
+        if (!$aifrecord) {
+            return;
+        }
+
+        foreach ($users as $userid) {
+            $submission = $DB->get_record('assign_submission', [
+                'assignment' => $assignmentid,
+                'userid' => $userid,
+                'latest' => 1,
+            ]);
+            if ($submission) {
+                $DB->delete_records('assignfeedback_aif_feedback', [
+                    'aif' => $aifrecord->id,
+                    'submission' => $submission->id,
+                ]);
+            }
+        }
     }
 
     /**
@@ -442,9 +503,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
             return '';
         }
         $format = $record->feedbackformat ?? FORMAT_HTML;
-        return format_text($record->feedback, $format, [
+        $text = format_text($record->feedback, $format, [
             'context' => $this->assignment->get_context(),
         ]);
+        return $text . $this->render_warningbox();
     }
 
     /**
@@ -478,9 +540,30 @@ class assign_feedback_aif extends assign_feedback_plugin {
             return '';
         }
         $format = $record->feedbackformat ?? FORMAT_HTML;
-        return format_text($record->feedback, $format, [
+        $text = format_text($record->feedback, $format, [
             'context' => $this->assignment->get_context(),
         ]);
+        return $text . $this->render_warningbox();
+    }
+
+    /**
+     * Render the ai_manager warning box about AI result quality.
+     *
+     * Only renders when the local_ai_manager backend is configured.
+     *
+     * @return string HTML for the warning box container.
+     */
+    private function render_warningbox(): string {
+        if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
+            return '';
+        }
+        global $PAGE;
+        $PAGE->requires->js_call_amd(
+            'local_ai_manager/warningbox',
+            'renderWarningBox',
+            ['[data-aif="aiwarning"]']
+        );
+        return '<div data-aif="aiwarning"></div>';
     }
 
     /**
