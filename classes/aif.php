@@ -81,13 +81,17 @@ class aif {
      * @param string $rubric The rubric criteria text.
      * @param string $prompt The teacher's prompt/instructions.
      * @param string $assignmentname The assignment name.
+     * @param string $description The assignment description (intro).
+     * @param string $activityinstructions The activity instructions shown on the submission page.
      * @return string The complete prompt.
      */
     public function build_prompt_from_template(
         string $submission,
         string $rubric,
         string $prompt,
-        string $assignmentname
+        string $assignmentname,
+        string $description = '',
+        string $activityinstructions = ''
     ): string {
         $language = $this->get_current_language_name();
 
@@ -97,10 +101,19 @@ class aif {
 
         if ($isexpertmode) {
             // In expert mode, the teacher's prompt IS the complete template.
+            // Build the rubric section: full section with heading if rubric exists, empty otherwise.
+            $rubricsection = '';
+            if (!empty(trim($rubric))) {
+                $rubricsection = "=== GRADING CRITERIA ===\n" . $rubric;
+            }
+
             $replacements = [
                 '{{submission}}' => $submission,
+                '{{rubric_section}}' => $rubricsection,
                 '{{rubric}}' => $rubric,
                 '{{assignmentname}}' => $assignmentname,
+                '{{description}}' => $description,
+                '{{activityinstructions}}' => $activityinstructions,
                 '{{language}}' => $language,
             ];
             return str_replace(array_keys($replacements), array_values($replacements), $prompt);
@@ -112,15 +125,29 @@ class aif {
             $template = get_string('defaultprompttemplate', 'assignfeedback_aif');
         }
 
+        // Build the rubric section: full section with heading if rubric exists, empty otherwise.
+        $rubricsection = '';
+        if (!empty(trim($rubric))) {
+            $rubricsection = "=== GRADING CRITERIA ===\n" . $rubric;
+        }
+
         $replacements = [
             '{{submission}}' => $submission,
+            '{{rubric_section}}' => $rubricsection,
             '{{rubric}}' => $rubric,
             '{{prompt}}' => $prompt,
             '{{assignmentname}}' => $assignmentname,
+            '{{description}}' => $description,
+            '{{activityinstructions}}' => $activityinstructions,
             '{{language}}' => $language,
         ];
 
-        return str_replace(array_keys($replacements), array_values($replacements), $template);
+        $result = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+        // Remove template sections that have empty content (e.g. no description or instructions).
+        $result = preg_replace('/^=== [A-Z ]+===\n\s*\n/m', '', $result);
+
+        return $result;
     }
 
     /**
@@ -193,7 +220,26 @@ class aif {
         $rubrictext = '';
         $submissiontext = '';
         $teacherprompt = $assignment->prompt ?? '';
-        $assignmentname = $DB->get_field('assign', 'name', ['id' => $assignment->aid]) ?: '';
+        $assignrecord = $DB->get_record('assign', ['id' => $assignment->aid], 'name, intro, introformat, activity, activityformat');
+        $assignmentname = $assignrecord ? $assignrecord->name : '';
+        $description = '';
+        $activityinstructions = '';
+        if ($assignrecord) {
+            if (!empty($assignrecord->intro)) {
+                $description = html_to_text(format_text(
+                    $assignrecord->intro,
+                    $assignrecord->introformat,
+                    ['filter' => false]
+                ));
+            }
+            if (!empty($assignrecord->activity)) {
+                $activityinstructions = html_to_text(format_text(
+                    $assignrecord->activity,
+                    $assignrecord->activityformat,
+                    ['filter' => false]
+                ));
+            }
+        }
         $options = [];
 
         if ($gradingmethod === 'rubric') {
@@ -222,7 +268,9 @@ class aif {
             $submissiontext,
             $rubrictext,
             $teacherprompt,
-            $assignmentname
+            $assignmentname,
+            $description,
+            $activityinstructions
         );
 
         return ['prompt' => $prompt, 'options' => $options];

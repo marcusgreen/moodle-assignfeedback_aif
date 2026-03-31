@@ -22,6 +22,7 @@ use core_external\external_single_structure;
 use core_external\external_value;
 use assignfeedback_aif\task\process_feedback_adhoc;
 use core\context\module as context_module;
+use core\output\stored_progress_bar;
 use core\task\manager;
 
 /**
@@ -50,10 +51,10 @@ class regenerate_feedback extends external_api {
      *
      * @param int $assignmentid The assignment instance id.
      * @param int $userid The user id.
-     * @return array Result with success status and message.
+     * @return array Result with success status, message, and progress tracking data.
      */
     public static function execute(int $assignmentid, int $userid): array {
-        global $DB, $CFG;
+        global $DB, $CFG, $USER;
 
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
@@ -88,21 +89,50 @@ class regenerate_feedback extends external_api {
             }
         }
 
-        // Queue the ad-hoc task for this single user.
+        // Queue the ad-hoc task with a unique marker for retrieval.
         $task = new process_feedback_adhoc();
+        $uniqadhoctaskid = uniqid();
         $task->set_custom_data([
             'assignment' => $params['assignmentid'],
             'users' => [$params['userid']],
             'action' => 'generate',
             'triggeredby' => 'manual',
+            'uniqadhoctaskid' => $uniqadhoctaskid,
         ]);
-        global $USER;
         $task->set_userid($USER->id);
         manager::queue_adhoc_task($task, true);
+
+        // Find the queued task to get its ID for stored progress.
+        $currenttasks = manager::get_adhoc_tasks(process_feedback_adhoc::class);
+        $adhoctask = null;
+        foreach ($currenttasks as $t) {
+            $data = $t->get_custom_data();
+            if (isset($data->uniqadhoctaskid) && $data->uniqadhoctaskid === $uniqadhoctaskid) {
+                $adhoctask = $t;
+                break;
+            }
+        }
+
+        $progressrecordid = 0;
+        if ($adhoctask) {
+            $adhoctask->initialise_stored_progress();
+
+            $idnumber = stored_progress_bar::convert_to_idnumber(
+                process_feedback_adhoc::class . '_' . $adhoctask->get_id()
+            );
+            $record = $DB->get_record('stored_progress', ['idnumber' => $idnumber]);
+            if ($record) {
+                $progressrecordid = (int) $record->id;
+                // Set initial message directly in DB to avoid HTML output in AJAX context.
+                $record->message = get_string('waitingforadhoctaskstart', 'assignfeedback_aif');
+                $DB->update_record('stored_progress', $record);
+            }
+        }
 
         return [
             'success' => true,
             'message' => get_string('regenerate_queued', 'assignfeedback_aif'),
+            'progressrecordid' => $progressrecordid,
         ];
     }
 
@@ -115,6 +145,7 @@ class regenerate_feedback extends external_api {
         return new external_single_structure([
             'success' => new external_value(PARAM_BOOL, 'Whether the task was queued successfully'),
             'message' => new external_value(PARAM_TEXT, 'Status message'),
+            'progressrecordid' => new external_value(PARAM_INT, 'Stored progress DB record ID for polling', VALUE_OPTIONAL),
         ]);
     }
 }

@@ -88,3 +88,75 @@ export const init = (assignmentId, userId) => {
 
     timerId = setInterval(poll, POLL_INTERVAL_MS);
 };
+
+/**
+ * Initialize progress polling using the stored_progress API.
+ *
+ * Used on the summary/overview page to show task progress and update
+ * the progress bar in real time. Reloads the page when complete.
+ *
+ * @param {number} assignmentId The assignment instance id (unused, for future use).
+ * @param {number} userId The user id (unused, for future use).
+ * @param {number} progressRecordId The stored_progress DB record ID.
+ */
+export const initWithProgress = (assignmentId, userId, progressRecordId) => {
+    const container = document.querySelector('[data-aif="generating"]');
+    if (!container) {
+        return;
+    }
+
+    const bar = container.querySelector('[data-aif="progress-bar"]');
+    const messageEl = container.querySelector('[data-aif="progress-message"]');
+
+    /**
+     * Poll the stored_progress API for updates.
+     */
+    const pollProgress = async() => {
+        try {
+            const results = await Ajax.call([{
+                methodname: 'core_output_poll_stored_progress',
+                args: {ids: [progressRecordId]},
+            }])[0];
+
+            if (!results || results.length === 0) {
+                setTimeout(pollProgress, POLL_INTERVAL_MS);
+                return;
+            }
+
+            const data = results[0];
+
+            if (bar) {
+                bar.style.width = parseFloat(data.progress).toFixed(1) + '%';
+            }
+            if (messageEl && data.message) {
+                messageEl.textContent = data.message;
+            }
+
+            if (data.error) {
+                if (bar) {
+                    bar.classList.add('bg-danger');
+                    bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
+                    bar.style.width = '100%';
+                }
+                return;
+            }
+
+            if (parseFloat(data.progress) >= 100) {
+                if (bar) {
+                    bar.classList.add('bg-success');
+                    bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
+                }
+                setTimeout(() => window.location.reload(), 1500);
+                return;
+            }
+
+            setTimeout(pollProgress, POLL_INTERVAL_MS);
+        } catch (error) {
+            Log.debug('assignfeedback_aif/feedbackpoller: progress poll error.');
+            Log.debug(error);
+            setTimeout(pollProgress, POLL_INTERVAL_MS);
+        }
+    };
+
+    pollProgress();
+};

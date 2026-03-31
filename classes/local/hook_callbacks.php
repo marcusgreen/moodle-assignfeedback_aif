@@ -92,6 +92,11 @@ class hook_callbacks {
             return;
         }
 
+        // Skip if view_summary() already rendered a spinner for this page.
+        if (\assign_feedback_aif::is_spinner_rendered()) {
+            return;
+        }
+
         // Render the spinner notification and start the poller.
         $html = $OUTPUT->render_from_template('assignfeedback_aif/feedback_generating', []);
         $hook->add_html($html);

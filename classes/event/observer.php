@@ -38,12 +38,31 @@ class observer {
     }
 
     /**
-     * Queue AI feedback generation for a submission if autogenerate is enabled.
+     * Listen to submission_updated events and re-queue AI feedback for submitted assignments.
      *
-     * @param \mod_assign\event\assessable_submitted $event The event object.
+     * Only triggers when the submission status is 'submitted' and autogenerate is enabled.
+     * Handles resubmission scenarios where the student modifies text or files after initial submission.
+     *
+     * @param \mod_assign\event\submission_updated $event The event object.
      * @return void
      */
-    private static function queue_feedback_generation(\mod_assign\event\assessable_submitted $event): void {
+    public static function submission_updated(\mod_assign\event\submission_updated $event): void {
+        // Only re-generate for already-submitted submissions.
+        $submissionstatus = $event->other['submissionstatus'] ?? '';
+        if ($submissionstatus !== 'submitted') {
+            return;
+        }
+
+        self::queue_feedback_generation($event);
+    }
+
+    /**
+     * Queue AI feedback generation for a submission if autogenerate is enabled.
+     *
+     * @param \core\event\base $event The event object.
+     * @return void
+     */
+    private static function queue_feedback_generation(\core\event\base $event): void {
         global $DB;
 
         $assign = $event->get_assign();

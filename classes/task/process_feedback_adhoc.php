@@ -19,11 +19,16 @@ namespace assignfeedback_aif\task;
 /**
  * Ad-hoc task for processing AI feedback.
  *
+ * Uses the stored progress trait to report task progress to the browser
+ * via the Moodle stored_progress polling mechanism.
+ *
  * @package    assignfeedback_aif
  * @copyright  2025 Sumaiya Javed <sumaiya.javed@catalyst.net.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class process_feedback_adhoc extends \core\task\adhoc_task {
+    use \core\task\stored_progress_task_trait;
+
     /**
      * Execute the ad-hoc task.
      */
@@ -31,6 +36,8 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         global $DB, $CFG;
 
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
+        $this->start_stored_progress();
 
         $customdata = $this->get_custom_data();
         $assignmentid = $customdata->assignment;
@@ -43,15 +50,38 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         $context = \core\context\module::instance($cm->id);
         $assign = new \assign($context, $cm, $course);
 
-        foreach ($users as $userid) {
+        $totalusers = count($users);
+
+        foreach ($users as $index => $userid) {
+            // Each user gets an equal slice of 0-100%.
+            $slicestart = ($index / $totalusers) * 100;
+            $slicesize = 100 / $totalusers;
+
             $record = $this->get_submission_record($assignmentid, $userid);
 
             if ($action === 'generate') {
-                $this->generate_feedback($record, $triggeredby, $assign);
+                $this->generate_feedback($record, $triggeredby, $assign, $slicestart, $slicesize);
             } else if ($action === 'delete') {
                 $this->delete_feedback($record, $assignmentid);
+                $this->report_substep($slicestart, $slicesize, 100, 'feedbackgenerationcomplete');
             }
         }
+
+        $this->progress->update_full(100, get_string('feedbackgenerationcomplete', 'assignfeedback_aif'));
+    }
+
+    /**
+     * Sets the initial progress of the associated progress bar.
+     *
+     * Adds a message that the task is waiting to be picked up by cron.
+     */
+    public function set_initial_progress(): void {
+        $this->progress->update_full(0, get_string('waitingforadhoctaskstart', 'assignfeedback_aif'));
+    }
+
+    #[\Override]
+    public function retry_until_success(): bool {
+        return false;
     }
 
     /**
@@ -88,16 +118,29 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
     /**
      * Generate AI feedback for a submission.
      *
+     * Reports granular progress within the user's allocated slice of the progress bar.
+     *
      * @param object|false $record The submission record.
      * @param string $triggeredby How the task was triggered: 'auto' (observer) or 'manual' (teacher).
      * @param \assign|null $assign The assign instance.
+     * @param float $slicestart The starting percentage of this user's progress slice.
+     * @param float $slicesize The size of this user's progress slice (percentage points).
      */
-    private function generate_feedback($record, string $triggeredby = 'manual', ?\assign $assign = null): void {
+    private function generate_feedback(
+        $record,
+        string $triggeredby = 'manual',
+        ?\assign $assign = null,
+        float $slicestart = 0,
+        float $slicesize = 100
+    ): void {
         global $DB, $CFG;
 
         if (empty($record)) {
             return;
         }
+
+        // Step 1: Preparing submission data (10%).
+        $this->report_substep($slicestart, $slicesize, 10, 'progresssteppreparing');
 
         // Delete existing feedback for this submission to allow regeneration.
         $DB->delete_records('assignfeedback_aif_feedback', [
@@ -108,10 +151,16 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         // Use the context from the submission for proper permission checks.
         $aif = new \assignfeedback_aif\aif($record->contextid);
 
+        // Step 2: Extracting submission content (30%).
+        $this->report_substep($slicestart, $slicesize, 30, 'progressstepextracting');
+
         $promptdata = $aif->get_prompt($record, 'rubric');
         if (empty($promptdata['prompt'])) {
             return;
         }
+
+        // Step 3: Requesting AI feedback (50%).
+        $this->report_substep($slicestart, $slicesize, 50, 'progresssteprequesting');
 
         // All content (including images and PDFs) is now converted to text during
         // prompt building, so we always use the default feedback purpose.
@@ -128,6 +177,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
             \core\cron::setup_user($submissionuser);
 
             if (!$provider->is_available($purpose, $record->contextid)) {
+                $this->progress->error(get_string('ainavailable', 'assignfeedback_aif'));
                 mtrace("AI backend not available for user {$record->userid}, skipping submission {$record->subid}.");
                 return;
             }
@@ -137,9 +187,16 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
                 null,
                 $promptdata['options']
             );
+        } catch (\Exception $e) {
+            $this->progress->error($e->getMessage());
+            mtrace("AI request failed for submission {$record->subid}: " . $e->getMessage());
+            return;
         } finally {
             \core\cron::setup_user();
         }
+
+        // Step 4: Saving feedback (90%).
+        $this->report_substep($slicestart, $slicesize, 90, 'progressstepsaving');
 
         // Practice mode: only when auto-triggered (not teacher) and no marking workflow.
         $ispractice = ($triggeredby === 'auto') && $this->is_practice_mode($record->aid);
@@ -147,11 +204,14 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         // Append the appropriate disclaimer to feedback.
         $aifeedback = $aif->append_disclaimer($aifeedback, $ispractice);
 
+        // Convert markdown to HTML so it can be displayed and edited in the TinyMCE editor.
+        $aifeedbackhtml = format_text($aifeedback, FORMAT_MARKDOWN, ['filter' => false]);
+
         $clock = \core\di::get(\core\clock::class);
         $data = (object) [
             'aif' => $record->aifid,
-            'feedback' => $aifeedback,
-            'feedbackformat' => FORMAT_MARKDOWN,
+            'feedback' => $aifeedbackhtml,
+            'feedbackformat' => FORMAT_HTML,
             'timecreated' => $clock->now()->getTimestamp(),
             'submission' => $record->subid,
         ];
@@ -161,6 +221,23 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         $this->ensure_grade_record($record, $assign);
 
         mtrace("AI feedback generated for assignment {$record->aid} submission {$record->subid}");
+    }
+
+    /**
+     * Report a sub-step within a user's progress slice.
+     *
+     * Calculates the absolute progress percentage based on the user's slice
+     * of the total progress bar and the relative position within that slice.
+     *
+     * @param float $slicestart The starting percentage of this user's slice.
+     * @param float $slicesize The size of this user's slice (percentage points).
+     * @param float $relativepercent The relative progress within the slice (0-100).
+     * @param string $langkey The lang string key for the progress message.
+     */
+    private function report_substep(float $slicestart, float $slicesize, float $relativepercent, string $langkey): void {
+        $absolutepercent = $slicestart + ($slicesize * $relativepercent / 100);
+        $absolutepercent = min($absolutepercent, 99); // Reserve 100% for the final completion message.
+        $this->progress->update_full($absolutepercent, get_string($langkey, 'assignfeedback_aif'));
     }
 
     /**

@@ -30,6 +30,10 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class assign_feedback_aif extends assign_feedback_plugin {
+
+    /** @var bool Whether the generating spinner has already been rendered on this page. */
+    private static bool $spinnerrendered = false;
+
     /** @var string File component for AI feedback. */
     const COMPONENT = 'assignfeedback_aif';
 
@@ -55,8 +59,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'maxbytes' => $this->assignment->get_course()->maxbytes,
             'maxfiles' => -1,
             'context' => $this->assignment->get_context(),
-            'noclean' => true,
-            'trusttext' => true,
         ];
     }
 
@@ -234,23 +236,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return bool true if elements were added to the form
      */
     public function get_form_elements_for_user($grade, MoodleQuickForm $mform, stdClass $data, $userid): bool {
-        global $PAGE, $USER;
-
-        // AI manager widgets: infobox (data sharing notice) and quota.
-        if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
-            $mform->addElement('html', '<div data-aif="aiinfo"></div>');
-            $mform->addElement('html', '<div data-aif="aiuserquota" class="mb-2"></div>');
-            $PAGE->requires->js_call_amd(
-                'local_ai_manager/infobox',
-                'renderInfoBox',
-                ['assignfeedback_aif', $USER->id, '[data-aif="aiinfo"]', ['feedback']]
-            );
-            $PAGE->requires->js_call_amd(
-                'local_ai_manager/userquota',
-                'renderUserQuota',
-                ['[data-aif="aiuserquota"]', ['feedback']]
-            );
-        }
+        global $DB, $PAGE, $USER;
 
         // Get the existing feedback.
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
@@ -280,26 +266,55 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
         $mform->addElement('editor', 'assignfeedbackaif_editor', $this->get_name(), null, $this->get_editor_options());
 
-        // Add regenerate button.
+        // Add (re-)generate button.
         $assignmentid = $this->assignment->get_instance()->id;
+
+        // Check if the student has a submission (to disable button if not).
+        $hassubmission = $DB->record_exists('assign_submission', [
+            'assignment' => $assignmentid,
+            'userid' => $userid,
+            'status' => 'submitted',
+            'latest' => 1,
+        ]);
+
         $buttonhtml = html_writer::tag(
             'button',
-            get_string('regenerate', 'assignfeedback_aif'),
+            get_string('generatefeedbackai', 'assignfeedback_aif'),
             [
                 'type' => 'button',
                 'class' => 'btn btn-secondary mt-2 mb-3',
                 'data-action' => 'regenerate-aif',
                 'data-assignmentid' => $assignmentid,
                 'data-userid' => $userid,
+                'disabled' => $hassubmission ? null : 'disabled',
             ]
         );
         $mform->addElement('html', $buttonhtml);
 
-        // Initialize the AMD module.
+        // Check for a running adhoc task with stored progress for this assignment+user.
+        $runningprogressid = $this->get_running_progress_id($assignmentid, $userid);
+
+        // ai_manager widgets: infobox (data sharing notice) and quota.
+        if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
+            $mform->addElement('html', '<div data-aif="aiinfo"></div>');
+            $mform->addElement('html', '<div data-aif="aiuserquota" class="mb-2"></div>');
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/infobox',
+                'renderInfoBox',
+                ['assignfeedback_aif', $USER->id, '[data-aif="aiinfo"]', ['feedback']]
+            );
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/userquota',
+                'renderUserQuota',
+                ['[data-aif="aiuserquota"]', ['feedback']]
+            );
+        }
+
+        // Initialize the AMD module. Pass running progress ID to resume polling on page load.
         $PAGE->requires->js_call_amd(
             'assignfeedback_aif/regenerate',
             'init',
-            [$assignmentid, $userid]
+            [$assignmentid, $userid, $runningprogressid]
         );
 
         return true;
@@ -508,10 +523,17 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $text = format_text($record->feedback, $format, [
                 'context' => $this->assignment->get_context(),
             ]);
-            return $text . $this->render_warningbox();
+            // Truncate for the grading table overview. Full feedback via "view" link.
+            $shorttext = shorten_text(strip_tags($text), 140);
+            $showviewlink = ($shorttext !== strip_tags($text));
+            return s($shorttext) . $this->render_warningbox();
         }
 
-        // No feedback yet — show spinner if generation is pending.
+        // No feedback yet — check for running task with stored progress or pending autogenerate.
+        $progressid = $this->get_running_progress_id($grade->assignment, $grade->userid);
+        if ($progressid > 0) {
+            return $this->render_generating_progress($grade->assignment, $grade->userid, $progressid);
+        }
         if ($this->is_feedback_pending($grade->assignment, $grade->userid)) {
             return $this->render_generating_spinner($grade->assignment, $grade->userid);
         }
@@ -536,6 +558,43 @@ class assign_feedback_aif extends assign_feedback_plugin {
                  WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1";
         $params = ['assignment' => $assignment, 'userid' => $userid];
         return $DB->get_record_sql($sql, $params);
+    }
+
+    /**
+     * Check if there is a running adhoc task with stored progress for this assignment and user.
+     *
+     * Searches for queued process_feedback_adhoc tasks that match the assignment and user,
+     * then looks up their stored_progress record.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @param int $userid The user ID.
+     * @return int The stored_progress record ID, or 0 if no running task.
+     */
+    private function get_running_progress_id(int $assignmentid, int $userid): int {
+        global $DB;
+
+        $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
+
+        // Find queued adhoc tasks for this class.
+        $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
+        foreach ($tasks as $task) {
+            $data = $task->get_custom_data();
+            if (
+                isset($data->assignment) && (int) $data->assignment === $assignmentid
+                && isset($data->users) && in_array($userid, (array) $data->users)
+            ) {
+                // Found a matching task — look up its stored_progress record.
+                $idnumber = \core\output\stored_progress_bar::convert_to_idnumber(
+                    $taskclass . '_' . $task->get_id()
+                );
+                $record = $DB->get_record('stored_progress', ['idnumber' => $idnumber]);
+                if ($record && (float) ($record->percentcompleted ?? 0) < 100) {
+                    return (int) $record->id;
+                }
+            }
+        }
+
+        return 0;
     }
 
     /**
@@ -668,6 +727,29 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
+     * Render the stored progress bar and start polling for a running task.
+     *
+     * Used in the summary view when a task is actively running with stored progress.
+     *
+     * @param int $assignmentid The assignment ID.
+     * @param int $userid The user ID.
+     * @param int $progressid The stored_progress record ID.
+     * @return string HTML with progress bar and JS initialisation.
+     */
+    private function render_generating_progress(int $assignmentid, int $userid, int $progressid): string {
+        global $OUTPUT, $PAGE;
+        $PAGE->requires->js_call_amd(
+            'assignfeedback_aif/feedbackpoller',
+            'initWithProgress',
+            [$assignmentid, $userid, $progressid]
+        );
+        self::$spinnerrendered = true;
+        return $OUTPUT->render_from_template('assignfeedback_aif/feedback_generating', [
+            'message' => get_string('feedbackgenerating', 'assignfeedback_aif'),
+        ]);
+    }
+
+    /**
      * Render the spinner and start the polling JS module.
      *
      * @param int $assignmentid The assignment ID.
@@ -681,7 +763,19 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'init',
             [$assignmentid, $userid]
         );
+        self::$spinnerrendered = true;
         return $OUTPUT->render_from_template('assignfeedback_aif/feedback_generating', []);
+    }
+
+    /**
+     * Check whether a spinner has already been rendered on this page.
+     *
+     * Used by the before_footer hook to avoid duplicate spinners.
+     *
+     * @return bool True if the spinner was already rendered.
+     */
+    public static function is_spinner_rendered(): bool {
+        return self::$spinnerrendered;
     }
 
     /**
