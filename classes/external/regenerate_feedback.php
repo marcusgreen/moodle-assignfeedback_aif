@@ -72,6 +72,22 @@ class regenerate_feedback extends external_api {
         self::validate_context($context);
         require_capability('mod/assign:grade', $context);
 
+        // Delete existing feedback immediately so the UI reflects the regeneration.
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $params['assignmentid']]);
+        if ($aifconfig) {
+            $submission = $DB->get_record('assign_submission', [
+                'assignment' => $params['assignmentid'],
+                'userid' => $params['userid'],
+                'latest' => 1,
+            ]);
+            if ($submission) {
+                $DB->delete_records('assignfeedback_aif_feedback', [
+                    'aif' => $aifconfig->id,
+                    'submission' => $submission->id,
+                ]);
+            }
+        }
+
         // Queue the ad-hoc task for this single user.
         $task = new process_feedback_adhoc();
         $task->set_custom_data([

@@ -493,20 +493,30 @@ class assign_feedback_aif extends assign_feedback_plugin {
     /**
      * Display the AI feedback in the feedback table.
      *
+     * When feedback does not exist yet but generation is pending (autogenerate
+     * enabled, submission present), a spinner and polling script are rendered
+     * so the page refreshes automatically once feedback arrives.
+     *
      * @param stdClass $grade The grade object.
      * @param bool $showviewlink Set to true to show a link to view the full feedback.
      * @return string The formatted feedback summary.
      */
     public function view_summary(stdClass $grade, &$showviewlink): string {
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
-        if (!$record) {
-            return '';
+        if ($record) {
+            $format = $record->feedbackformat ?? FORMAT_HTML;
+            $text = format_text($record->feedback, $format, [
+                'context' => $this->assignment->get_context(),
+            ]);
+            return $text . $this->render_warningbox();
         }
-        $format = $record->feedbackformat ?? FORMAT_HTML;
-        $text = format_text($record->feedback, $format, [
-            'context' => $this->assignment->get_context(),
-        ]);
-        return $text . $this->render_warningbox();
+
+        // No feedback yet — show spinner if generation is pending.
+        if ($this->is_feedback_pending($grade->assignment, $grade->userid)) {
+            return $this->render_generating_spinner($grade->assignment, $grade->userid);
+        }
+
+        return '';
     }
 
     /**
@@ -550,6 +560,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * Render the ai_manager warning box about AI result quality.
      *
      * Only renders when the local_ai_manager backend is configured.
+     * The JS AMD call is registered only once per page to prevent
+     * duplicate warning boxes when multiple feedback views exist.
      *
      * @return string HTML for the warning box container.
      */
@@ -557,12 +569,16 @@ class assign_feedback_aif extends assign_feedback_plugin {
         if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
             return '';
         }
-        global $PAGE;
-        $PAGE->requires->js_call_amd(
-            'local_ai_manager/warningbox',
-            'renderWarningBox',
-            ['[data-aif="aiwarning"]']
-        );
+        static $jsregistered = false;
+        if (!$jsregistered) {
+            global $PAGE;
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/warningbox',
+                'renderWarningBox',
+                ['[data-aif="aiwarning"]']
+            );
+            $jsregistered = true;
+        }
         return '<div data-aif="aiwarning"></div>';
     }
 
@@ -606,11 +622,66 @@ class assign_feedback_aif extends assign_feedback_plugin {
     /**
      * Returns true if there are no AI feedback entries for the given grade.
      *
+     * Also returns false when feedback generation is pending so that the
+     * feedback section is rendered and the spinner can be displayed.
+     *
      * @param stdClass $grade The grade object.
-     * @return bool True if no feedback exists.
+     * @return bool True if no feedback exists and none is pending.
      */
     public function is_empty(stdClass $grade): bool {
-        return $this->view($grade) === '';
+        if ($this->get_feedbackaif($grade->assignment, $grade->userid)) {
+            return false;
+        }
+        // Show section when feedback is still being generated.
+        if ($this->is_feedback_pending($grade->assignment, $grade->userid)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Check whether AI feedback generation is pending for a submission.
+     *
+     * Feedback is considered pending when autogenerate is enabled for this
+     * assignment and a submitted submission exists but no feedback record yet.
+     *
+     * @param int $assignmentid The assignment ID.
+     * @param int $userid The user ID.
+     * @return bool True if feedback generation is expected but not yet complete.
+     */
+    private function is_feedback_pending(int $assignmentid, int $userid): bool {
+        global $DB;
+
+        // Check autogenerate is enabled.
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
+        if (!$aifconfig || empty($aifconfig->autogenerate)) {
+            return false;
+        }
+
+        // Check a submitted submission exists.
+        return $DB->record_exists('assign_submission', [
+            'assignment' => $assignmentid,
+            'userid' => $userid,
+            'status' => 'submitted',
+            'latest' => 1,
+        ]);
+    }
+
+    /**
+     * Render the spinner and start the polling JS module.
+     *
+     * @param int $assignmentid The assignment ID.
+     * @param int $userid The user ID.
+     * @return string HTML with spinner and JS initialisation.
+     */
+    private function render_generating_spinner(int $assignmentid, int $userid): string {
+        global $OUTPUT, $PAGE;
+        $PAGE->requires->js_call_amd(
+            'assignfeedback_aif/feedbackpoller',
+            'init',
+            [$assignmentid, $userid]
+        );
+        return $OUTPUT->render_from_template('assignfeedback_aif/feedback_generating', []);
     }
 
     /**
