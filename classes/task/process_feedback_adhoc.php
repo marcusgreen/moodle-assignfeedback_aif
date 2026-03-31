@@ -120,10 +120,13 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
         // Set up the user context for the submission owner so that quota and
         // availability checks are performed against the correct user.
-        $submissionuser = \core_user::get_user($record->userid);
-        \core\cron::setup_user($submissionuser);
+        // For team submissions, userid may be 0 (group submission); get_user()
+        // returns false in that case, so fall back to null (cron default user).
+        $submissionuser = \core_user::get_user($record->userid) ?: null;
 
         try {
+            \core\cron::setup_user($submissionuser);
+
             if (!$provider->is_available($purpose, $record->contextid)) {
                 mtrace("AI backend not available for user {$record->userid}, skipping submission {$record->subid}.");
                 return;
