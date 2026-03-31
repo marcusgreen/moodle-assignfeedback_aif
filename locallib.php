@@ -68,7 +68,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_settings(MoodleQuickForm $mform): void {
 
-        // ai_manager infobox: data sharing notice for teachers configuring the prompt.
+        // AI manager infobox: data sharing notice for teachers configuring the prompt.
         if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
             global $PAGE, $USER;
             $mform->addElement('html', '<div data-aif="aisettingsinfo"></div>');
@@ -236,7 +236,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function get_form_elements_for_user($grade, MoodleQuickForm $mform, stdClass $data, $userid): bool {
         global $PAGE, $USER;
 
-        // ai_manager widgets: infobox (data sharing notice) and quota.
+        // AI manager widgets: infobox (data sharing notice) and quota.
         if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
             $mform->addElement('html', '<div data-aif="aiinfo"></div>');
             $mform->addElement('html', '<div data-aif="aiuserquota" class="mb-2"></div>');

@@ -42,8 +42,12 @@ class check_feedback_status extends external_api {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'assignmentid' => new external_value(PARAM_INT, 'The assignment instance id'),
-            'userid' => new external_value(PARAM_INT, 'The user id to check feedback for, 0 to check all pending tasks',
-                VALUE_DEFAULT, 0),
+            'userid' => new external_value(
+                PARAM_INT,
+                'The user id to check feedback for, 0 to check all pending tasks',
+                VALUE_DEFAULT,
+                0
+            ),
         ]);
     }
 
@@ -73,7 +77,7 @@ class check_feedback_status extends external_api {
 
         if ($params['userid'] > 0) {
             // Per-user mode: check if feedback exists for a specific user.
-            $canview = ($params['userid'] == $GLOBALS['USER']->id)
+            $canview = ($params['userid'] == $globals['USER']->id)
                 || has_capability('mod/assign:grade', $context);
             if (!$canview) {
                 throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
@@ -105,7 +109,7 @@ class check_feedback_status extends external_api {
             'pattern' => '%"assignment":' . $params['assignmentid'] . '%',
         ]);
 
-        // feedbackexists=true means "done" (no more pending tasks).
+        // The feedbackexists=true item means "done" (no more pending tasks).
         return ['feedbackexists' => !$pending];
     }
 

@@ -90,7 +90,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
      *
      * @param object|false $record The submission record.
      * @param string $triggeredby How the task was triggered: 'auto' (observer) or 'manual' (teacher).
-     * @param \assign $assign The assign instance.
+     * @param \assign|null $assign The assign instance.
      */
     private function generate_feedback($record, string $triggeredby = 'manual', ?\assign $assign = null): void {
         global $DB, $CFG;
