@@ -42,8 +42,13 @@ class ai_request_provider {
             return $this->is_available_local_ai_manager($purpose, $contextid);
         }
 
-        // Core AI subsystem: assume available if the manager class exists.
-        return class_exists('\core_ai\manager');
+        // Core AI subsystem: check if there is at least one enabled provider
+        // configured for the generate_text action.
+        if (!class_exists('\core_ai\manager')) {
+            return false;
+        }
+        $manager = \core\di::get(\core_ai\manager::class);
+        return $manager->is_action_available(\core_ai\aiactions\generate_text::class);
     }
 
     /**
