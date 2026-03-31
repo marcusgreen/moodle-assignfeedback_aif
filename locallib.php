@@ -550,6 +550,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * Render the ai_manager warning box about AI result quality.
      *
      * Only renders when the local_ai_manager backend is configured.
+     * The JS AMD call is registered only once per page to prevent
+     * duplicate warning boxes when multiple feedback views exist.
      *
      * @return string HTML for the warning box container.
      */
@@ -557,12 +559,16 @@ class assign_feedback_aif extends assign_feedback_plugin {
         if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
             return '';
         }
-        global $PAGE;
-        $PAGE->requires->js_call_amd(
-            'local_ai_manager/warningbox',
-            'renderWarningBox',
-            ['[data-aif="aiwarning"]']
-        );
+        static $jsregistered = false;
+        if (!$jsregistered) {
+            global $PAGE;
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/warningbox',
+                'renderWarningBox',
+                ['[data-aif="aiwarning"]']
+            );
+            $jsregistered = true;
+        }
         return '<div data-aif="aiwarning"></div>';
     }
 
