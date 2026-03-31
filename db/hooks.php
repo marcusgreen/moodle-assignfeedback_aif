@@ -30,4 +30,8 @@ $callbacks = [
         'hook' => \local_ai_manager\hook\purpose_usage::class,
         'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::handle_purpose_usage',
     ],
+    [
+        'hook' => \core\hook\output\before_footer_html_generation::class,
+        'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::before_footer',
+    ],
 ];

@@ -69,6 +69,12 @@ class observer {
         // Run as the submitting user so quota and availability checks are correct.
         $task->set_userid($userid);
         manager::queue_adhoc_task($task, true);
+
+        // Ensure a grade record exists immediately so the student-facing
+        // feedback section is rendered while feedback generation is pending.
+        // Without this, the assign module skips all feedback plugins when
+        // no grade record exists, preventing the spinner from showing.
+        $assign->get_user_grade($userid, true);
     }
 
     /**

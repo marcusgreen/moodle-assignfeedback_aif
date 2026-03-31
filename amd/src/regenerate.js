@@ -26,6 +26,7 @@ import Ajax from 'core/ajax';
 import Notification from 'core/notification';
 import {add as addToast} from 'core/toast';
 import {get_string as getString} from 'core/str';
+import Templates from 'core/templates';
 import Pending from 'core/pending';
 
 /**
@@ -66,15 +67,55 @@ export const init = (assignmentId, userId) => {
 
             if (result.success) {
                 addToast(result.message, {type: 'success'});
+                clearEditorAndShowSpinner(button, assignmentId, userId);
             } else {
                 addToast(result.message, {type: 'danger'});
+                button.disabled = false;
+                button.textContent = originalText;
             }
         } catch (error) {
             Notification.exception(error);
-        } finally {
             button.disabled = false;
             button.textContent = originalText;
+        } finally {
             pendingPromise.resolve();
         }
     });
+};
+
+/**
+ * Clear the feedback editor, hide the form elements and show a generating spinner.
+ *
+ * After successful regeneration queue, replaces the editor area with the
+ * feedback_generating template and starts the feedbackpoller to auto-reload
+ * once the new feedback is ready.
+ *
+ * @param {HTMLElement} button The regenerate button element.
+ * @param {number} assignmentId The assignment instance id.
+ * @param {number} userId The user id.
+ */
+const clearEditorAndShowSpinner = async(button, assignmentId, userId) => {
+    // Find the editor wrapper — the form group containing the editor.
+    const editorElement = document.querySelector('[data-fieldtype="editor"]');
+    if (editorElement) {
+        const editorWrapper = editorElement.closest('.fitem');
+        if (editorWrapper) {
+            editorWrapper.style.display = 'none';
+        }
+    }
+
+    // Hide the regenerate button.
+    button.style.display = 'none';
+
+    // Render the spinner template after the hidden editor.
+    const target = editorElement ? editorElement.closest('.fitem') : button;
+    const {html, js} = await Templates.renderForPromise('assignfeedback_aif/feedback_generating', {});
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    target.parentNode.insertBefore(container, target);
+    Templates.runTemplateJS(js);
+
+    // Start polling for the new feedback.
+    const poller = await import('assignfeedback_aif/feedbackpoller');
+    poller.init(assignmentId, userId);
 };

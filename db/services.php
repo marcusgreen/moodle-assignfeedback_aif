@@ -33,4 +33,11 @@ $functions = [
         'ajax' => true,
         'capabilities' => 'mod/assign:grade',
     ],
+    'assignfeedback_aif_check_feedback_status' => [
+        'classname' => 'assignfeedback_aif\external\check_feedback_status',
+        'description' => 'Check whether AI feedback exists for a submission',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => '',
+    ],
 ];

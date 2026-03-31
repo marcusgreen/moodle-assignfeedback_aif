@@ -27,8 +27,8 @@ namespace assignfeedback_aif;
 
 defined('MOODLE_INTERNAL') || die();
 
-use assignfeedback_aif\task\process_feedback_rubric;
-use assignfeedback_aif\task\process_feedback_rubric_adhoc;
+use assignfeedback_aif\task\process_feedback;
+use assignfeedback_aif\task\process_feedback_adhoc;
 use assignfeedback_aif\external\regenerate_feedback;
 
 require_once(__DIR__ . '/../../../tests/generator.php');
@@ -40,8 +40,8 @@ require_once(__DIR__ . '/generator_trait.php');
  * @package    assignfeedback_aif
  * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \assignfeedback_aif\task\process_feedback_rubric
- * @covers \assignfeedback_aif\task\process_feedback_rubric_adhoc
+ * @covers \assignfeedback_aif\task\process_feedback
+ * @covers \assignfeedback_aif\task\process_feedback_adhoc
  * @covers \assignfeedback_aif\event\observer
  * @covers \assignfeedback_aif\external\regenerate_feedback
  */
@@ -80,10 +80,10 @@ final class process_feedback_test extends \advanced_testcase {
         $this->create_and_submit($env, 'My essay about renewable energy');
         $this->create_aif_config($env, 'Evaluate based on rubric');
 
-        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
         $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
 
-        $task = new process_feedback_rubric();
+        $task = new process_feedback();
         ob_start();
         $task->execute();
         ob_end_clean();
@@ -119,10 +119,10 @@ final class process_feedback_test extends \advanced_testcase {
             'timecreated' => $clock->now()->getTimestamp(),
         ]);
 
-        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
         $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
 
-        $task = new process_feedback_rubric();
+        $task = new process_feedback();
         ob_start();
         $task->execute();
         ob_end_clean();
@@ -143,7 +143,7 @@ final class process_feedback_test extends \advanced_testcase {
         $this->create_and_submit($env, 'Student assignment text');
         $this->create_aif_config($env, 'Provide feedback');
 
-        $task = new process_feedback_rubric_adhoc();
+        $task = new process_feedback_adhoc();
         $task->set_custom_data([
             'assignment' => $env->assign->id,
             'users' => [$env->student->id],
@@ -186,7 +186,7 @@ final class process_feedback_test extends \advanced_testcase {
         ]);
         $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback'));
 
-        $task = new process_feedback_rubric_adhoc();
+        $task = new process_feedback_adhoc();
         $task->set_custom_data([
             'assignment' => $env->assign->id,
             'users' => [$env->student->id],
@@ -221,7 +221,7 @@ final class process_feedback_test extends \advanced_testcase {
 
         // Count adhoc tasks before submission.
         $tasksbefore = $DB->count_records('task_adhoc', [
-            'classname' => '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc',
+            'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ]);
 
         $sink = $this->redirectMessages();
@@ -230,13 +230,13 @@ final class process_feedback_test extends \advanced_testcase {
 
         // An adhoc task should have been queued.
         $tasksafter = $DB->count_records('task_adhoc', [
-            'classname' => '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc',
+            'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ]);
         $this->assertGreaterThan($tasksbefore, $tasksafter);
 
         // Verify the queued task contains the correct student userid (not null).
         $task = $DB->get_records('task_adhoc', [
-            'classname' => '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc',
+            'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ], 'id DESC', '*', 0, 1);
         $task = reset($task);
         $customdata = json_decode($task->customdata);
@@ -300,7 +300,7 @@ final class process_feedback_test extends \advanced_testcase {
         $this->assertNotEmpty($submission, 'CP3: assign_submission record must exist');
 
         // Count tasks before submission.
-        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
         $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
 
         // Submit_for_grading fires assessable_submitted, observer runs, task queued.
@@ -335,7 +335,7 @@ final class process_feedback_test extends \advanced_testcase {
         $this->assertEquals('generate', $customdata->action, 'CP5c: Task action must be generate');
 
         // CP6: Execute the adhoc task — feedback is created.
-        $adhoctask = new process_feedback_rubric_adhoc();
+        $adhoctask = new process_feedback_adhoc();
         $adhoctask->set_custom_data($customdata);
         ob_start();
         $adhoctask->execute();
@@ -371,7 +371,7 @@ final class process_feedback_test extends \advanced_testcase {
         $this->assertEquals(1, (int) $aifconfig->autogenerate, 'CP1b: autogenerate must be 1');
 
         // Count tasks before.
-        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc';
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
         $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
 
         // Student saves a submission. When submissiondrafts=0, this auto-submits.
@@ -423,7 +423,7 @@ final class process_feedback_test extends \advanced_testcase {
             'CP4a: Task users must contain the student'
         );
 
-        $adhoctask = new process_feedback_rubric_adhoc();
+        $adhoctask = new process_feedback_adhoc();
         $adhoctask->set_custom_data($customdata);
         ob_start();
         $adhoctask->execute();
@@ -456,7 +456,7 @@ final class process_feedback_test extends \advanced_testcase {
         $generator->create_submission($submissiondata);
 
         $tasksbefore = $DB->count_records('task_adhoc', [
-            'classname' => '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc',
+            'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ]);
 
         $sink = $this->redirectMessages();
@@ -465,7 +465,7 @@ final class process_feedback_test extends \advanced_testcase {
 
         // No new adhoc task should be queued.
         $tasksafter = $DB->count_records('task_adhoc', [
-            'classname' => '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc',
+            'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ]);
         $this->assertEquals($tasksbefore, $tasksafter);
     }
@@ -520,7 +520,7 @@ final class process_feedback_test extends \advanced_testcase {
         $this->setUser($env->teacher);
 
         $tasksbefore = $DB->count_records('task_adhoc', [
-            'classname' => '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc',
+            'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ]);
 
         $result = regenerate_feedback::execute($env->assign->id, $env->student->id);
@@ -529,7 +529,7 @@ final class process_feedback_test extends \advanced_testcase {
         $this->assertNotEmpty($result['message']);
 
         $tasksafter = $DB->count_records('task_adhoc', [
-            'classname' => '\\assignfeedback_aif\\task\\process_feedback_rubric_adhoc',
+            'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ]);
         $this->assertGreaterThan($tasksbefore, $tasksafter);
     }

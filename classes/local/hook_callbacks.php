@@ -46,4 +46,60 @@ class hook_callbacks {
             get_string('purposeplacedescription_itt', 'assignfeedback_aif')
         );
     }
+
+    /**
+     * Show a generating spinner on the assign view page when AI feedback tasks are pending.
+     *
+     * Hooks into before_footer to inject a notification banner with spinner and
+     * a polling script that reloads the page once all pending tasks are complete.
+     *
+     * @param \core\hook\output\before_footer_html_generation $hook The hook instance.
+     */
+    public static function before_footer(\core\hook\output\before_footer_html_generation $hook): void {
+        global $PAGE, $DB, $OUTPUT;
+
+        // Only act on the assign view page.
+        if ($PAGE->pagetype !== 'mod-assign-view') {
+            return;
+        }
+
+        // Get the assignment ID from the course module context.
+        $context = $PAGE->context;
+        if ($context->contextlevel !== CONTEXT_MODULE) {
+            return;
+        }
+
+        // Check capability — only show to graders.
+        if (!has_capability('mod/assign:grade', $context)) {
+            return;
+        }
+
+        $cm = get_coursemodule_from_id('assign', $context->instanceid, 0, false, IGNORE_MISSING);
+        if (!$cm) {
+            return;
+        }
+
+        // Check if there are pending adhoc tasks for this assignment.
+        $classname = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
+        $sql = "SELECT id FROM {task_adhoc} WHERE classname = :classname AND " .
+               $DB->sql_like('customdata', ':pattern');
+        $pending = $DB->record_exists_sql($sql, [
+            'classname' => $classname,
+            'pattern' => '%"assignment":' . (int) $cm->instance . '%',
+        ]);
+
+        if (!$pending) {
+            return;
+        }
+
+        // Render the spinner notification and start the poller.
+        $html = $OUTPUT->render_from_template('assignfeedback_aif/feedback_generating', []);
+        $hook->add_html($html);
+
+        $PAGE->requires->js_call_amd(
+            'assignfeedback_aif/feedbackpoller',
+            'init',
+            [(int) $cm->instance, 0]
+        );
+    }
 }
