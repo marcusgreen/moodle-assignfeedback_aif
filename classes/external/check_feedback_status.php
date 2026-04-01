@@ -77,7 +77,8 @@ class check_feedback_status extends external_api {
 
         if ($params['userid'] > 0) {
             // Per-user mode: check if feedback exists for a specific user.
-            $canview = ($params['userid'] == $globals['USER']->id)
+            global $USER;
+            $canview = ((int) $params['userid'] === (int) $USER->id)
                 || has_capability('mod/assign:grade', $context);
             if (!$canview) {
                 throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
@@ -106,7 +107,7 @@ class check_feedback_status extends external_api {
                $DB->sql_like('customdata', ':pattern');
         $pending = $DB->record_exists_sql($sql, [
             'classname' => $classname,
-            'pattern' => '%"assignment":' . $params['assignmentid'] . '%',
+            'pattern' => '%"assignment":' . (int) $params['assignmentid'] . '%',
         ]);
 
         // The feedbackexists=true item means "done" (no more pending tasks).

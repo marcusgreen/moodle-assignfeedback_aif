@@ -78,7 +78,7 @@ final class process_feedback_test extends \advanced_testcase {
 
         $env = $this->create_test_environment();
         $this->create_and_submit($env, 'My essay about renewable energy');
-        $this->create_aif_config($env, 'Evaluate based on rubric');
+        $this->create_aif_config($env, 'Evaluate based on rubric', 1);
 
         $taskclass = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
         $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
@@ -102,7 +102,7 @@ final class process_feedback_test extends \advanced_testcase {
 
         $env = $this->create_test_environment();
         $this->create_and_submit($env, 'Test essay');
-        $aifid = $this->create_aif_config($env, 'Evaluate');
+        $aifid = $this->create_aif_config($env, 'Evaluate', 1);
 
         $submission = $DB->get_record('assign_submission', [
             'assignment' => $env->assign->id,

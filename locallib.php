@@ -30,7 +30,6 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class assign_feedback_aif extends assign_feedback_plugin {
-
     /** @var bool Whether the generating spinner has already been rendered on this page. */
     private static bool $spinnerrendered = false;
 
@@ -217,7 +216,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
                     $clock = \core\di::get(\core\clock::class);
                     $record->feedback = $value;
                     $record->feedbackformat = FORMAT_HTML;
-                    $record->timecreated = $clock->now()->getTimestamp();
+                    $record->timemodified = $clock->now()->getTimestamp();
                     $DB->update_record('assignfeedback_aif_feedback', $record);
                     return true;
                 }
@@ -294,7 +293,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         // Check for a running adhoc task with stored progress for this assignment+user.
         $runningprogressid = $this->get_running_progress_id($assignmentid, $userid);
 
-        // ai_manager widgets: infobox (data sharing notice) and quota.
+        // Local ai_manager widgets: infobox (data sharing notice) and quota.
         if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
             $mform->addElement('html', '<div data-aif="aiinfo"></div>');
             $mform->addElement('html', '<div data-aif="aiuserquota" class="mb-2"></div>');
@@ -373,7 +372,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
 
         if ($record) {
-            $record->timecreated = $clock->now()->getTimestamp();
+            $record->timemodified = $clock->now()->getTimestamp();
             $record->feedback = $data->assignfeedbackaif;
             $record->feedbackformat = $data->assignfeedbackaifformat;
             $DB->update_record('assignfeedback_aif_feedback', $record);

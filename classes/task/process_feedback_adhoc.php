@@ -107,12 +107,12 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
                 JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
                 JOIN {assign_submission} sub ON sub.assignment = a.id
                 WHERE sub.status = 'submitted'
-                  AND cx.contextlevel = " . CONTEXT_MODULE . "
+                  AND cx.contextlevel = :contextlevel
                   AND a.id = :aid
                   AND sub.userid = :userid
                   AND sub.latest = 1";
 
-        return $DB->get_record_sql($sql, ['aid' => $assignmentid, 'userid' => $userid]);
+        return $DB->get_record_sql($sql, ['aid' => $assignmentid, 'userid' => $userid, 'contextlevel' => CONTEXT_MODULE]);
     }
 
     /**
