@@ -109,5 +109,38 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026033001, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026040100) {
+        // Add timemodified field to assignfeedback_aif_feedback table.
+        $table = new xmldb_table('assignfeedback_aif_feedback');
+        $field = new xmldb_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'timecreated');
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Initialize timemodified from timecreated for existing records.
+        $DB->execute("UPDATE {assignfeedback_aif_feedback} SET timemodified = timecreated WHERE timemodified = 0");
+
+        // Fix feedbackformat DEFAULT: upgrade step 2026020605 used DEFAULT=1 (FORMAT_HTML)
+        // but install.xml had DEFAULT=4 (FORMAT_MARKDOWN). Align to FORMAT_HTML since the
+        // adhoc task converts Markdown to HTML before storing.
+        $field = new xmldb_field('feedbackformat', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, '1', 'feedback');
+        $dbman->change_field_default($table, $field);
+
+        upgrade_plugin_savepoint(true, 2026040100, 'assignfeedback', 'aif');
+    }
+
+    if ($oldversion < 2026040102) {
+        // Add skippedfiles field to store names of files that could not be analysed.
+        $table = new xmldb_table('assignfeedback_aif_feedback');
+        $field = new xmldb_field('skippedfiles', XMLDB_TYPE_TEXT, null, null, null, null, null, 'submission');
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026040102, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

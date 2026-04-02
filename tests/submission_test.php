@@ -43,6 +43,8 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test that the plugin can be enabled on an assignment instance.
+     *
+     * @covers ::is_enabled
      */
     public function test_plugin_can_be_enabled(): void {
         $this->resetAfterTest();
@@ -57,6 +59,8 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test save_settings inserts a new config record and updates it on second call.
+     *
+     * @covers ::save_settings
      */
     public function test_save_settings_creates_and_updates(): void {
         global $DB;
@@ -90,6 +94,8 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test save creates feedback and updates existing feedback for a grade.
+     *
+     * @covers ::save
      */
     public function test_save_creates_and_updates_feedback(): void {
         global $DB;
@@ -136,6 +142,8 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test is_feedback_modified detects changed and unchanged feedback text.
+     *
+     * @covers ::is_feedback_modified
      */
     public function test_is_feedback_modified(): void {
         global $DB;
@@ -161,6 +169,8 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test get_feedbackaif returns the record or false.
+     *
+     * @covers ::get_feedbackaif
      */
     public function test_get_feedbackaif(): void {
         global $DB;
@@ -199,6 +209,9 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test view and view_summary return formatted feedback or empty string.
+     *
+     * @covers ::view
+     * @covers ::view_summary
      */
     public function test_view_and_view_summary(): void {
         global $DB;
@@ -243,6 +256,8 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test text_for_gradebook returns raw feedback text or empty string.
+     *
+     * @covers ::text_for_gradebook
      */
     public function test_text_for_gradebook(): void {
         global $DB;
@@ -279,6 +294,8 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test delete_instance cascades deletion to both config and feedback tables.
+     *
+     * @covers ::delete_instance
      */
     public function test_delete_instance_cascading(): void {
         global $DB;
@@ -321,6 +338,8 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test is_empty reflects whether feedback exists for a grade.
+     *
+     * @covers ::is_empty
      */
     public function test_is_empty(): void {
         global $DB;
@@ -358,6 +377,9 @@ final class submission_test extends \advanced_testcase {
 
     /**
      * Test get_editor_text and set_editor_text roundtrip for import/export.
+     *
+     * @covers ::get_editor_text
+     * @covers ::set_editor_text
      */
     public function test_editor_text_roundtrip(): void {
         global $DB;
@@ -397,6 +419,195 @@ final class submission_test extends \advanced_testcase {
         // Invalid field name should return empty/false.
         $this->assertEquals('', $plugin->get_editor_text('invalid', $grade->id));
         $this->assertFalse($plugin->set_editor_text('invalid', 'test', $grade->id));
+    }
+
+    /**
+     * Test that batch delete removes feedback for all selected users.
+     *
+     * @covers ::grading_batch_operation
+     */
+    public function test_batch_delete_multiple_users(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        // Create two additional students and enrol them.
+        $student2 = $this->getDataGenerator()->create_and_enrol($env->course, 'student');
+        $student3 = $this->getDataGenerator()->create_and_enrol($env->course, 'student');
+
+        // Create submissions for all three students.
+        $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
+        foreach ([$env->student, $student2, $student3] as $student) {
+            $this->setUser($student);
+            $generator->create_submission([
+                'cmid' => $env->cm->id,
+                'userid' => $student->id,
+                'onlinetext' => 'Submission by user ' . $student->id,
+            ]);
+            $sink = $this->redirectMessages();
+            $env->assignobj->submit_for_grading((object) ['userid' => $student->id], []);
+            $sink->close();
+        }
+
+        // Set up the AIF config.
+        $aifid = $this->create_aif_config($env);
+
+        // Insert feedback records for all three students.
+        $clock = \core\di::get(\core\clock::class);
+        $userids = [$env->student->id, $student2->id, $student3->id];
+        foreach ($userids as $userid) {
+            $submission = $DB->get_record('assign_submission', [
+                'assignment' => $env->assign->id,
+                'userid' => $userid,
+                'latest' => 1,
+            ]);
+            $DB->insert_record('assignfeedback_aif_feedback', [
+                'aif' => $aifid,
+                'feedback' => 'AI feedback for user ' . $userid,
+                'feedbackformat' => FORMAT_HTML,
+                'submission' => $submission->id,
+                'timecreated' => $clock->now()->getTimestamp(),
+            ]);
+        }
+
+        // Verify all three feedback records exist.
+        $this->assertEquals(3, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
+
+        // Call the private delete_feedbackaif method via reflection.
+        $this->setUser($env->teacher);
+        $plugin = $this->get_aif_plugin($env->assignobj);
+        $method = new \ReflectionMethod($plugin, 'delete_feedbackaif');
+
+        // Delete feedback for all three users at once.
+        $method->invoke($plugin, $userids);
+
+        // All feedback records must be gone.
+        $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
+    }
+
+    /**
+     * Test view_summary shows error with retry button for failed feedback.
+     *
+     * @covers ::view_summary
+     */
+    public function test_view_summary_error_shows_retry(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_and_submit($env);
+        $aifid = $this->create_aif_config($env);
+
+        $this->setUser($env->teacher);
+        $grade = $env->assignobj->get_user_grade($env->student->id, true);
+        $plugin = $this->get_aif_plugin($env->assignobj);
+
+        // Insert a feedback record with an error marker in skippedfiles.
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'latest' => 1,
+        ]);
+        $clock = \core\di::get(\core\clock::class);
+        $DB->insert_record('assignfeedback_aif_feedback', [
+            'aif' => $aifid,
+            'feedback' => '',
+            'feedbackformat' => FORMAT_HTML,
+            'submission' => $submission->id,
+            'skippedfiles' => json_encode([['_error' => 'AI quota exceeded']]),
+            'timecreated' => $clock->now()->getTimestamp(),
+        ]);
+
+        $showviewlink = false;
+        $result = $plugin->view_summary($grade, $showviewlink);
+
+        // Should contain the error message and a retry button.
+        $this->assertStringContainsString('AI quota exceeded', $result);
+        $this->assertStringContainsString('data-action="retry-aif"', $result);
+        $this->assertStringContainsString(
+            'data-assignmentid="' . $env->assign->id . '"',
+            $result
+        );
+    }
+
+    /**
+     * Test view shows error with retry button for failed feedback.
+     *
+     * @covers ::view
+     */
+    public function test_view_error_shows_retry(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_and_submit($env);
+        $aifid = $this->create_aif_config($env);
+
+        $this->setUser($env->teacher);
+        $grade = $env->assignobj->get_user_grade($env->student->id, true);
+        $plugin = $this->get_aif_plugin($env->assignobj);
+
+        // Insert error feedback.
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'latest' => 1,
+        ]);
+        $clock = \core\di::get(\core\clock::class);
+        $DB->insert_record('assignfeedback_aif_feedback', [
+            'aif' => $aifid,
+            'feedback' => '',
+            'feedbackformat' => FORMAT_HTML,
+            'submission' => $submission->id,
+            'skippedfiles' => json_encode([['_error' => 'Connection timeout']]),
+            'timecreated' => $clock->now()->getTimestamp(),
+        ]);
+
+        $result = $plugin->view($grade);
+
+        $this->assertStringContainsString('Connection timeout', $result);
+        $this->assertStringContainsString('data-action="retry-aif"', $result);
+    }
+
+    /**
+     * Test view shows skipped files warning when feedback contains skipped files.
+     *
+     * @covers ::view
+     */
+    public function test_view_skipped_files_warning(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_and_submit($env);
+        $aifid = $this->create_aif_config($env);
+
+        $this->setUser($env->teacher);
+        $grade = $env->assignobj->get_user_grade($env->student->id, true);
+        $plugin = $this->get_aif_plugin($env->assignobj);
+
+        // Insert feedback with skipped files.
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'latest' => 1,
+        ]);
+        $clock = \core\di::get(\core\clock::class);
+        $DB->insert_record('assignfeedback_aif_feedback', [
+            'aif' => $aifid,
+            'feedback' => '<p>Partial feedback.</p>',
+            'feedbackformat' => FORMAT_HTML,
+            'submission' => $submission->id,
+            'skippedfiles' => json_encode([
+                ['filename' => 'image.png', 'reason' => 'skipreason_conversionnotsupported', 'reasondata' => 'pdf, docx'],
+            ]),
+            'timecreated' => $clock->now()->getTimestamp(),
+        ]);
+
+        $result = $plugin->view($grade);
+
+        $this->assertStringContainsString('Partial feedback.', $result);
+        $this->assertStringContainsString('image.png', $result);
     }
 
     /**

@@ -26,78 +26,108 @@ use core\output\stored_progress_bar;
 use core\task\manager;
 
 /**
- * External function to regenerate AI feedback for a submission.
+ * External function to retry AI feedback generation after a failure.
+ *
+ * Allows both teachers (with mod/assign:grade) and students (own submission,
+ * autogenerate enabled, error state present) to re-queue a failed feedback
+ * generation task.
  *
  * @package    assignfeedback_aif
  * @copyright  2026 ISB Bayern
  * @author     Dr. Peter Mayer
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class regenerate_feedback extends external_api {
+class retry_feedback extends external_api {
     /**
-     * Describes the parameters for regenerate_feedback.
+     * Describes the parameters for retry_feedback.
      *
      * @return external_function_parameters
      */
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'assignmentid' => new external_value(PARAM_INT, 'The assignment instance id'),
-            'userid' => new external_value(PARAM_INT, 'The user id to regenerate feedback for'),
+            'userid' => new external_value(PARAM_INT, 'The user id to retry feedback for'),
         ]);
     }
 
     /**
-     * Regenerate AI feedback for a submission.
+     * Retry AI feedback generation for a submission that previously failed.
+     *
+     * Deletes the existing error feedback record, queues a new adhoc task,
+     * and returns a stored progress record ID for client-side polling.
      *
      * @param int $assignmentid The assignment instance id.
      * @param int $userid The user id.
-     * @return array Result with success status, message, and progress tracking data.
+     * @return array Result with success status and progress tracking data.
      */
     public static function execute(int $assignmentid, int $userid): array {
         global $DB, $CFG, $USER;
 
-        // Validate parameters.
         $params = self::validate_parameters(self::execute_parameters(), [
             'assignmentid' => $assignmentid,
             'userid' => $userid,
         ]);
 
-        // Get the assignment.
+        // Get the assignment and validate context.
         $assignment = $DB->get_record('assign', ['id' => $params['assignmentid']], '*', MUST_EXIST);
         $cm = get_coursemodule_from_instance('assign', $assignment->id, $assignment->course, false, MUST_EXIST);
         $context = context_module::instance($cm->id);
-
-        // Validate context and capability.
         self::validate_context($context);
-        require_capability('mod/assign:grade', $context);
 
-        // Delete existing feedback immediately so the UI reflects the regeneration.
+        // Permission check: teacher with grade capability OR own submission with autogenerate.
+        $isteacher = has_capability('mod/assign:grade', $context);
+        $isownsubmission = ((int) $USER->id === $params['userid']);
+
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $params['assignmentid']]);
-        if ($aifconfig) {
-            $submission = $DB->get_record('assign_submission', [
-                'assignment' => $params['assignmentid'],
-                'userid' => $params['userid'],
-                'latest' => 1,
+        if (!$aifconfig) {
+            return ['success' => false, 'progressrecordid' => 0];
+        }
+
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $params['assignmentid'],
+            'userid' => $params['userid'],
+            'latest' => 1,
+        ]);
+        if (!$submission) {
+            return ['success' => false, 'progressrecordid' => 0];
+        }
+
+        if (!$isteacher) {
+            if (!$isownsubmission) {
+                throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
+            }
+            // Students can only retry when autogenerate is enabled.
+            if (empty($aifconfig->autogenerate)) {
+                throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
+            }
+            // Students can only retry when there is an error state.
+            $feedbackrecord = $DB->get_record('assignfeedback_aif_feedback', [
+                'aif' => $aifconfig->id,
+                'submission' => $submission->id,
             ]);
-            if ($submission) {
-                $DB->delete_records('assignfeedback_aif_feedback', [
-                    'aif' => $aifconfig->id,
-                    'submission' => $submission->id,
-                ]);
+            if (!$feedbackrecord || !self::has_error_marker($feedbackrecord)) {
+                throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
             }
         }
 
+        // Delete existing error feedback so the UI reflects the retry.
+        $DB->delete_records('assignfeedback_aif_feedback', [
+            'aif' => $aifconfig->id,
+            'submission' => $submission->id,
+        ]);
+
         // Queue the ad-hoc task with a unique marker for retrieval.
+        $triggeredby = $isteacher ? 'manual' : 'auto';
         $task = new process_feedback_adhoc();
         $uniqadhoctaskid = uniqid();
         $task->set_custom_data([
             'assignment' => $params['assignmentid'],
             'users' => [$params['userid']],
             'action' => 'generate',
-            'triggeredby' => 'manual',
+            'triggeredby' => $triggeredby,
             'uniqadhoctaskid' => $uniqadhoctaskid,
         ]);
-        $task->set_userid($USER->id);
+        $task->set_userid($isteacher ? $USER->id : $params['userid']);
         manager::queue_adhoc_task($task, true);
 
         // Find the queued task to get its ID for stored progress.
@@ -121,7 +151,6 @@ class regenerate_feedback extends external_api {
             $record = $DB->get_record('stored_progress', ['idnumber' => $idnumber]);
             if ($record) {
                 $progressrecordid = (int) $record->id;
-                // Set initial message directly in DB to avoid HTML output in AJAX context.
                 $record->message = get_string('waitingforadhoctaskstart', 'assignfeedback_aif');
                 $DB->update_record('stored_progress', $record);
             }
@@ -129,21 +158,41 @@ class regenerate_feedback extends external_api {
 
         return [
             'success' => true,
-            'message' => get_string('regenerate_queued', 'assignfeedback_aif'),
             'progressrecordid' => $progressrecordid,
         ];
     }
 
     /**
-     * Describes the return value for regenerate_feedback.
+     * Check whether a feedback record contains an error marker in skippedfiles.
+     *
+     * @param \stdClass $record The feedback record.
+     * @return bool True if the record has an error marker.
+     */
+    private static function has_error_marker(\stdClass $record): bool {
+        if (empty($record->skippedfiles)) {
+            return false;
+        }
+        $skipped = json_decode($record->skippedfiles, true);
+        if (!is_array($skipped)) {
+            return false;
+        }
+        foreach ($skipped as $entry) {
+            if (is_array($entry) && isset($entry['_error'])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Describes the return value for retry_feedback.
      *
      * @return external_single_structure
      */
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
             'success' => new external_value(PARAM_BOOL, 'Whether the task was queued successfully'),
-            'message' => new external_value(PARAM_TEXT, 'Status message'),
-            'progressrecordid' => new external_value(PARAM_INT, 'Stored progress DB record ID for polling', VALUE_OPTIONAL),
+            'progressrecordid' => new external_value(PARAM_INT, 'Stored progress DB record ID for polling'),
         ]);
     }
 }

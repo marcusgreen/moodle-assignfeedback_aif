@@ -17,7 +17,9 @@
  * Expert mode template button for AI Assisted Feedback.
  *
  * When clicked, inserts the admin-configured prompt template into the prompt
- * textarea. If the textarea already has content, a confirmation dialog is shown.
+ * textarea. The {{prompt}} placeholder is pre-replaced with the teacher's
+ * current prompt text or a placeholder instruction. If the assignment does
+ * not use rubrics, the {{rubric_section}} placeholder is replaced with an empty string.
  *
  * @module     assignfeedback_aif/expertmode
  * @copyright  2026 ISB Bayern
@@ -27,13 +29,14 @@
 
 import {getString} from 'core/str';
 import Notification from 'core/notification';
+import Ajax from 'core/ajax';
 
 /**
  * Initialize the expert mode button.
  *
- * @param {string} template The admin-configured prompt template.
+ * Loads the admin-configured prompt template via AJAX when the button is clicked.
  */
-export const init = (template) => {
+export const init = () => {
     const button = document.getElementById('id_assignfeedback_aif_expertmodebtn');
     const promptTextarea = document.getElementById('id_assignfeedback_aif_prompt');
 
@@ -49,27 +52,61 @@ export const init = (template) => {
     button.addEventListener('click', async(e) => {
         e.preventDefault();
 
+        let template;
+        try {
+            const result = await Ajax.call([{
+                methodname: 'assignfeedback_aif_get_expert_template',
+                args: {},
+            }])[0];
+            template = result.template;
+        } catch (error) {
+            Notification.exception(error);
+            return;
+        }
+
         const confirmMessage = await getString('expertmodeconfirm', 'assignfeedback_aif');
+        const placeholder = await getString('expertmodepromptplaceholder', 'assignfeedback_aif');
         Notification.confirm(
             await getString('useexpertmodetemplate', 'assignfeedback_aif'),
             confirmMessage,
             await getString('yes', 'core'),
             await getString('no', 'core'),
             () => {
-                insertTemplate(promptTextarea, template);
+                insertTemplate(promptTextarea, template, placeholder);
             }
         );
     });
 };
 
 /**
- * Insert the template into the textarea.
+ * Insert the template into the textarea with placeholder replacements.
+ *
+ * Replaces {{prompt}} with the teacher's current prompt text or a placeholder.
+ * Resolves {{rubric_section}} client-side: kept as-is when rubrics are active, cleared otherwise.
  *
  * @param {HTMLTextAreaElement} textarea The prompt textarea element.
  * @param {string} template The template text to insert.
+ * @param {string} placeholder The placeholder text for an empty prompt.
  */
-const insertTemplate = (textarea, template) => {
-    textarea.value = template;
+const insertTemplate = (textarea, template, placeholder) => {
+    let result = template;
+
+    // Replace {{prompt}} with current prompt or placeholder instruction.
+    const currentPrompt = textarea.value.trim();
+    if (currentPrompt && !currentPrompt.includes('{{submission}}')) {
+        result = result.replace('{{prompt}}', currentPrompt);
+    } else {
+        result = result.replace('{{prompt}}', placeholder);
+    }
+
+    // Clear {{rubric_section}} if assignment does not use rubric grading.
+    const gradingMethodSelect = document.getElementById('id_advancedgradingmethod_submissions');
+    const hasRubric = gradingMethodSelect && gradingMethodSelect.value === 'rubric';
+    if (!hasRubric) {
+        result = result.replace(/\{\{rubric_section\}\}\n?\n?/g, '');
+    }
+
+    textarea.value = result;
     textarea.dispatchEvent(new Event('input', {bubbles: true}));
     textarea.dispatchEvent(new Event('change', {bubbles: true}));
     textarea.focus();

@@ -36,31 +36,49 @@ class ai_request_provider {
      * @return bool True if the AI backend is available.
      */
     public function is_available(string $purpose, int $contextid): bool {
+        return $this->get_unavailability_reason($purpose, $contextid) === null;
+    }
+
+    /**
+     * Get the reason why the AI backend is unavailable.
+     *
+     * Returns a human-readable error message if the backend is not available,
+     * or null if the backend is available and ready.
+     *
+     * @param string $purpose The purpose to check (e.g., 'feedback', 'itt').
+     * @param int $contextid The context ID.
+     * @return string|null Error message if unavailable, null if available.
+     */
+    public function get_unavailability_reason(string $purpose, int $contextid): ?string {
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
 
         if ($backend === 'local_ai_manager') {
-            return $this->is_available_local_ai_manager($purpose, $contextid);
+            return $this->get_unavailability_reason_local_ai_manager($purpose, $contextid);
         }
 
         // Core AI subsystem: check if there is at least one enabled provider
         // configured for the generate_text action.
         if (!class_exists('\core_ai\manager')) {
-            return false;
+            return get_string('ainavailable', 'assignfeedback_aif');
         }
         $manager = \core\di::get(\core_ai\manager::class);
-        return $manager->is_action_available(\core_ai\aiactions\generate_text::class);
+        if (!$manager->is_action_available(\core_ai\aiactions\generate_text::class)) {
+            return get_string('ainavailable', 'assignfeedback_aif');
+        }
+
+        return null;
     }
 
     /**
-     * Check availability via local_ai_manager.
+     * Get the reason why the local_ai_manager backend is unavailable.
      *
      * @param string $purpose The purpose to check.
      * @param int $contextid The context ID.
-     * @return bool True if available.
+     * @return string|null Error message if unavailable, null if available.
      */
-    private function is_available_local_ai_manager(string $purpose, int $contextid): bool {
+    private function get_unavailability_reason_local_ai_manager(string $purpose, int $contextid): ?string {
         if (!class_exists('\local_ai_manager\ai_manager_utils')) {
-            return false;
+            return get_string('ainavailable', 'assignfeedback_aif');
         }
 
         global $USER;
@@ -70,20 +88,20 @@ class ai_request_provider {
             empty($aiconfig['availability']) ||
             $aiconfig['availability']['available'] !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
         ) {
-            return false;
+            return $aiconfig['availability']['errormessage'] ?? get_string('ainavailable', 'assignfeedback_aif');
         }
 
         // Check specific purpose availability.
         foreach ($aiconfig['purposes'] as $purposeconfig) {
-            if (
-                $purposeconfig['purpose'] === $purpose &&
-                $purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
-            ) {
-                return true;
+            if ($purposeconfig['purpose'] === $purpose) {
+                if ($purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
+                    return null;
+                }
+                return $purposeconfig['errormessage'] ?? get_string('ainavailable', 'assignfeedback_aif');
             }
         }
 
-        return false;
+        return get_string('ainavailable', 'assignfeedback_aif');
     }
 
     /**
