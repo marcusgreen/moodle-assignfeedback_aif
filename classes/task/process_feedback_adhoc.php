@@ -171,7 +171,12 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         // Step 2: Extracting submission content (30%).
         $this->report_substep($slicestart, $slicesize, 30, 'progressstepextracting');
 
-        $promptdata = $aif->get_prompt($record, 'rubric');
+        // Determine the actual grading method for this assignment.
+        $context = \core\context::instance_by_id($record->contextid);
+        $gradingmanager = get_grading_manager($context, 'mod_assign', 'submissions');
+        $gradingmethod = $gradingmanager->get_active_method() ?: 'simple';
+
+        $promptdata = $aif->get_prompt($record, $gradingmethod);
         if (empty($promptdata['prompt'])) {
             // Build an informative error message including skipped file details.
             $errormsg = get_string('erroremptysubmission', 'assignfeedback_aif');
@@ -203,7 +208,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
         // Determine the user context for the AI request:
         // - Manual triggers (teacher clicks regenerate): use the teacher's identity so
-        //   quota and responsibility are attributed to the teacher.
+        // quota and responsibility are attributed to the teacher.
         // - Automatic triggers (student submission): use the student's identity.
         if ($triggeredby === 'manual') {
             $taskuserid = $this->get_userid();

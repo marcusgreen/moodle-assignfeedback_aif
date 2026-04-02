@@ -98,13 +98,16 @@ class hook_callbacks {
         }
 
         // Check if there are pending adhoc tasks for this assignment.
-        $classname = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
-        $sql = "SELECT id FROM {task_adhoc} WHERE classname = :classname AND " .
-               $DB->sql_like('customdata', ':pattern');
-        $pending = $DB->record_exists_sql($sql, [
-            'classname' => $classname,
-            'pattern' => '%"assignment":' . (int) $cm->instance . '%',
-        ]);
+        $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
+        $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
+        $pending = false;
+        foreach ($tasks as $task) {
+            $data = $task->get_custom_data();
+            if (isset($data->assignment) && (int) $data->assignment === (int) $cm->instance) {
+                $pending = true;
+                break;
+            }
+        }
 
         if (!$pending) {
             return;

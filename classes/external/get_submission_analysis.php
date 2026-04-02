@@ -92,8 +92,14 @@ class get_submission_analysis extends external_api {
         $skipped = [];
 
         $fs = get_file_storage();
-        $files = $fs->get_area_files($context->id, 'assignsubmission_file', 'submission_files',
-            $submission->id, 'itemid, filepath, filename', false);
+        $files = $fs->get_area_files(
+            $context->id,
+            'assignsubmission_file',
+            'submission_files',
+            $submission->id,
+            'itemid, filepath, filename',
+            false
+        );
 
         $imagemimetypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
         $converter = new \core_files\converter();

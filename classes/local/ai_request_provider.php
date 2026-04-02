@@ -70,17 +70,6 @@ class ai_request_provider {
     }
 
     /**
-     * Check availability via local_ai_manager.
-     *
-     * @param string $purpose The purpose to check.
-     * @param int $contextid The context ID.
-     * @return bool True if available.
-     */
-    private function is_available_local_ai_manager(string $purpose, int $contextid): bool {
-        return $this->get_unavailability_reason_local_ai_manager($purpose, $contextid) === null;
-    }
-
-    /**
      * Get the reason why the local_ai_manager backend is unavailable.
      *
      * @param string $purpose The purpose to check.

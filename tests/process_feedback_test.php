@@ -25,11 +25,11 @@
 
 namespace assignfeedback_aif;
 
-defined('MOODLE_INTERNAL') || die();
-
 use assignfeedback_aif\task\process_feedback;
 use assignfeedback_aif\task\process_feedback_adhoc;
 use assignfeedback_aif\external\regenerate_feedback;
+
+defined('MOODLE_INTERNAL') || die();
 
 require_once(__DIR__ . '/../../../tests/generator.php');
 require_once(__DIR__ . '/generator_trait.php');
@@ -71,6 +71,8 @@ final class process_feedback_test extends \advanced_testcase {
 
     /**
      * Test the dispatcher scheduled task enqueues adhoc tasks for unprocessed submissions.
+     *
+     * @covers \assignfeedback_aif\task\process_feedback::execute
      */
     public function test_rubric_scheduled_task_generates_feedback(): void {
         global $DB;
@@ -95,6 +97,8 @@ final class process_feedback_test extends \advanced_testcase {
 
     /**
      * Test the rubric scheduled task skips submissions with existing feedback.
+     *
+     * @covers \assignfeedback_aif\task\process_feedback::execute
      */
     public function test_rubric_scheduled_task_skips_existing(): void {
         global $DB;
@@ -134,6 +138,8 @@ final class process_feedback_test extends \advanced_testcase {
 
     /**
      * Test the adhoc task generates feedback for a specific user.
+     *
+     * @covers \assignfeedback_aif\task\process_feedback_adhoc::execute
      */
     public function test_adhoc_task_generates_feedback(): void {
         global $DB;
@@ -161,6 +167,8 @@ final class process_feedback_test extends \advanced_testcase {
 
     /**
      * Test the adhoc task deletes feedback for a specific user.
+     *
+     * @covers \assignfeedback_aif\task\process_feedback_adhoc::execute
      */
     public function test_adhoc_task_deletes_feedback(): void {
         global $DB;
@@ -201,6 +209,8 @@ final class process_feedback_test extends \advanced_testcase {
 
     /**
      * Test that the observer queues an adhoc task when autogenerate is enabled.
+     *
+     * @covers \assignfeedback_aif\event\observer::submission_submitted
      */
     public function test_observer_queues_task_when_autogenerate_enabled(): void {
         global $DB;
@@ -252,6 +262,9 @@ final class process_feedback_test extends \advanced_testcase {
      *
      * Uses submit_for_grading() which is the path when "Require students to click submit" is YES.
      * Events are NOT intercepted with redirectEvents() so the observer actually runs.
+     *
+     * @covers \assignfeedback_aif\event\observer::submission_submitted
+     * @covers \assignfeedback_aif\task\process_feedback_adhoc::execute
      */
     public function test_observer_autogenerate_diagnostic(): void {
         global $DB;
@@ -354,6 +367,9 @@ final class process_feedback_test extends \advanced_testcase {
      * When "Require students to click submit" is NO (default), the assessable_submitted
      * event fires from save_submission() — a different code path than submit_for_grading().
      * This test ensures the observer works for the default production configuration.
+     *
+     * @covers \assignfeedback_aif\event\observer::submission_submitted
+     * @covers \assignfeedback_aif\task\process_feedback_adhoc::execute
      */
     public function test_observer_autogenerate_no_submissiondrafts(): void {
         global $DB;

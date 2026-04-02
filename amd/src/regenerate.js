@@ -133,40 +133,33 @@ const showConfirmationWithAnalysis = async(button, assignmentId, userId) => {
  * @returns {string} HTML message for the confirmation dialog.
  */
 const buildAnalysisMessage = async(analysis) => {
-    let message = await getString('confirmgeneratefeedback', 'assignfeedback_aif');
-    message += '<div class="mt-3">';
+    const [confirmtext, onlinetextlabel, processablefileslabel, skippedfileslabel, nosubmissionlabel] =
+        await Promise.all([
+            getString('confirmgeneratefeedback', 'assignfeedback_aif'),
+            getString('analysisonlinetext', 'assignfeedback_aif'),
+            getString('analysisprocessablefiles', 'assignfeedback_aif'),
+            getString('analysisskippedfiles', 'assignfeedback_aif'),
+            getString('analysisnosubmission', 'assignfeedback_aif'),
+        ]);
 
-    if (analysis.hasonlinetext) {
-        const label = await getString('analysisonlinetext', 'assignfeedback_aif');
-        message += '<div class="text-success"><i class="fa fa-check mr-1"></i>' + label + '</div>';
-    }
+    const context = {
+        confirmtext,
+        hasonlinetext: analysis.hasonlinetext,
+        onlinetextlabel,
+        hasprocessablefiles: analysis.processablefiles.length > 0,
+        processablefileslabel,
+        processablefiles: analysis.processablefiles,
+        hasskippedfiles: analysis.skippedfiles.length > 0,
+        skippedfileslabel,
+        skippedfiles: analysis.skippedfiles,
+        nosubmission: !analysis.hasonlinetext
+            && analysis.processablefiles.length === 0
+            && analysis.skippedfiles.length === 0,
+        nosubmissionlabel,
+    };
 
-    if (analysis.processablefiles.length > 0) {
-        const label = await getString('analysisprocessablefiles', 'assignfeedback_aif');
-        message += '<div class="mt-2 font-weight-bold">' + label + '</div><ul class="mb-1">';
-        for (const f of analysis.processablefiles) {
-            message += '<li class="text-success"><i class="fa fa-check mr-1"></i>' + f.filename + '</li>';
-        }
-        message += '</ul>';
-    }
-
-    if (analysis.skippedfiles.length > 0) {
-        const label = await getString('analysisskippedfiles', 'assignfeedback_aif');
-        message += '<div class="mt-2 font-weight-bold text-warning">' + label + '</div><ul class="mb-1">';
-        for (const f of analysis.skippedfiles) {
-            message += '<li class="text-warning"><i class="fa fa-exclamation-triangle mr-1"></i>'
-                + f.filename + ' <small class="text-muted">(' + f.reason + ')</small></li>';
-        }
-        message += '</ul>';
-    }
-
-    if (!analysis.hasonlinetext && analysis.processablefiles.length === 0 && analysis.skippedfiles.length === 0) {
-        const label = await getString('analysisnosubmission', 'assignfeedback_aif');
-        message += '<div class="text-warning"><i class="fa fa-exclamation-triangle mr-1"></i>' + label + '</div>';
-    }
-
-    message += '</div>';
-    return message;
+    const {html} = await Templates.renderForPromise('assignfeedback_aif/analysis_dialog', context);
+    return html;
 };
 
 /**
@@ -327,10 +320,50 @@ const pollProgress = async(container, progressRecordId) => {
 };
 
 /**
- * Fetch generated feedback and inject it into the TinyMCE editor.
+ * Set content in any Moodle editor attached to the given textarea.
+ *
+ * Tries the TinyMCE API first via dynamic import so the module is only
+ * loaded when TinyMCE is actually the active editor. Falls back to
+ * setting textarea.value for other editors (Marklar, plain textarea).
+ *
+ * @param {string} elementId The textarea element ID.
+ * @param {string} html The HTML content to set.
+ * @returns {boolean} Whether the content was set successfully.
+ */
+const setEditorContent = async(elementId, html) => {
+    const textarea = document.getElementById(elementId);
+    if (!textarea) {
+        return false;
+    }
+
+    // Try the TinyMCE API first — it manages an iframe so textarea.value alone won't work.
+    try {
+        const {getInstanceForElementId} = await import('editor_tiny/editor');
+        const editor = getInstanceForElementId(elementId);
+        if (editor) {
+            editor.setContent(html);
+            editor.save();
+            return true;
+        }
+    } catch {
+        // Editor_tiny not available — a different editor is active.
+    }
+
+    // Fallback for plain textarea, Marklar, or any other editor.
+    textarea.value = html;
+    textarea.dispatchEvent(new Event('change', {bubbles: true}));
+    return true;
+};
+
+/** @var {string} EDITOR_TEXTAREA_ID The textarea element ID for the AIF feedback editor. */
+const EDITOR_TEXTAREA_ID = 'id_assignfeedbackaif_editor';
+
+/**
+ * Fetch generated feedback and inject it into the editor.
  *
  * Instead of reloading the page (which would lose unsaved grade data),
  * fetches the feedback via webservice and sets it in the editor directly.
+ * Uses the TinyMCE API when available, otherwise falls back to the textarea.
  *
  * @param {HTMLElement} container The progress bar container element.
  */
@@ -345,23 +378,10 @@ const injectFeedbackIntoEditor = async(container) => {
         }])[0];
 
         if (result.feedbackexists && result.feedbackhtml) {
-            // Find the TinyMCE editor for the AIF feedback field.
             const editorElement = document.querySelector('[data-fieldtype="editor"]');
             const editorWrapper = editorElement ? editorElement.closest('.fitem') : null;
-            const textarea = document.getElementById('id_assignfeedbackaif_editor');
 
-            if (textarea) {
-                // Set the textarea value (raw HTML).
-                textarea.value = result.feedbackhtml;
-                textarea.dispatchEvent(new Event('change', {bubbles: true}));
-
-                // If TinyMCE is active, update its content too.
-                // TinyMCE 6 in Moodle uses a data-fieldtype attribute on the wrapper.
-                const tinyFrame = editorElement?.querySelector('iframe');
-                if (tinyFrame && tinyFrame.contentDocument) {
-                    tinyFrame.contentDocument.body.innerHTML = result.feedbackhtml;
-                }
-            }
+            await setEditorContent(EDITOR_TEXTAREA_ID, result.feedbackhtml);
 
             // Remove progress bar and restore the editor.
             container.remove();

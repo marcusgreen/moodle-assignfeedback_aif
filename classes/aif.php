@@ -426,6 +426,7 @@ class aif {
                 }
             } catch (\Exception $e) {
                 // AI Manager not available, continue with native formats only.
+                debugging('AI Manager ITT purpose unavailable: ' . $e->getMessage(), DEBUG_DEVELOPER);
             }
         }
 

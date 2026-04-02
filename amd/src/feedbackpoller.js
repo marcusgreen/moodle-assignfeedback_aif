@@ -28,6 +28,8 @@
 
 import Ajax from 'core/ajax';
 import Log from 'core/log';
+import {add as addToast} from 'core/toast';
+import {get_string as getString} from 'core/str';
 
 /** @var {number} POLL_INTERVAL_MS Polling interval in milliseconds. */
 const POLL_INTERVAL_MS = 5000;
@@ -94,9 +96,10 @@ export const init = (assignmentId, userId) => {
  *
  * Used on the summary/overview page to show task progress and update
  * the progress bar in real time. Reloads the page when complete.
+ * On error, a retry button is shown so the user can re-queue the task.
  *
- * @param {number} assignmentId The assignment instance id (unused, for future use).
- * @param {number} userId The user id (unused, for future use).
+ * @param {number} assignmentId The assignment instance id.
+ * @param {number} userId The user id.
  * @param {number} progressRecordId The stored_progress DB record ID.
  */
 export const initWithProgress = (assignmentId, userId, progressRecordId) => {
@@ -138,6 +141,7 @@ export const initWithProgress = (assignmentId, userId, progressRecordId) => {
                     bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
                     bar.style.width = '100%';
                 }
+                addRetryButton(container, assignmentId, userId);
                 return;
             }
 
@@ -159,4 +163,70 @@ export const initWithProgress = (assignmentId, userId, progressRecordId) => {
     };
 
     pollProgress();
+};
+
+/**
+ * Add a retry button to a container when feedback generation fails.
+ *
+ * Creates a button element and appends it to the given container.
+ * The button uses data attributes so the delegated click handler
+ * from initRetryAll() can process the retry.
+ *
+ * @param {HTMLElement} container The container to append the retry button to.
+ * @param {number} assignmentId The assignment instance id.
+ * @param {number} userId The user id.
+ */
+const addRetryButton = async(container, assignmentId, userId) => {
+    const label = await getString('retrygeneration', 'assignfeedback_aif');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary btn-sm mt-2';
+    btn.textContent = label;
+    btn.dataset.action = 'retry-aif';
+    btn.dataset.assignmentid = assignmentId;
+    btn.dataset.userid = userId;
+    container.appendChild(btn);
+    initRetryAll();
+};
+
+/**
+ * Initialize retry functionality for all retry buttons on the page.
+ *
+ * Uses event delegation on the document body so it works for both
+ * server-rendered retry buttons and dynamically added ones (e.g. when
+ * the progress bar detects an error during polling).
+ *
+ * On click, calls the retry_feedback webservice to re-queue the failed
+ * task, then reloads the page so the progress bar is shown again.
+ */
+export const initRetryAll = () => {
+    if (document.body.dataset.aifRetryAttached) {
+        return;
+    }
+    document.body.dataset.aifRetryAttached = 'true';
+
+    document.body.addEventListener('click', async(e) => {
+        const button = e.target.closest('[data-action="retry-aif"]');
+        if (!button || button.disabled) {
+            return;
+        }
+        e.preventDefault();
+        button.disabled = true;
+
+        const assignmentId = parseInt(button.dataset.assignmentid);
+        const userId = parseInt(button.dataset.userid);
+
+        try {
+            await Ajax.call([{
+                methodname: 'assignfeedback_aif_retry_feedback',
+                args: {assignmentid: assignmentId, userid: userId},
+            }])[0];
+            window.location.reload();
+        } catch (error) {
+            Log.debug('assignfeedback_aif/feedbackpoller: retry failed.');
+            Log.debug(error);
+            addToast(error.message || String(error), {type: 'danger'});
+            button.disabled = false;
+        }
+    });
 };

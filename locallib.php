@@ -33,6 +33,9 @@ class assign_feedback_aif extends assign_feedback_plugin {
     /** @var bool Whether the generating spinner has already been rendered on this page. */
     private static bool $spinnerrendered = false;
 
+    /** @var bool Whether the retry JS module has been initialised on this page. */
+    private static bool $retryinitialised = false;
+
     /** @var string File component for AI feedback. */
     const COMPONENT = 'assignfeedback_aif';
 
@@ -89,17 +92,9 @@ class assign_feedback_aif extends assign_feedback_plugin {
             );
             $mform->hideIf('assignfeedback_aif_expertmodebtn', 'assignfeedback_aif_enabled', 'notchecked');
 
-            // Pass the expert template via data attribute to avoid exceeding the
-            // 1024-char limit of js_call_amd arguments.
+            // The expert template is loaded via AJAX (get_expert_template webservice)
+            // to avoid embedding large data in HTML attributes.
             global $PAGE;
-            $experttemplate = get_config('assignfeedback_aif', 'prompttemplate');
-            if (empty($experttemplate)) {
-                $experttemplate = get_string('defaultprompttemplate', 'assignfeedback_aif');
-            }
-            $mform->addElement(
-                'html',
-                '<div id="aif-expertmode-data" data-template="' . s($experttemplate) . '" class="hidden"></div>'
-            );
             $PAGE->requires->js_call_amd('assignfeedback_aif/expertmode', 'init');
         }
 
@@ -130,6 +125,9 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
 
+        // Read settings from the plugin's own table rather than assign_plugin_config
+        // because the AIF config record stores additional fields (autogenerate, prompt)
+        // that go beyond what the base class get_config()/set_config() supports.
         global $DB;
 
         $instance = $this->assignment->get_default_instance();
@@ -288,20 +286,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $runningprogressid = $this->get_running_progress_id($assignmentid, $userid);
 
         // Local ai_manager widgets: infobox (data sharing notice) and quota.
-        if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
-            $mform->addElement('html', '<div data-aif="aiinfo"></div>');
-            $mform->addElement('html', '<div data-aif="aiuserquota" class="mb-2"></div>');
-            $PAGE->requires->js_call_amd(
-                'local_ai_manager/infobox',
-                'renderInfoBox',
-                ['assignfeedback_aif', $USER->id, '[data-aif="aiinfo"]', ['feedback', 'itt']]
-            );
-            $PAGE->requires->js_call_amd(
-                'local_ai_manager/userquota',
-                'renderUserQuota',
-                ['[data-aif="aiuserquota"]', ['feedback', 'itt']]
-            );
-        }
+        $this->render_ai_manager_widgets($mform);
 
         // Initialize the AMD module. Pass running progress ID to resume polling on page load.
         $PAGE->requires->js_call_amd(
@@ -312,6 +297,33 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
         return true;
     }
+
+    /**
+     * Render local_ai_manager infobox and quota widgets into the grading form.
+     *
+     * Only adds elements when the local_ai_manager backend is configured.
+     *
+     * @param MoodleQuickForm $mform The form to add elements to.
+     */
+    private function render_ai_manager_widgets(MoodleQuickForm $mform): void {
+        if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
+            return;
+        }
+        global $PAGE, $USER;
+        $mform->addElement('html', '<div data-aif="aiinfo"></div>');
+        $mform->addElement('html', '<div data-aif="aiuserquota" class="mb-2"></div>');
+        $PAGE->requires->js_call_amd(
+            'local_ai_manager/infobox',
+            'renderInfoBox',
+            ['assignfeedback_aif', $USER->id, '[data-aif="aiinfo"]', ['feedback', 'itt']]
+        );
+        $PAGE->requires->js_call_amd(
+            'local_ai_manager/userquota',
+            'renderUserQuota',
+            ['[data-aif="aiuserquota"]', ['feedback', 'itt']]
+        );
+    }
+
     /**
      * Save the settings for AI feedback plugin.
      *
@@ -441,13 +453,21 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
         if ($action == 'generatefeedbackai') {
             $this->process_feedbackaif($users, 'generate');
-            redirect($gradingurl, get_string('regenerate_queued', 'assignfeedback_aif'),
-                null, \core\output\notification::NOTIFY_SUCCESS);
+            redirect(
+                $gradingurl,
+                get_string('regenerate_queued', 'assignfeedback_aif'),
+                null,
+                \core\output\notification::NOTIFY_SUCCESS
+            );
         }
         if ($action == 'deletefeedbackai') {
             $this->delete_feedbackaif($users);
-            redirect($gradingurl, get_string('batchdeletefeedbackcomplete', 'assignfeedback_aif'),
-                null, \core\output\notification::NOTIFY_SUCCESS);
+            redirect(
+                $gradingurl,
+                get_string('batchdeletefeedbackcomplete', 'assignfeedback_aif'),
+                null,
+                \core\output\notification::NOTIFY_SUCCESS
+            );
         }
         return '';
     }
@@ -524,8 +544,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             // Check for error marker in skippedfiles.
             $errormsg = $this->get_error_from_feedback($record);
             if ($errormsg !== null) {
-                global $OUTPUT;
-                return $OUTPUT->notification($errormsg, \core\output\notification::NOTIFY_ERROR);
+                return $this->render_error_with_retry($errormsg, $grade->assignment, $grade->userid);
             }
             $format = $record->feedbackformat ?? FORMAT_HTML;
             $text = format_text($record->feedback, $format, [
@@ -534,7 +553,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             // Truncate for the grading table overview. Full feedback via "view" link.
             $shorttext = shorten_text(strip_tags($text), 140);
             $showviewlink = ($shorttext !== strip_tags($text));
-            return s($shorttext) . $this->render_warningbox();
+            return $shorttext . $this->render_warningbox();
         }
 
         // No feedback yet — check for running task with stored progress or pending autogenerate.
@@ -621,7 +640,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         // Check for error marker in skippedfiles.
         $errormsg = $this->get_error_from_feedback($record);
         if ($errormsg !== null) {
-            return $OUTPUT->notification($errormsg, \core\output\notification::NOTIFY_ERROR);
+            return $this->render_error_with_retry($errormsg, $grade->assignment, $grade->userid);
         }
 
         $format = $record->feedbackformat ?? FORMAT_HTML;
@@ -674,11 +693,48 @@ class assign_feedback_aif extends assign_feedback_plugin {
         if (!empty($skipped) && is_array($skipped)) {
             foreach ($skipped as $entry) {
                 if (is_array($entry) && isset($entry['_error'])) {
-                    return get_string('feedbackgenerationerror', 'assignfeedback_aif', s($entry['_error']));
+                    return get_string('feedbackgenerationerror', 'assignfeedback_aif', $entry['_error']);
                 }
             }
         }
         return null;
+    }
+
+    /**
+     * Render an error notification with a retry button.
+     *
+     * Used in both view_summary() and view() when feedback generation failed.
+     * The retry button triggers a new adhoc task via the retry_feedback webservice.
+     *
+     * @param string $errormsg The error message to display.
+     * @param int $assignmentid The assignment ID.
+     * @param int $userid The user ID.
+     * @return string HTML with error notification and retry button.
+     */
+    private function render_error_with_retry(string $errormsg, int $assignmentid, int $userid): string {
+        global $OUTPUT;
+        $html = $OUTPUT->render_from_template('assignfeedback_aif/error_with_retry', [
+            'errormsg' => $errormsg,
+            'assignmentid' => $assignmentid,
+            'userid' => $userid,
+            'retrylabel' => get_string('retrygeneration', 'assignfeedback_aif'),
+        ]);
+        $this->ensure_retry_js();
+        return $html;
+    }
+
+    /**
+     * Ensure the retry JS module is loaded exactly once per page.
+     *
+     * Uses event delegation so a single listener handles all retry buttons,
+     * including those added dynamically by the progress bar error handler.
+     */
+    private function ensure_retry_js(): void {
+        if (!self::$retryinitialised) {
+            global $PAGE;
+            $PAGE->requires->js_call_amd('assignfeedback_aif/feedbackpoller', 'initRetryAll', []);
+            self::$retryinitialised = true;
+        }
     }
 
     /**

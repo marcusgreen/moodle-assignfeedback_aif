@@ -29,19 +29,14 @@
 
 import {getString} from 'core/str';
 import Notification from 'core/notification';
+import Ajax from 'core/ajax';
 
 /**
  * Initialize the expert mode button.
  *
- * Reads the admin-configured prompt template from a data attribute
- * to avoid exceeding the 1024-char argument limit of js_call_amd.
+ * Loads the admin-configured prompt template via AJAX when the button is clicked.
  */
 export const init = () => {
-    const dataEl = document.getElementById('aif-expertmode-data');
-    if (!dataEl) {
-        return;
-    }
-    const template = dataEl.dataset.template;
     const button = document.getElementById('id_assignfeedback_aif_expertmodebtn');
     const promptTextarea = document.getElementById('id_assignfeedback_aif_prompt');
 
@@ -56,6 +51,18 @@ export const init = () => {
 
     button.addEventListener('click', async(e) => {
         e.preventDefault();
+
+        let template;
+        try {
+            const result = await Ajax.call([{
+                methodname: 'assignfeedback_aif_get_expert_template',
+                args: {},
+            }])[0];
+            template = result.template;
+        } catch (error) {
+            Notification.exception(error);
+            return;
+        }
 
         const confirmMessage = await getString('expertmodeconfirm', 'assignfeedback_aif');
         const placeholder = await getString('expertmodepromptplaceholder', 'assignfeedback_aif');

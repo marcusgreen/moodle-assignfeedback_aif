@@ -114,13 +114,16 @@ class check_feedback_status extends external_api {
         // Assignment-wide mode: check if any adhoc tasks are still pending.
         require_capability('mod/assign:grade', $context);
 
-        $classname = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
-        $sql = "SELECT id FROM {task_adhoc} WHERE classname = :classname AND " .
-               $DB->sql_like('customdata', ':pattern');
-        $pending = $DB->record_exists_sql($sql, [
-            'classname' => $classname,
-            'pattern' => '%"assignment":' . (int) $params['assignmentid'] . '%',
-        ]);
+        $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
+        $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
+        $pending = false;
+        foreach ($tasks as $task) {
+            $data = $task->get_custom_data();
+            if (isset($data->assignment) && (int) $data->assignment === (int) $params['assignmentid']) {
+                $pending = true;
+                break;
+            }
+        }
 
         // The feedbackexists=true item means "done" (no more pending tasks).
         return [
@@ -137,7 +140,12 @@ class check_feedback_status extends external_api {
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
             'feedbackexists' => new external_value(PARAM_BOOL, 'Whether AI feedback exists for the submission'),
-            'feedbackhtml' => new external_value(PARAM_RAW, 'The formatted feedback HTML (only for per-user mode)', VALUE_DEFAULT, ''),
+            'feedbackhtml' => new external_value(
+                PARAM_RAW,
+                'The formatted feedback HTML (only for per-user mode)',
+                VALUE_DEFAULT,
+                ''
+            ),
         ]);
     }
 }
