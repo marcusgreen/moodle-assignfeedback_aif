@@ -130,5 +130,17 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026040100, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026040102) {
+        // Add skippedfiles field to store names of files that could not be analysed.
+        $table = new xmldb_table('assignfeedback_aif_feedback');
+        $field = new xmldb_field('skippedfiles', XMLDB_TYPE_TEXT, null, null, null, null, null, 'submission');
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026040102, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

@@ -33,7 +33,7 @@ class hook_callbacks {
     public static function handle_purpose_usage(\local_ai_manager\hook\purpose_usage $hook): void {
         $hook->set_component_displayname(
             'assignfeedback_aif',
-            get_string('pluginname', 'assignfeedback_aif')
+            get_string('pluginname_userfaced', 'assignfeedback_aif')
         );
         $hook->add_purpose_usage_description(
             'feedback',
@@ -48,34 +48,52 @@ class hook_callbacks {
     }
 
     /**
-     * Show a generating spinner on the assign view page when AI feedback tasks are pending.
+     * Show notifications on assign pages when AI feedback tasks are pending or when
+     * students need to be warned about data being sent to AI.
      *
-     * Hooks into before_footer to inject a notification banner with spinner and
-     * a polling script that reloads the page once all pending tasks are complete.
+     * For teachers on the grading overview: shows a spinner when adhoc tasks are pending.
+     * For students on the submission page: shows a data sharing notice when autogenerate
+     * is enabled, so they know their submission will be sent to an AI system.
      *
      * @param \core\hook\output\before_footer_html_generation $hook The hook instance.
      */
     public static function before_footer(\core\hook\output\before_footer_html_generation $hook): void {
-        global $PAGE, $DB, $OUTPUT;
+        global $PAGE, $DB, $OUTPUT, $USER;
 
-        // Only act on the assign view page.
-        if ($PAGE->pagetype !== 'mod-assign-view') {
+        // Only act on assign pages.
+        if (!str_starts_with($PAGE->pagetype, 'mod-assign-')) {
             return;
         }
 
-        // Get the assignment ID from the course module context.
         $context = $PAGE->context;
         if ($context->contextlevel !== CONTEXT_MODULE) {
             return;
         }
 
-        // Check capability — only show to graders.
-        if (!has_capability('mod/assign:grade', $context)) {
+        $cm = get_coursemodule_from_id('assign', $context->instanceid, 0, false, IGNORE_MISSING);
+        if (!$cm) {
             return;
         }
 
-        $cm = get_coursemodule_from_id('assign', $context->instanceid, 0, false, IGNORE_MISSING);
-        if (!$cm) {
+        // Student submission page: show data sharing notice when autogenerate is enabled.
+        if ($PAGE->pagetype === 'mod-assign-view' && !has_capability('mod/assign:grade', $context)) {
+            $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
+            if ($aifconfig && !empty($aifconfig->autogenerate)) {
+                $html = $OUTPUT->notification(
+                    get_string('studentsubmissionainotice', 'assignfeedback_aif'),
+                    \core\output\notification::NOTIFY_INFO
+                );
+                $hook->add_html($html);
+            }
+            return;
+        }
+
+        // Teacher grading overview: show spinner when adhoc tasks are pending.
+        if ($PAGE->pagetype !== 'mod-assign-view') {
+            return;
+        }
+
+        if (!has_capability('mod/assign:grade', $context)) {
             return;
         }
 

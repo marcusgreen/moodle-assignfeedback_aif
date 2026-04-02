@@ -84,19 +84,31 @@ class check_feedback_status extends external_api {
                 throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
             }
 
-            $sql = "SELECT aiff.id
+            $sql = "SELECT aiff.id, aiff.feedback, aiff.feedbackformat
                       FROM {assignfeedback_aif_feedback} aiff
                       JOIN {assignfeedback_aif} aif ON aiff.aif = aif.id
                       JOIN {assign_submission} sub ON aiff.submission = sub.id
                      WHERE aif.assignment = :assignmentid
                        AND sub.userid = :userid
                        AND sub.latest = 1";
-            $exists = $DB->record_exists_sql($sql, [
+            $record = $DB->get_record_sql($sql, [
                 'assignmentid' => $params['assignmentid'],
                 'userid' => $params['userid'],
             ]);
+            $exists = !empty($record);
 
-            return ['feedbackexists' => $exists];
+            // Return the feedback HTML when it exists, so the grading page can
+            // inject it into the editor without a full page reload.
+            $feedbackhtml = '';
+            if ($exists && has_capability('mod/assign:grade', $context)) {
+                $format = $record->feedbackformat ?? FORMAT_HTML;
+                $feedbackhtml = format_text($record->feedback, $format, ['context' => $context]);
+            }
+
+            return [
+                'feedbackexists' => $exists,
+                'feedbackhtml' => $feedbackhtml,
+            ];
         }
 
         // Assignment-wide mode: check if any adhoc tasks are still pending.
@@ -111,7 +123,10 @@ class check_feedback_status extends external_api {
         ]);
 
         // The feedbackexists=true item means "done" (no more pending tasks).
-        return ['feedbackexists' => !$pending];
+        return [
+            'feedbackexists' => !$pending,
+            'feedbackhtml' => '',
+        ];
     }
 
     /**
@@ -122,6 +137,7 @@ class check_feedback_status extends external_api {
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
             'feedbackexists' => new external_value(PARAM_BOOL, 'Whether AI feedback exists for the submission'),
+            'feedbackhtml' => new external_value(PARAM_RAW, 'The formatted feedback HTML (only for per-user mode)', VALUE_DEFAULT, ''),
         ]);
     }
 }

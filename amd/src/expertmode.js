@@ -33,9 +33,15 @@ import Notification from 'core/notification';
 /**
  * Initialize the expert mode button.
  *
- * @param {string} template The admin-configured prompt template.
+ * Reads the admin-configured prompt template from a data attribute
+ * to avoid exceeding the 1024-char argument limit of js_call_amd.
  */
-export const init = (template) => {
+export const init = () => {
+    const dataEl = document.getElementById('aif-expertmode-data');
+    if (!dataEl) {
+        return;
+    }
+    const template = dataEl.dataset.template;
     const button = document.getElementById('id_assignfeedback_aif_expertmodebtn');
     const promptTextarea = document.getElementById('id_assignfeedback_aif_prompt');
 

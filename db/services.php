@@ -40,4 +40,11 @@ $functions = [
         'ajax' => true,
         'capabilities' => '',
     ],
+    'assignfeedback_aif_get_submission_analysis' => [
+        'classname' => 'assignfeedback_aif\external\get_submission_analysis',
+        'description' => 'Analyse submission files for convertibility before AI feedback generation',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'mod/assign:grade',
+    ],
 ];

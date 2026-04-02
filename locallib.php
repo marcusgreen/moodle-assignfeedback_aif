@@ -69,17 +69,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_settings(MoodleQuickForm $mform): void {
 
-        // AI manager infobox: data sharing notice for teachers configuring the prompt.
-        if (get_config('assignfeedback_aif', 'backend') === 'local_ai_manager') {
-            global $PAGE, $USER;
-            $mform->addElement('html', '<div data-aif="aisettingsinfo"></div>');
-            $PAGE->requires->js_call_amd(
-                'local_ai_manager/infobox',
-                'renderInfoBox',
-                ['assignfeedback_aif', $USER->id, '[data-aif="aisettingsinfo"]', ['feedback']]
-            );
-        }
-
         $defaultprompt = get_config('assignfeedback_aif', 'prompt');
 
         $mform->addElement(
@@ -100,13 +89,18 @@ class assign_feedback_aif extends assign_feedback_plugin {
             );
             $mform->hideIf('assignfeedback_aif_expertmodebtn', 'assignfeedback_aif_enabled', 'notchecked');
 
-            // Initialize the expert mode JS module with the admin template.
+            // Pass the expert template via data attribute to avoid exceeding the
+            // 1024-char limit of js_call_amd arguments.
             global $PAGE;
             $experttemplate = get_config('assignfeedback_aif', 'prompttemplate');
             if (empty($experttemplate)) {
                 $experttemplate = get_string('defaultprompttemplate', 'assignfeedback_aif');
             }
-            $PAGE->requires->js_call_amd('assignfeedback_aif/expertmode', 'init', [$experttemplate]);
+            $mform->addElement(
+                'html',
+                '<div id="aif-expertmode-data" data-template="' . s($experttemplate) . '" class="hidden"></div>'
+            );
+            $PAGE->requires->js_call_amd('assignfeedback_aif/expertmode', 'init');
         }
 
         // Auto-generate on submission checkbox.
@@ -300,12 +294,12 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $PAGE->requires->js_call_amd(
                 'local_ai_manager/infobox',
                 'renderInfoBox',
-                ['assignfeedback_aif', $USER->id, '[data-aif="aiinfo"]', ['feedback']]
+                ['assignfeedback_aif', $USER->id, '[data-aif="aiinfo"]', ['feedback', 'itt']]
             );
             $PAGE->requires->js_call_amd(
                 'local_ai_manager/userquota',
                 'renderUserQuota',
-                ['[data-aif="aiuserquota"]', ['feedback']]
+                ['[data-aif="aiuserquota"]', ['feedback', 'itt']]
             );
         }
 
@@ -434,17 +428,26 @@ class assign_feedback_aif extends assign_feedback_plugin {
     /**
      * User has chosen a custom grading batch operation and selected some users.
      *
+     * Redirects back to the grading table with a toast notification instead of
+     * returning HTML, which would result in a blank page.
+     *
      * @param string $action The chosen action.
      * @param array $users An array of user ids.
-     * @return string The response html.
+     * @return string The response html (never reached due to redirect).
      */
     public function grading_batch_operation($action, $users): string {
-        // Currently only supports rubric grading method.
+        $cmid = $this->assignment->get_course_module()->id;
+        $gradingurl = new \moodle_url('/mod/assign/view.php', ['id' => $cmid, 'action' => 'grading']);
+
         if ($action == 'generatefeedbackai') {
             $this->process_feedbackaif($users, 'generate');
+            redirect($gradingurl, get_string('regenerate_queued', 'assignfeedback_aif'),
+                null, \core\output\notification::NOTIFY_SUCCESS);
         }
         if ($action == 'deletefeedbackai') {
             $this->delete_feedbackaif($users);
+            redirect($gradingurl, get_string('batchdeletefeedbackcomplete', 'assignfeedback_aif'),
+                null, \core\output\notification::NOTIFY_SUCCESS);
         }
         return '';
     }
@@ -518,6 +521,12 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function view_summary(stdClass $grade, &$showviewlink): string {
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
         if ($record) {
+            // Check for error marker in skippedfiles.
+            $errormsg = $this->get_error_from_feedback($record);
+            if ($errormsg !== null) {
+                global $OUTPUT;
+                return $OUTPUT->notification($errormsg, \core\output\notification::NOTIFY_ERROR);
+            }
             $format = $record->feedbackformat ?? FORMAT_HTML;
             $text = format_text($record->feedback, $format, [
                 'context' => $this->assignment->get_context(),
@@ -603,15 +612,73 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string The formatted feedback text.
      */
     public function view(stdClass $grade): string {
+        global $OUTPUT;
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
         if (!$record) {
             return '';
         }
+
+        // Check for error marker in skippedfiles.
+        $errormsg = $this->get_error_from_feedback($record);
+        if ($errormsg !== null) {
+            return $OUTPUT->notification($errormsg, \core\output\notification::NOTIFY_ERROR);
+        }
+
         $format = $record->feedbackformat ?? FORMAT_HTML;
         $text = format_text($record->feedback, $format, [
             'context' => $this->assignment->get_context(),
         ]);
-        return $text . $this->render_warningbox();
+        $result = $text;
+
+        // Show notice about skipped files.
+        if (!empty($record->skippedfiles)) {
+            $skipped = json_decode($record->skippedfiles, true);
+            if (!empty($skipped)) {
+                $filelist = [];
+                foreach ($skipped as $entry) {
+                    if (is_array($entry) && isset($entry['filename'])) {
+                        $reasonkey = $entry['reason'] ?? 'skipreason_conversionnotsupported';
+                        $reasondata = $entry['reasondata'] ?? null;
+                        $reason = get_string($reasonkey, 'assignfeedback_aif', $reasondata);
+                        $filelist[] = s($entry['filename']) . ' (' . s($reason) . ')';
+                    } else {
+                        // Legacy format: plain filename string.
+                        $filelist[] = s($entry);
+                    }
+                }
+                $result .= $OUTPUT->notification(
+                    get_string('feedbackskippedfiles', 'assignfeedback_aif', implode(', ', $filelist)),
+                    \core\output\notification::NOTIFY_WARNING
+                );
+            }
+        }
+
+        return $result . $this->render_warningbox();
+    }
+
+    /**
+     * Extract error message from a feedback record's skippedfiles JSON.
+     *
+     * Error feedback records are stored with a special '_error' key in the
+     * skippedfiles JSON when feedback generation fails. This allows the error
+     * to persist and be visible even after the adhoc task has been cleaned up.
+     *
+     * @param stdClass $record The feedback record.
+     * @return string|null The error message, or null if no error.
+     */
+    private function get_error_from_feedback(stdClass $record): ?string {
+        if (empty($record->skippedfiles)) {
+            return null;
+        }
+        $skipped = json_decode($record->skippedfiles, true);
+        if (!empty($skipped) && is_array($skipped)) {
+            foreach ($skipped as $entry) {
+                if (is_array($entry) && isset($entry['_error'])) {
+                    return get_string('feedbackgenerationerror', 'assignfeedback_aif', s($entry['_error']));
+                }
+            }
+        }
+        return null;
     }
 
     /**

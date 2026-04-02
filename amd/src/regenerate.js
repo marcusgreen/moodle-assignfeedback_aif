@@ -36,6 +36,12 @@ import Pending from 'core/pending';
 /** @var {number} Polling interval in milliseconds. */
 const POLL_INTERVAL = 5000;
 
+/** @var {number} Stored assignment ID for feedback fetching. */
+let storedAssignmentId = 0;
+
+/** @var {number} Stored user ID for feedback fetching. */
+let storedUserId = 0;
+
 /**
  * Initialize the regenerate button functionality.
  *
@@ -47,6 +53,8 @@ const POLL_INTERVAL = 5000;
  * @param {number} runningProgressId Stored progress record ID of a running task, or 0.
  */
 export const init = (assignmentId, userId, runningProgressId = 0) => {
+    storedAssignmentId = assignmentId;
+    storedUserId = userId;
     const button = document.querySelector('[data-action="regenerate-aif"]');
     if (!button) {
         return;
@@ -65,19 +73,7 @@ export const init = (assignmentId, userId, runningProgressId = 0) => {
 
     button.addEventListener('click', async(e) => {
         e.preventDefault();
-
-        // Show confirmation dialog before sending data to AI.
-        const confirmMessage = await getString('confirmgeneratefeedback', 'assignfeedback_aif');
-        const confirmTitle = await getString('generatefeedbackai', 'assignfeedback_aif');
-        Notification.confirm(
-            confirmTitle,
-            confirmMessage,
-            await getString('yes', 'core'),
-            await getString('no', 'core'),
-            async() => {
-                await doRegenerate(button, assignmentId, userId);
-            }
-        );
+        await showConfirmationWithAnalysis(button, assignmentId, userId);
     });
 };
 
@@ -90,6 +86,87 @@ export const init = (assignmentId, userId, runningProgressId = 0) => {
 const resumeProgressBar = async(button, progressRecordId) => {
     const message = await getString('feedbackgenerating', 'assignfeedback_aif');
     await showProgressBar(button, progressRecordId, message);
+};
+
+/**
+ * Fetch submission analysis and show a confirmation dialog with file details.
+ *
+ * Calls the get_submission_analysis webservice to list which files can be
+ * processed and which will be skipped, then presents the information in
+ * the confirmation dialog so the teacher can make an informed decision.
+ *
+ * @param {HTMLElement} button The regenerate button element.
+ * @param {number} assignmentId The assignment instance id.
+ * @param {number} userId The user id.
+ */
+const showConfirmationWithAnalysis = async(button, assignmentId, userId) => {
+    const confirmTitle = await getString('generatefeedbackai', 'assignfeedback_aif');
+
+    let confirmMessage = '';
+    try {
+        const analysis = await Ajax.call([{
+            methodname: 'assignfeedback_aif_get_submission_analysis',
+            args: {assignmentid: assignmentId, userid: userId},
+        }])[0];
+
+        confirmMessage = await buildAnalysisMessage(analysis);
+    } catch {
+        // Fall back to generic message if analysis fails.
+        confirmMessage = await getString('confirmgeneratefeedback', 'assignfeedback_aif');
+    }
+
+    Notification.confirm(
+        confirmTitle,
+        confirmMessage,
+        await getString('yes', 'core'),
+        await getString('no', 'core'),
+        async() => {
+            await doRegenerate(button, assignmentId, userId);
+        }
+    );
+};
+
+/**
+ * Build a human-readable confirmation message from the submission analysis.
+ *
+ * @param {object} analysis The analysis result from the webservice.
+ * @returns {string} HTML message for the confirmation dialog.
+ */
+const buildAnalysisMessage = async(analysis) => {
+    let message = await getString('confirmgeneratefeedback', 'assignfeedback_aif');
+    message += '<div class="mt-3">';
+
+    if (analysis.hasonlinetext) {
+        const label = await getString('analysisonlinetext', 'assignfeedback_aif');
+        message += '<div class="text-success"><i class="fa fa-check mr-1"></i>' + label + '</div>';
+    }
+
+    if (analysis.processablefiles.length > 0) {
+        const label = await getString('analysisprocessablefiles', 'assignfeedback_aif');
+        message += '<div class="mt-2 font-weight-bold">' + label + '</div><ul class="mb-1">';
+        for (const f of analysis.processablefiles) {
+            message += '<li class="text-success"><i class="fa fa-check mr-1"></i>' + f.filename + '</li>';
+        }
+        message += '</ul>';
+    }
+
+    if (analysis.skippedfiles.length > 0) {
+        const label = await getString('analysisskippedfiles', 'assignfeedback_aif');
+        message += '<div class="mt-2 font-weight-bold text-warning">' + label + '</div><ul class="mb-1">';
+        for (const f of analysis.skippedfiles) {
+            message += '<li class="text-warning"><i class="fa fa-exclamation-triangle mr-1"></i>'
+                + f.filename + ' <small class="text-muted">(' + f.reason + ')</small></li>';
+        }
+        message += '</ul>';
+    }
+
+    if (!analysis.hasonlinetext && analysis.processablefiles.length === 0 && analysis.skippedfiles.length === 0) {
+        const label = await getString('analysisnosubmission', 'assignfeedback_aif');
+        message += '<div class="text-warning"><i class="fa fa-exclamation-triangle mr-1"></i>' + label + '</div>';
+    }
+
+    message += '</div>';
+    return message;
 };
 
 /**
@@ -207,18 +284,37 @@ const pollProgress = async(container, progressRecordId) => {
         }
 
         if (data.error) {
-            // Show error state.
+            // Show error state: red bar and prominent error message.
             bar.classList.add('bg-danger');
             bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
             bar.style.width = '100%';
+            if (data.message) {
+                messageEl.classList.remove('text-muted');
+                messageEl.classList.add('text-danger', 'font-weight-bold');
+                // Render newlines as line breaks for multi-error messages.
+                messageEl.innerHTML = '';
+                const lines = data.message.split('\n');
+                lines.forEach((line, i) => {
+                    messageEl.appendChild(document.createTextNode(line));
+                    if (i < lines.length - 1) {
+                        messageEl.appendChild(document.createElement('br'));
+                    }
+                });
+            }
+            // Restore the button so the teacher can retry.
+            const btn = document.querySelector('[data-action="regenerate-aif"]');
+            if (btn) {
+                btn.style.display = '';
+                btn.disabled = false;
+            }
             return;
         }
 
         if (parseFloat(data.progress) >= 100) {
-            // Generation complete — show success and reload.
+            // Generation complete — fetch the feedback and inject into editor.
             bar.classList.add('bg-success');
             bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
-            setTimeout(() => window.location.reload(), 1500);
+            await injectFeedbackIntoEditor(container);
             return;
         }
 
@@ -227,5 +323,67 @@ const pollProgress = async(container, progressRecordId) => {
     } catch (error) {
         // On network error, keep trying.
         setTimeout(() => pollProgress(container, progressRecordId), POLL_INTERVAL);
+    }
+};
+
+/**
+ * Fetch generated feedback and inject it into the TinyMCE editor.
+ *
+ * Instead of reloading the page (which would lose unsaved grade data),
+ * fetches the feedback via webservice and sets it in the editor directly.
+ *
+ * @param {HTMLElement} container The progress bar container element.
+ */
+const injectFeedbackIntoEditor = async(container) => {
+    try {
+        const result = await Ajax.call([{
+            methodname: 'assignfeedback_aif_check_feedback_status',
+            args: {
+                assignmentid: storedAssignmentId,
+                userid: storedUserId,
+            },
+        }])[0];
+
+        if (result.feedbackexists && result.feedbackhtml) {
+            // Find the TinyMCE editor for the AIF feedback field.
+            const editorElement = document.querySelector('[data-fieldtype="editor"]');
+            const editorWrapper = editorElement ? editorElement.closest('.fitem') : null;
+            const textarea = document.getElementById('id_assignfeedbackaif_editor');
+
+            if (textarea) {
+                // Set the textarea value (raw HTML).
+                textarea.value = result.feedbackhtml;
+                textarea.dispatchEvent(new Event('change', {bubbles: true}));
+
+                // If TinyMCE is active, update its content too.
+                // TinyMCE 6 in Moodle uses a data-fieldtype attribute on the wrapper.
+                const tinyFrame = editorElement?.querySelector('iframe');
+                if (tinyFrame && tinyFrame.contentDocument) {
+                    tinyFrame.contentDocument.body.innerHTML = result.feedbackhtml;
+                }
+            }
+
+            // Remove progress bar and restore the editor.
+            container.remove();
+            if (editorWrapper) {
+                editorWrapper.style.display = '';
+            }
+
+            // Restore the button.
+            const button = document.querySelector('[data-action="regenerate-aif"]');
+            if (button) {
+                button.style.display = '';
+                button.disabled = false;
+                button.textContent = await getString('generatefeedbackai', 'assignfeedback_aif');
+            }
+
+            addToast(await getString('feedbackgenerationcomplete', 'assignfeedback_aif'), {type: 'success'});
+        } else {
+            // Feedback not available yet — fall back to reload.
+            setTimeout(() => window.location.reload(), 1500);
+        }
+    } catch {
+        // On error, fall back to reload.
+        setTimeout(() => window.location.reload(), 1500);
     }
 };
