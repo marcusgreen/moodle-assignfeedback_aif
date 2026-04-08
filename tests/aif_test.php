@@ -208,7 +208,6 @@ final class aif_test extends \advanced_testcase {
         $this->resetAfterTest();
 
         set_config('disclaimer', self::TEST_DISCLAIMER, 'assignfeedback_aif');
-        set_config('translatedisclaimer', 0, 'assignfeedback_aif');
 
         $context = \core\context\system::instance();
         $aif = new aif($context->id);
@@ -248,7 +247,6 @@ final class aif_test extends \advanced_testcase {
         $this->resetAfterTest();
 
         set_config('practicedisclaimer', self::TEST_PRACTICE_DISCLAIMER, 'assignfeedback_aif');
-        set_config('translatedisclaimer', 0, 'assignfeedback_aif');
 
         $context = \core\context\system::instance();
         $aif = new aif($context->id);
@@ -271,7 +269,6 @@ final class aif_test extends \advanced_testcase {
         $this->resetAfterTest();
 
         unset_config('practicedisclaimer', 'assignfeedback_aif');
-        set_config('translatedisclaimer', 0, 'assignfeedback_aif');
 
         $context = \core\context\system::instance();
         $aif = new aif($context->id);
@@ -298,7 +295,6 @@ final class aif_test extends \advanced_testcase {
 
         set_config('disclaimer', self::TEST_DISCLAIMER, 'assignfeedback_aif');
         set_config('practicedisclaimer', self::TEST_PRACTICE_DISCLAIMER, 'assignfeedback_aif');
-        set_config('translatedisclaimer', 0, 'assignfeedback_aif');
 
         $context = \core\context\system::instance();
         $aif = new aif($context->id);

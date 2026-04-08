@@ -34,4 +34,13 @@ $observers = [
             'eventname'   => '\mod_assign\event\submission_removed',
             'callback'    => '\assignfeedback_aif\event\observer::submission_removed',
         ],
+
+        [
+            'eventname'   => '\assignsubmission_onlinetext\event\submission_updated',
+            'callback'    => '\assignfeedback_aif\event\observer::submission_updated',
+        ],
+        [
+            'eventname'   => '\assignsubmission_file\event\submission_updated',
+            'callback'    => '\assignfeedback_aif\event\observer::submission_updated',
+        ],
     ];

@@ -57,6 +57,7 @@ class process_feedback extends \core\task\scheduled_task {
                   JOIN {assign_submission} sub ON sub.assignment = a.id
                  WHERE sub.status = :status
                    AND sub.latest = 1
+                   AND aif.autogenerate = 1
                    AND NOT EXISTS (
                        SELECT 1 FROM {assignfeedback_aif_feedback} aiff
                         WHERE aiff.aif = aif.id AND aiff.submission = sub.id

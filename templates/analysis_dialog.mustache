@@ -1,0 +1,87 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template assignfeedback_aif/analysis_dialog
+
+    Confirmation dialog content showing submission analysis before AI feedback generation.
+
+    Context variables required for this template:
+    * confirmtext - The main confirmation question text.
+    * hasonlinetext - Whether the submission includes online text.
+    * onlinetextlabel - Label for online text presence.
+    * hasprocessablefiles - Whether processable files exist.
+    * processablefileslabel - Label for the processable files section.
+    * processablefiles - Array of processable file objects with filename.
+    * hasskippedfiles - Whether skipped files exist.
+    * skippedfileslabel - Label for the skipped files section.
+    * skippedfiles - Array of skipped file objects with filename and reason.
+    * nosubmission - Whether no submission content was found at all.
+    * nosubmissionlabel - Label for the no-submission warning.
+
+    Example context (json):
+    {
+        "confirmtext": "This will send the submission to AI. Continue?",
+        "hasonlinetext": true,
+        "onlinetextlabel": "Online text submission will be included",
+        "hasprocessablefiles": true,
+        "processablefileslabel": "Files that will be analysed:",
+        "processablefiles": [
+            {"filename": "essay.pdf"},
+            {"filename": "notes.txt"}
+        ],
+        "hasskippedfiles": true,
+        "skippedfileslabel": "Files that cannot be analysed:",
+        "skippedfiles": [
+            {"filename": "image.png", "reason": "Format not supported"}
+        ],
+        "nosubmission": false,
+        "nosubmissionlabel": "No submission content found."
+    }
+}}
+{{confirmtext}}
+<div class="mt-3">
+    {{#hasonlinetext}}
+        <div class="text-success"><i class="fa fa-check mr-1" aria-hidden="true"></i>{{onlinetextlabel}}</div>
+    {{/hasonlinetext}}
+
+    {{#hasprocessablefiles}}
+        <div class="mt-2 font-weight-bold">{{processablefileslabel}}</div>
+        <ul class="mb-1">
+            {{#processablefiles}}
+                <li class="text-success"><i class="fa fa-check mr-1" aria-hidden="true"></i>{{filename}}</li>
+            {{/processablefiles}}
+        </ul>
+    {{/hasprocessablefiles}}
+
+    {{#hasskippedfiles}}
+        <div class="mt-2 font-weight-bold text-warning">{{skippedfileslabel}}</div>
+        <ul class="mb-1">
+            {{#skippedfiles}}
+                <li class="text-warning">
+                    <i class="fa fa-exclamation-triangle mr-1" aria-hidden="true"></i>
+                    {{filename}} <small class="text-muted">({{reason}})</small>
+                </li>
+            {{/skippedfiles}}
+        </ul>
+    {{/hasskippedfiles}}
+
+    {{#nosubmission}}
+        <div class="text-warning">
+            <i class="fa fa-exclamation-triangle mr-1" aria-hidden="true"></i>{{nosubmissionlabel}}
+        </div>
+    {{/nosubmission}}
+</div>

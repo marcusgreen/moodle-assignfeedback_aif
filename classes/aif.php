@@ -81,15 +81,33 @@ class aif {
      * @param string $rubric The rubric criteria text.
      * @param string $prompt The teacher's prompt/instructions.
      * @param string $assignmentname The assignment name.
+     * @param string $description The assignment description (intro).
+     * @param string $activityinstructions The activity instructions shown on the submission page.
      * @return string The complete prompt.
      */
     public function build_prompt_from_template(
         string $submission,
         string $rubric,
         string $prompt,
-        string $assignmentname
+        string $assignmentname,
+        string $description = '',
+        string $activityinstructions = ''
     ): string {
         $language = $this->get_current_language_name();
+
+        // Build conditional sections: only include headings when content exists.
+        $descriptionsection = '';
+        if (!empty(trim($description))) {
+            $descriptionsection = "=== ASSIGNMENT DESCRIPTION ===\n" . $description;
+        }
+        $instructionssection = '';
+        if (!empty(trim($activityinstructions))) {
+            $instructionssection = "=== ACTIVITY INSTRUCTIONS ===\n" . $activityinstructions;
+        }
+        $rubricsection = '';
+        if (!empty(trim($rubric))) {
+            $rubricsection = "=== GRADING CRITERIA ===\n" . $rubric;
+        }
 
         // Expert mode detection: if the teacher's prompt contains {{submission}},
         // it replaces the admin template entirely.
@@ -99,8 +117,13 @@ class aif {
             // In expert mode, the teacher's prompt IS the complete template.
             $replacements = [
                 '{{submission}}' => $submission,
+                '{{rubric_section}}' => $rubricsection,
                 '{{rubric}}' => $rubric,
                 '{{assignmentname}}' => $assignmentname,
+                '{{description}}' => $description,
+                '{{description_section}}' => $descriptionsection,
+                '{{activityinstructions}}' => $activityinstructions,
+                '{{instructions_section}}' => $instructionssection,
                 '{{language}}' => $language,
             ];
             return str_replace(array_keys($replacements), array_values($replacements), $prompt);
@@ -114,13 +137,27 @@ class aif {
 
         $replacements = [
             '{{submission}}' => $submission,
+            '{{rubric_section}}' => $rubricsection,
             '{{rubric}}' => $rubric,
             '{{prompt}}' => $prompt,
             '{{assignmentname}}' => $assignmentname,
+            '{{description}}' => $description,
+            '{{description_section}}' => $descriptionsection,
+            '{{activityinstructions}}' => $activityinstructions,
+            '{{instructions_section}}' => $instructionssection,
             '{{language}}' => $language,
         ];
 
-        return str_replace(array_keys($replacements), array_values($replacements), $template);
+        $result = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+        // Remove template sections that have empty content (e.g. no description or instructions).
+        // Matches section headings followed only by whitespace until the next heading or end.
+        $result = preg_replace('/^=== [A-Z ]+===\n\s*(?=\n=== |$)/m', '', $result);
+
+        // Clean up excessive blank lines left after removing empty sections.
+        $result = preg_replace('/\n{3,}/', "\n\n", $result);
+
+        return $result;
     }
 
     /**
@@ -179,11 +216,12 @@ class aif {
      *
      * Extracts text from all submitted content (online text, documents, images, PDFs)
      * and builds a combined prompt. Images and PDFs are converted to text via AI (ITT purpose)
-     * before being included in the final prompt.
+     * before being included in the final prompt. When both online text and files are present,
+     * the submission content is structured with section labels so the LLM can distinguish sources.
      *
      * @param stdClass $assignment The assignment data object.
      * @param string $gradingmethod The grading method (e.g., 'rubric').
-     * @return array Array with 'prompt' string and 'options' array.
+     * @return array Array with 'prompt' string, 'options' array, and 'skippedfiles' array.
      */
     public function get_prompt(stdClass $assignment, string $gradingmethod): array {
         global $DB;
@@ -191,9 +229,27 @@ class aif {
         mtrace("Assignment {$assignment->aid} submission {$assignment->subid} user {$assignment->userid}");
 
         $rubrictext = '';
-        $submissiontext = '';
         $teacherprompt = $assignment->prompt ?? '';
-        $assignmentname = $DB->get_field('assign', 'name', ['id' => $assignment->aid]) ?: '';
+        $assignrecord = $DB->get_record('assign', ['id' => $assignment->aid], 'name, intro, introformat, activity, activityformat');
+        $assignmentname = $assignrecord ? $assignrecord->name : '';
+        $description = '';
+        $activityinstructions = '';
+        if ($assignrecord) {
+            if (!empty($assignrecord->intro)) {
+                $description = html_to_text(format_text(
+                    $assignrecord->intro,
+                    $assignrecord->introformat,
+                    ['filter' => false]
+                ));
+            }
+            if (!empty($assignrecord->activity)) {
+                $activityinstructions = html_to_text(format_text(
+                    $assignrecord->activity,
+                    $assignrecord->activityformat,
+                    ['filter' => false]
+                ));
+            }
+        }
         $options = [];
 
         if ($gradingmethod === 'rubric') {
@@ -201,20 +257,37 @@ class aif {
         }
 
         // Get submission text from online text.
-        if ($onlinetext = $DB->get_field('assignsubmission_onlinetext', 'onlinetext', ['submission' => $assignment->subid])) {
+        $onlinetext = $DB->get_field('assignsubmission_onlinetext', 'onlinetext', ['submission' => $assignment->subid]);
+        if ($onlinetext) {
             mtrace("Content from text submission added to the prompt.");
-            $submissiontext .= $onlinetext;
         }
 
         // Get submission content from files (all files converted to text).
-        $filetext = $this->extract_content_from_files($assignment);
-        if (!empty($filetext)) {
-            $submissiontext .= ' ' . $filetext;
+        $fileresult = $this->extract_content_from_files($assignment);
+        $filetext = $fileresult['text'];
+
+        // Log unconvertible files so it's visible in the task output.
+        if (!empty($fileresult['skippedfiles'])) {
+            foreach ($fileresult['skippedfiles'] as $skipped) {
+                mtrace("WARNING: File '{$skipped['filename']}' could not be converted and was excluded from AI analysis"
+                    . " (reason: {$skipped['reason']}).");
+            }
         }
 
-        if (empty($submissiontext)) {
+        // Structure the submission content based on available sources.
+        $submissiontext = $this->build_structured_submission($onlinetext ?: '', $filetext, $fileresult);
+
+        if (empty(trim($submissiontext))) {
             mtrace("No submission text found");
-            return ['prompt' => '', 'options' => []];
+            return ['prompt' => '', 'options' => [], 'skippedfiles' => $fileresult['skippedfiles']];
+        }
+
+        // Extract content from assignment additional files (introattachments).
+        // Teachers often use these to provide detailed instructions or rubric sheets.
+        $introattachmenttext = $this->extract_introattachment_content($assignment);
+        if (!empty($introattachmenttext)) {
+            $description .= "\n\n" . get_string('introattachmentsheading', 'assignfeedback_aif') . "\n" . $introattachmenttext;
+            mtrace("Content from assignment additional files included in prompt.");
         }
 
         // Use the template system to build the full prompt.
@@ -222,10 +295,58 @@ class aif {
             $submissiontext,
             $rubrictext,
             $teacherprompt,
-            $assignmentname
+            $assignmentname,
+            $description,
+            $activityinstructions
         );
 
-        return ['prompt' => $prompt, 'options' => $options];
+        return ['prompt' => $prompt, 'options' => $options, 'skippedfiles' => $fileresult['skippedfiles']];
+    }
+
+    /**
+     * Build structured submission text with labels when multiple sources exist.
+     *
+     * When both online text and file content are present, adds section labels
+     * so the LLM can distinguish the different sources.
+     *
+     * @param string $onlinetext The student's online text submission.
+     * @param string $filetext The extracted text from submitted files.
+     * @param array $fileresult The file extraction result including metadata.
+     * @return string The structured submission text.
+     */
+    private function build_structured_submission(string $onlinetext, string $filetext, array $fileresult): string {
+        $hasonline = !empty(trim($onlinetext));
+        $hasfiles = !empty(trim($filetext));
+
+        if ($hasonline && $hasfiles) {
+            // Both sources: label them clearly for the LLM.
+            $parts = [];
+            $parts[] = "[Online text submission]\n" . $onlinetext;
+            $parts[] = "[Submitted files]\n" . $filetext;
+            // Note skipped files for AI context.
+            if (!empty($fileresult['skippedfiles'])) {
+                $skippednames = array_column($fileresult['skippedfiles'], 'filename');
+                $parts[] = "[Note: The following files could not be analysed and are not included: "
+                    . implode(', ', $skippednames) . "]";
+            }
+            return implode("\n\n", $parts);
+        }
+
+        if ($hasonline) {
+            return $onlinetext;
+        }
+
+        if ($hasfiles) {
+            $text = $filetext;
+            if (!empty($fileresult['skippedfiles'])) {
+                $skippednames = array_column($fileresult['skippedfiles'], 'filename');
+                $text .= "\n\n[Note: The following files could not be analysed and are not included: "
+                    . implode(', ', $skippednames) . "]";
+            }
+            return $text;
+        }
+
+        return '';
     }
 
     /**
@@ -274,6 +395,97 @@ class aif {
     private const IMAGE_MIMETYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
     /**
+     * Common document extensions to check for converter support.
+     */
+    private const DOCUMENT_EXTENSIONS = ['doc', 'docx', 'rtf', 'odt', 'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp', 'html', 'csv'];
+
+    /**
+     * Get a formatted list of all file extensions supported by the plugin.
+     *
+     * Collects supported formats from three sources:
+     * - Natively handled: txt, pdf, and image formats (PNG, JPEG, WebP, GIF).
+     * - AI Manager ITT backend: additional MIME types declared by the connector.
+     * - Document converter: common document formats that can be converted to txt.
+     *
+     * @return string Comma-separated list of uppercase file extensions (e.g. "DOC, DOCX, GIF, JPEG, PDF, PNG, TXT, WEBP").
+     */
+    public static function get_supported_file_extensions(): string {
+        // Start with natively handled MIME types.
+        $mimetypes = array_merge(
+            ['text/plain', 'application/pdf'],
+            self::IMAGE_MIMETYPES
+        );
+
+        // Add MIME types from AI Manager ITT backend.
+        $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
+        if ($backend === 'local_ai_manager') {
+            try {
+                $purposeoptions = \local_ai_manager\ai_manager_utils::get_available_purpose_options('itt');
+                if (!empty($purposeoptions['allowedmimetypes']) && is_array($purposeoptions['allowedmimetypes'])) {
+                    $mimetypes = array_merge($mimetypes, $purposeoptions['allowedmimetypes']);
+                }
+            } catch (\Exception $e) {
+                // AI Manager not available, continue with native formats only.
+                debugging('AI Manager ITT purpose unavailable: ' . $e->getMessage(), DEBUG_DEVELOPER);
+            }
+        }
+
+        // Convert MIME types to file extensions.
+        $mimetypes = array_unique($mimetypes);
+        $typesarray = get_mimetypes_array();
+        $extensions = [];
+        foreach ($mimetypes as $mimetype) {
+            foreach ($typesarray as $ext => $info) {
+                if ($info['type'] === $mimetype) {
+                    $extensions[] = strtoupper($ext);
+                    break;
+                }
+            }
+        }
+
+        // Add document formats supported by enabled converter plugins.
+        $converter = new \core_files\converter();
+        foreach (self::DOCUMENT_EXTENSIONS as $ext) {
+            if ($converter->can_convert_format_to($ext, 'txt')) {
+                $extensions[] = strtoupper($ext);
+            }
+        }
+
+        $extensions = array_unique($extensions);
+        sort($extensions);
+        return implode(', ', $extensions);
+    }
+
+    /**
+     * Check if the configured AI backend supports a given MIME type natively.
+     *
+     * When using local_ai_manager, the ITT purpose connector declares which
+     * MIME types it can handle directly (e.g., Gemini supports application/pdf).
+     * This allows sending files directly instead of converting them first.
+     *
+     * @param string $mimetype The MIME type to check.
+     * @return bool True if the backend can handle this MIME type natively.
+     */
+    protected function is_mimetype_supported_by_ai_backend(string $mimetype): bool {
+        $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
+        if ($backend !== 'local_ai_manager') {
+            return false;
+        }
+
+        try {
+            $purposeoptions = \local_ai_manager\ai_manager_utils::get_available_purpose_options('itt');
+            if (!empty($purposeoptions['allowedmimetypes']) && is_array($purposeoptions['allowedmimetypes'])) {
+                return in_array($mimetype, $purposeoptions['allowedmimetypes']);
+            }
+        } catch (\Exception $e) {
+            // If the purpose or connector is not available, fall back to conversion.
+            return false;
+        }
+
+        return false;
+    }
+
+    /**
      * Extract text content from all submitted files.
      *
      * All file types are converted to text:
@@ -282,12 +494,14 @@ class aif {
      * - Images (PNG, JPEG, WebP, GIF): converted to text via AI ITT (image-to-text) requests.
      * - PDFs: each page rendered as image, then converted to text via ITT.
      *
+     * Files that cannot be converted are tracked and reported.
      * Results are cached by content hash to avoid repeated expensive AI calls.
      *
      * @param stdClass $assignment The assignment data object.
-     * @return string The combined extracted text from all files.
+     * @return array Associative array with 'text' (combined text), 'processedfiles' (list of names),
+     *               and 'skippedfiles' (list of arrays with 'filename' and 'reason' keys).
      */
-    protected function extract_content_from_files(stdClass $assignment): string {
+    protected function extract_content_from_files(stdClass $assignment): array {
         $fs = get_file_storage();
         $contextid = $assignment->contextid;
         $component = 'assignsubmission_file';
@@ -296,10 +510,12 @@ class aif {
 
         $files = $fs->get_area_files($contextid, $component, $filearea, $itemid, 'itemid, filepath, filename', false);
         if (!$files) {
-            return '';
+            return ['text' => '', 'processedfiles' => [], 'skippedfiles' => []];
         }
 
         $alltext = '';
+        $processedfiles = [];
+        $skippedfiles = [];
 
         foreach ($files as $file) {
             if (!$file instanceof \stored_file) {
@@ -314,35 +530,139 @@ class aif {
                 $tempfile = $file->copy_content_to_temp();
                 $alltext .= file_get_contents($tempfile) . "\n";
                 unlink($tempfile);
+                $processedfiles[] = $filename;
                 mtrace("Text content from '{$filename}' added to the prompt.");
                 continue;
             }
 
             // Images: convert to text via ITT.
             if (in_array($mimetype, self::IMAGE_MIMETYPES)) {
-                $extractedtext = $this->extract_content_from_image($file);
+                $extractionerror = null;
+                try {
+                    $extractedtext = $this->extract_content_from_image($file);
+                } catch (\Exception $e) {
+                    mtrace("Failed to extract text from image '{$filename}': " . $e->getMessage());
+                    $extractedtext = '';
+                    $extractionerror = $e->getMessage();
+                }
                 if (!empty($extractedtext)) {
                     $alltext .= $extractedtext . "\n";
+                    $processedfiles[] = $filename;
                     mtrace("Text extracted from image '{$filename}' via ITT.");
+                } else {
+                    $skippedfile = ['filename' => $filename, 'reason' => 'skipreason_imageextractionfailed'];
+                    if ($extractionerror !== null) {
+                        $skippedfile['errormessage'] = $extractionerror;
+                    }
+                    $skippedfiles[] = $skippedfile;
                 }
                 continue;
             }
 
             // PDFs: render pages as images, then extract text via ITT.
             if ($mimetype === 'application/pdf') {
-                $extractedtext = $this->extract_content_from_pdf($file);
+                $extractionerror = null;
+                try {
+                    $extractedtext = $this->extract_content_from_pdf($file);
+                } catch (\Exception $e) {
+                    mtrace("Failed to extract text from PDF '{$filename}': " . $e->getMessage());
+                    $extractedtext = '';
+                    $extractionerror = $e->getMessage();
+                }
                 if (!empty($extractedtext)) {
                     $alltext .= $extractedtext . "\n";
+                    $processedfiles[] = $filename;
                     mtrace("Text extracted from PDF '{$filename}' via page-by-page ITT.");
+                } else {
+                    $skippedfile = ['filename' => $filename, 'reason' => 'skipreason_pdfextractionfailed'];
+                    if ($extractionerror !== null) {
+                        $skippedfile['errormessage'] = $extractionerror;
+                    }
+                    $skippedfiles[] = $skippedfile;
                 }
                 continue;
             }
 
-            // Other document types: try core_files converter (e.g., DOCX → TXT).
+            // Other document types: check convertibility first, then try core_files converter.
+            $converter = new \core_files\converter();
+            if (!$converter->can_convert_storedfile_to($file, 'txt')) {
+                mtrace("File '{$filename}' ({$mimetype}) cannot be converted - skipping.");
+                $skippedfiles[] = [
+                    'filename' => $filename,
+                    'reason' => 'skipreason_conversionnotsupported',
+                    'reasondata' => self::get_supported_file_extensions(),
+                ];
+                continue;
+            }
+
             $extractedtext = $this->extract_content_via_converter($file);
             if (!empty($extractedtext)) {
                 $alltext .= $extractedtext . "\n";
+                $processedfiles[] = $filename;
                 mtrace("Content from file '{$filename}' converted and added to the prompt.");
+            } else {
+                $skippedfiles[] = ['filename' => $filename, 'reason' => 'skipreason_conversionfailed'];
+            }
+        }
+
+        return [
+            'text' => trim($alltext),
+            'processedfiles' => $processedfiles,
+            'skippedfiles' => $skippedfiles,
+        ];
+    }
+
+    /**
+     * Extract text content from assignment introattachment files.
+     *
+     * These are the "Additional files" uploaded by the teacher in the assignment settings.
+     * Teachers often use these to provide detailed task descriptions or grading criteria.
+     *
+     * @param stdClass $assignment The assignment data object.
+     * @return string The combined extracted text from introattachment files.
+     */
+    protected function extract_introattachment_content(stdClass $assignment): string {
+        $fs = get_file_storage();
+        $files = $fs->get_area_files(
+            $assignment->contextid,
+            'mod_assign',
+            'introattachment',
+            0,
+            'filepath, filename',
+            false
+        );
+
+        if (!$files) {
+            return '';
+        }
+
+        $alltext = '';
+        foreach ($files as $file) {
+            if (!$file instanceof \stored_file) {
+                continue;
+            }
+
+            $mimetype = $file->get_mimetype();
+            $filename = $file->get_filename();
+
+            if ($mimetype === 'text/plain') {
+                $tempfile = $file->copy_content_to_temp();
+                $alltext .= "[{$filename}]\n" . file_get_contents($tempfile) . "\n";
+                unlink($tempfile);
+                continue;
+            }
+
+            if ($mimetype === 'application/pdf') {
+                $extractedtext = $this->extract_content_from_pdf($file);
+                if (!empty($extractedtext)) {
+                    $alltext .= "[{$filename}]\n" . $extractedtext . "\n";
+                }
+                continue;
+            }
+
+            $extractedtext = $this->extract_content_via_converter($file);
+            if (!empty($extractedtext)) {
+                $alltext .= "[{$filename}]\n" . $extractedtext . "\n";
             }
         }
 
@@ -353,9 +673,12 @@ class aif {
      * Extract text from an image file using AI image-to-text (ITT).
      *
      * Results are cached by content hash to avoid repeated AI calls.
+     * Exceptions from AI requests are NOT caught here — they propagate to the
+     * caller so the actual error message (e.g. "access blocked") can be shown.
      *
      * @param \stored_file $file The image file.
-     * @return string The extracted text, or empty string on failure.
+     * @return string The extracted text.
+     * @throws \moodle_exception If the AI request fails.
      */
     protected function extract_content_from_image(\stored_file $file): string {
         // Check cache first.
@@ -367,20 +690,19 @@ class aif {
 
         $encodedimage = 'data:' . $file->get_mimetype() . ';base64,' . base64_encode($file->get_content());
 
-        try {
-            $content = $this->retrieve_text_from_ai($encodedimage);
-            $this->store_to_cache($file->get_contenthash(), $content);
-            return $content;
-        } catch (\Exception $e) {
-            mtrace("Failed to extract text from image '{$file->get_filename()}': " . $e->getMessage());
-            return '';
-        }
+        $content = $this->retrieve_text_from_ai($encodedimage);
+        $this->store_to_cache($file->get_contenthash(), $content);
+        return $content;
     }
 
     /**
-     * Extract text from a PDF by rendering each page as an image and sending to ITT.
+     * Extract text from a PDF file.
      *
-     * Uses ghostscript/pdftoppm (via assignfeedback_editpdf) to render pages.
+     * First checks if the AI backend supports PDF natively (e.g., Gemini).
+     * If so, sends the entire PDF as a base64 data URL in a single request.
+     * Otherwise, falls back to rendering each page as an image via ghostscript
+     * and sending images individually via ITT.
+     *
      * Results are cached by content hash to avoid repeated AI calls.
      *
      * @param \stored_file $file The PDF file.
@@ -394,6 +716,23 @@ class aif {
             return $cached;
         }
 
+        // Try native PDF support if the AI backend handles it directly.
+        if ($this->is_mimetype_supported_by_ai_backend('application/pdf')) {
+            try {
+                $encodedpdf = 'data:application/pdf;base64,' . base64_encode($file->get_content());
+                $content = $this->retrieve_text_from_ai($encodedpdf);
+                if (!empty($content)) {
+                    $this->store_to_cache($file->get_contenthash(), $content);
+                    mtrace("Text extracted from PDF '{$file->get_filename()}' via native PDF support.");
+                    return $content;
+                }
+            } catch (\Exception $e) {
+                mtrace("Native PDF extraction failed for '{$file->get_filename()}': "
+                    . $e->getMessage() . " — falling back to page-by-page rendering.");
+            }
+        }
+
+        // Fall back to page-by-page image rendering.
         try {
             $encodedimages = $this->convert_pdf_to_images($file);
         } catch (\Exception $e) {
@@ -404,20 +743,30 @@ class aif {
 
         $content = '';
         $pagenum = 0;
+        $firsterror = null;
         foreach ($encodedimages as $encodedimage) {
             $pagenum++;
             try {
                 $pagetext = $this->retrieve_text_from_ai($encodedimage);
                 $content .= $pagetext . "\n";
-                mtrace("Extracted text from PDF page {$pagenum}/{" . count($encodedimages) . "}.");
+                mtrace("Extracted text from PDF page " . $pagenum . "/" . count($encodedimages) . ".");
             } catch (\Exception $e) {
                 mtrace("Failed to extract text from PDF page {$pagenum}: " . $e->getMessage());
+                if ($firsterror === null) {
+                    $firsterror = $e;
+                }
             }
         }
 
         $content = trim($content);
         if (!empty($content)) {
             $this->store_to_cache($file->get_contenthash(), $content);
+        }
+
+        // If no content was extracted and AI requests failed, throw the first error
+        // so the caller can report the actual AI backend error message to the user.
+        if (empty($content) && $firsterror !== null) {
+            throw $firsterror;
         }
 
         return $content;
