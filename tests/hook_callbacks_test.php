@@ -174,7 +174,7 @@ final class hook_callbacks_test extends \advanced_testcase {
             }
             // If no record exists, is_enabled() returns false by default — which is what we want.
         } else {
-            // block_ai_control not installed — is_ai_active_for_context returns true,
+            // Block_ai_control not installed — is_ai_active_for_context returns true,
             // so no warning should appear. Skip this test.
             $this->markTestSkipped('block_ai_control plugin is not installed.');
         }

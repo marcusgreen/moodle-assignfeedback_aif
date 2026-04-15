@@ -415,7 +415,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         // Protect display math: $$...$$ (multi-line).
         $markdown = preg_replace_callback('/\$\$.+?\$\$/s', $protect, $markdown);
 
-        // Protect inline math: \(...\).
+        // Protect inline math delimiters.
         $markdown = preg_replace_callback('/\\\\\(.+?\\\\\)/s', $protect, $markdown);
 
         // Convert the remaining markdown to HTML without Moodle filters.

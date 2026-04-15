@@ -25,9 +25,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['ainavailable'] = 'AI backend is not available for this purpose';
 $string['aicontrolinactive_student'] = 'You can upload your files for this assignment, but AI feedback is currently not available. Your teacher has not yet enabled the AI feature for this course.';
 $string['aicontrolinactive_teacher'] = 'Automatic AI feedback generation is enabled for this assignment, but AI is currently not activated in the AI Control Center. Students will not receive AI feedback until you activate AI for this course.';
+$string['ainavailable'] = 'AI backend is not available for this purpose';
 $string['analysisnosubmission'] = 'No submission content found for this student.';
 $string['analysisonlinetext'] = 'Online text submission will be included';
 $string['analysisprocessablefiles'] = 'Files that will be analysed:';

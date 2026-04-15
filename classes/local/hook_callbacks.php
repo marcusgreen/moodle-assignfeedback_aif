@@ -178,8 +178,10 @@ class hook_callbacks {
 
             // The 'feedback' purpose must be 'available'.
             foreach ($aiconfig['purposes'] as $purposeconfig) {
-                if ($purposeconfig['purpose'] === 'feedback'
-                        && $purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
+                if (
+                    $purposeconfig['purpose'] === 'feedback'
+                        && $purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
+                ) {
                     return true;
                 }
             }
