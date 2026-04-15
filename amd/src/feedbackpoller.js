@@ -40,12 +40,17 @@ const MAX_POLLS = 120;
 /**
  * Initialize the feedback poller.
  *
+ * Starts with simple existence polling. When the background task creates a
+ * stored_progress record, automatically switches to initWithProgress so the
+ * student sees a real progress bar instead of a static spinner.
+ *
  * @param {number} assignmentId The assignment instance id.
  * @param {number} userId The user id to poll feedback for.
  */
 export const init = (assignmentId, userId) => {
     let pollCount = 0;
     let timerId = null;
+    let switchedToProgress = false;
 
     /**
      * Poll for feedback existence.
@@ -70,6 +75,15 @@ export const init = (assignmentId, userId) => {
             if (result.feedbackexists) {
                 stopPolling();
                 window.location.reload();
+                return;
+            }
+
+            // When a stored_progress record becomes available, switch to
+            // real progress polling so the user sees a live progress bar.
+            if (result.progressrecordid && !switchedToProgress) {
+                switchedToProgress = true;
+                stopPolling();
+                initWithProgress(assignmentId, userId, result.progressrecordid);
             }
         } catch (error) {
             Log.debug('assignfeedback_aif/feedbackpoller: poll error, stopping.');

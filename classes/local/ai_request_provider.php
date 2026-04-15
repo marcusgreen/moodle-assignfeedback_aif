@@ -53,6 +53,13 @@ class ai_request_provider {
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
 
         if ($backend === 'local_ai_manager') {
+            // Check block_ai_control directly before the ai_manager availability chain.
+            // The hook-based check through local_ai_manager only fires if the full purpose
+            // availability chain completes, so we add a direct check as defense-in-depth.
+            $aicontrolreason = self::get_block_ai_control_restriction($contextid);
+            if ($aicontrolreason !== null) {
+                return $aicontrolreason;
+            }
             return $this->get_unavailability_reason_local_ai_manager($purpose, $contextid);
         }
 
@@ -169,5 +176,49 @@ class ai_request_provider {
         }
 
         return $responsedata['generatedcontent'];
+    }
+
+    /**
+     * Check if block_ai_control disables AI for the given context.
+     *
+     * This is a direct check independent of the local_ai_manager hook chain.
+     * Teachers with the block/ai_control:control capability are exempt.
+     * If block_ai_control is not installed, returns null (no restriction).
+     *
+     * @param int $contextid The module or course context ID.
+     * @return string|null Error message if AI is blocked, null if allowed.
+     */
+    private static function get_block_ai_control_restriction(int $contextid): ?string {
+        if (!class_exists(\block_ai_control\local\aiconfig::class)) {
+            return null;
+        }
+
+        $context = \core\context::instance_by_id($contextid);
+
+        // Find course context — block_ai_control operates at course level.
+        $coursecontext = $context;
+        while ($coursecontext->contextlevel > CONTEXT_COURSE) {
+            $coursecontext = $coursecontext->get_parent_context();
+        }
+        if ($coursecontext->contextlevel !== CONTEXT_COURSE) {
+            return null;
+        }
+
+        // Teachers with control capability bypass the check.
+        if (has_capability('block/ai_control:control', $coursecontext)) {
+            return null;
+        }
+
+        try {
+            $aiconfig = new \block_ai_control\local\aiconfig($coursecontext->id);
+            if (!$aiconfig->record_exists() || !$aiconfig->is_enabled()) {
+                return get_string('noaiincourse', 'block_ai_control');
+            }
+        } catch (\Exception $e) {
+            // If the config check fails, deny access as a safety measure.
+            return get_string('ainavailable', 'assignfeedback_aif');
+        }
+
+        return null;
     }
 }

@@ -252,7 +252,9 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         $aifeedback = $aif->append_disclaimer($aifeedback, $ispractice);
 
         // Convert markdown to HTML so it can be displayed and edited in the TinyMCE editor.
-        $aifeedbackhtml = format_text($aifeedback, FORMAT_MARKDOWN, ['filter' => false]);
+        // Math blocks must be protected because the Markdown processor strips backslashes,
+        // which destroys LaTeX delimiters (\( \) \[ \]) and commands (\frac, \mathrm, etc.).
+        $aifeedbackhtml = self::markdown_to_html_preserve_math($aifeedback);
 
         $clock = \core\di::get(\core\clock::class);
         $data = (object) [
@@ -379,5 +381,55 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         ]);
 
         mtrace("AI feedback deleted for assignment {$assignmentid} submission {$record->subid}");
+    }
+
+    /**
+     * Convert markdown to HTML while preserving LaTeX math notation.
+     *
+     * The standard Markdown processor interprets backslashes as escape characters,
+     * which destroys LaTeX delimiters (\( \) \[ \]) and commands (\frac, \mathrm, etc.).
+     * This method temporarily replaces math blocks with HTML placeholder elements
+     * before Markdown conversion, then restores them afterwards.
+     *
+     * Supported math delimiters:
+     * - \(...\) for inline math
+     * - \[...\] for display math
+     * - $$...$$ for display math (alternative notation)
+     *
+     * @param string $markdown The markdown text potentially containing LaTeX math.
+     * @return string HTML with LaTeX math blocks preserved.
+     */
+    private static function markdown_to_html_preserve_math(string $markdown): string {
+        $placeholders = [];
+        $counter = 0;
+
+        $protect = function (array $match) use (&$placeholders, &$counter): string {
+            $id = $counter++;
+            $placeholders[$id] = $match[0];
+            return '<span data-preserved-math="' . $id . '"></span>';
+        };
+
+        // Protect display math: \[...\] (multi-line).
+        $markdown = preg_replace_callback('/\\\\\[.+?\\\\\]/s', $protect, $markdown);
+
+        // Protect display math: $$...$$ (multi-line).
+        $markdown = preg_replace_callback('/\$\$.+?\$\$/s', $protect, $markdown);
+
+        // Protect inline math: \(...\).
+        $markdown = preg_replace_callback('/\\\\\(.+?\\\\\)/s', $protect, $markdown);
+
+        // Convert the remaining markdown to HTML without Moodle filters.
+        $html = format_text($markdown, FORMAT_MARKDOWN, ['filter' => false]);
+
+        // Restore math blocks from placeholders.
+        foreach ($placeholders as $id => $math) {
+            $html = str_replace(
+                '<span data-preserved-math="' . $id . '"></span>',
+                $math,
+                $html
+            );
+        }
+
+        return $html;
     }
 }

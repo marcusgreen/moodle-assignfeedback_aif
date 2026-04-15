@@ -647,7 +647,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $text = format_text($record->feedback, $format, [
             'context' => $this->assignment->get_context(),
         ]);
-        $result = $text;
+        $result = \html_writer::div($text, 'assignfeedback_aif-feedback');
 
         // Show notice about skipped files.
         if (!empty($record->skippedfiles)) {

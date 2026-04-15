@@ -1,0 +1,16 @@
+/* Prevent AI feedback content from causing horizontal page scroll. */
+.assignfeedback_aif-feedback {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+}
+
+/* Ensure wide content (LaTeX math, pre blocks, tables) stays within bounds. */
+.assignfeedback_aif-feedback .MathJax,
+.assignfeedback_aif-feedback .katex-display,
+.assignfeedback_aif-feedback .MathJax_Display,
+.assignfeedback_aif-feedback pre,
+.assignfeedback_aif-feedback table {
+    overflow-x: auto;
+    max-width: 100%;
+}
