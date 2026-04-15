@@ -27,7 +27,8 @@ defined('MOODLE_INTERNAL') || die();
 
 $callbacks = [
     [
-        'hook' => \local_ai_manager\hook\purpose_usage::class,
+        // String literal because local_ai_manager is an optional dependency.
+        'hook' => 'local_ai_manager\hook\purpose_usage',
         'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::handle_purpose_usage',
     ],
     [

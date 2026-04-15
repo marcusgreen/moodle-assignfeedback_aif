@@ -552,6 +552,8 @@ final class process_feedback_test extends \advanced_testcase {
 
     /**
      * Test the regenerate_feedback external API requires grade capability.
+     *
+     * @covers \assignfeedback_aif\external\regenerate_feedback::execute
      */
     public function test_regenerate_external_api_requires_capability(): void {
         $this->resetAfterTest();
@@ -565,5 +567,75 @@ final class process_feedback_test extends \advanced_testcase {
 
         $this->expectException(\required_capability_exception::class);
         regenerate_feedback::execute($env->assign->id, $env->student->id);
+    }
+
+    /**
+     * Test that resubmission deletes existing AI feedback before queuing new generation.
+     *
+     * @covers \assignfeedback_aif\event\observer::queue_feedback_generation
+     */
+    public function test_resubmission_deletes_existing_feedback(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment([
+            'submissiondrafts' => 1,
+            'submissionstatement' => '',
+            'requiresubmissionstatement' => 0,
+        ]);
+        $aifid = $this->create_aif_config($env, 'Analyse grammar', 1);
+
+        // First submission.
+        $this->create_and_submit($env, 'First submission text');
+
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'latest' => 1,
+        ]);
+
+        // Simulate existing AI feedback from first submission.
+        $clock = \core\di::get(\core\clock::class);
+        $DB->insert_record('assignfeedback_aif_feedback', [
+            'aif' => $aifid,
+            'feedback' => 'Old AI feedback from first submission',
+            'feedbackformat' => FORMAT_HTML,
+            'submission' => $submission->id,
+            'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
+        ]);
+        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
+
+        // Revert to draft so student can resubmit.
+        $this->setUser($env->teacher);
+        $env->assignobj->revert_to_draft($env->student->id);
+
+        // Student resubmits.
+        $this->setUser($env->student);
+        $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
+        $generator->create_submission([
+            'cmid' => $env->cm->id,
+            'userid' => $env->student->id,
+            'onlinetext' => 'Updated second submission text',
+        ]);
+
+        $msgsink = $this->redirectMessages();
+        $env->assignobj->submit_for_grading((object) ['userid' => $env->student->id], []);
+        $msgsink->close();
+
+        // Old feedback should be deleted after resubmission.
+        $this->assertEquals(
+            0,
+            $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]),
+            'Old AI feedback must be deleted when student resubmits'
+        );
+
+        // A new adhoc task should have been queued.
+        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
+        $this->assertGreaterThan(
+            0,
+            $DB->count_records('task_adhoc', ['classname' => $taskclass]),
+            'Adhoc task must be queued for new feedback generation'
+        );
     }
 }

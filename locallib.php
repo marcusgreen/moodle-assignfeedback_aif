@@ -886,7 +886,9 @@ class assign_feedback_aif extends assign_feedback_plugin {
             [$assignmentid, $userid]
         );
         self::$spinnerrendered = true;
-        return $OUTPUT->render_from_template('assignfeedback_aif/feedback_generating', []);
+        return $OUTPUT->render_from_template('assignfeedback_aif/feedback_generating', [
+            'message' => get_string('waitingforadhoctaskstart', 'assignfeedback_aif'),
+        ]);
     }
 
     /**
