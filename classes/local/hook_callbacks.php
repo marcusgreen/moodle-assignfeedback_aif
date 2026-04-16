@@ -26,6 +26,27 @@ namespace assignfeedback_aif\local;
  */
 class hook_callbacks {
     /**
+     * Swap the AI request provider with a fake for behat testing.
+     *
+     * When running in the behat test environment and mock mode is enabled,
+     * this replaces the real ai_request_provider with a fake that returns
+     * configurable responses from DB config. This works across all PHP
+     * processes (web, CLI cron) because the DI container is rebuilt per request.
+     *
+     * @param \core\hook\di_configuration $hook The DI configuration hook.
+     */
+    public static function configure_di(\core\hook\di_configuration $hook): void {
+        if (!defined('BEHAT_SITE_RUNNING')) {
+            return;
+        }
+
+        $hook->add_definition(
+            \assignfeedback_aif\local\ai_request_provider::class,
+            \DI\create(\assignfeedback_aif\testing\fake_ai_request_provider::class),
+        );
+    }
+
+    /**
      * Provide information about which AI purposes are being used by this plugin.
      *
      * @param \local_ai_manager\hook\purpose_usage $hook The purpose_usage hook object.
