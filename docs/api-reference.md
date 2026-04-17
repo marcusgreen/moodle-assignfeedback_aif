@@ -239,7 +239,7 @@ Defined in `locallib.php`:
 
 ```php
 define('ASSIGNFEEDBACK_AIF_COMPONENT', 'assignfeedback_aif');
-define('ASSIGNFEEDBACK_AIF_FILEAREA', 'feedback');
+define('ASSIGNFEEDBACK_AIF_FILEAREA', 'assignfeedback_aif_feedback');
 ```
 
 These are used for file storage operations (editor files).

@@ -55,7 +55,7 @@ $string['disclaimer'] = 'Disclaimer';
 $string['disclaimer_text'] = 'Text appended to each AI response indicating feedback is from a Large Language Model and not a human.';
 $string['enabled'] = 'Enabled';
 $string['enabled_help'] = 'Enable the AI Feedback plugin. <br>
-Note: Images and PDFs are automatically converted to text using AI image-to-text (ITT). A document converter (e.g. Google Drive) is used as fallback for DOCX and other document formats.';
+Note: Submitted files are analysed using AI image-to-text (ITT). Documents not directly supported by ITT (e.g. DOCX, PDF) are first converted to images using a document converter, then processed by ITT.';
 $string['enabledbydefault'] = 'Enabled by default';
 $string['enableexpertmode'] = 'Enable expert mode';
 $string['enableexpertmode_text'] = 'When enabled, shows an "Expert mode template" button in the assignment settings, allowing teachers to use the full prompt template with all placeholders directly.';

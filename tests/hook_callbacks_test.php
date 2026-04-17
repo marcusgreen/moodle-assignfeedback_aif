@@ -153,7 +153,7 @@ final class hook_callbacks_test extends \advanced_testcase {
     }
 
     /**
-     * Test teacher sees warning when autogenerate is on but block_ai_control is not active.
+     * Test teacher sees warning when autogenerate is on but AI is not available.
      *
      * @covers ::before_footer
      */
@@ -163,33 +163,20 @@ final class hook_callbacks_test extends \advanced_testcase {
         $env = $this->create_test_environment();
         $this->create_aif_config($env, 'Test prompt', 1);
 
-        // Ensure block_ai_control has no config for this course (AI not activated).
-        // The aiconfig constructor requires a course context, and without a record it's not enabled.
-        if (class_exists(\block_ai_control\local\aiconfig::class)) {
-            $coursecontext = \core\context\course::instance($env->course->id);
-            $aiconfig = new \block_ai_control\local\aiconfig($coursecontext->id);
-            if ($aiconfig->record_exists()) {
-                $aiconfig->set_enabled(false);
-                $aiconfig->store();
-            }
-            // If no record exists, is_enabled() returns false by default — which is what we want.
-        } else {
-            // Block_ai_control not installed — is_ai_active_for_context returns true,
-            // so no warning should appear. Skip this test.
-            $this->markTestSkipped('block_ai_control plugin is not installed.');
-        }
+        // Without AI manager config, AI is not available for the teacher.
+        $this->setup_ai_availability($env->teacher, false);
 
         $html = $this->dispatch_before_footer($env->cm, $env->teacher);
 
         $this->assertStringContainsString(
             get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
             $html,
-            'Teacher should see warning when AI is not active in ai_control'
+            'Teacher should see warning when AI is not available'
         );
     }
 
     /**
-     * Test teacher sees no warning when autogenerate is on and AI is active.
+     * Test teacher sees no warning when AI is available.
      *
      * @covers ::before_footer
      */
@@ -199,15 +186,8 @@ final class hook_callbacks_test extends \advanced_testcase {
         $env = $this->create_test_environment();
         $this->create_aif_config($env, 'Test prompt', 1);
 
-        if (class_exists(\block_ai_control\local\aiconfig::class)) {
-            $coursecontext = \core\context\course::instance($env->course->id);
-            $aiconfig = new \block_ai_control\local\aiconfig($coursecontext->id);
-            $aiconfig->set_enabled(true);
-            $aiconfig->set_expiresat(-1); // Never expires.
-            $aiconfig->store();
-        }
-        // If block_ai_control is not installed, is_ai_active_for_context returns true,
-        // so no warning appears either — same expected result.
+        // Set up real ai_manager infrastructure so AI is available for the teacher.
+        $this->setup_ai_availability($env->teacher, true);
 
         $html = $this->dispatch_before_footer($env->cm, $env->teacher);
 

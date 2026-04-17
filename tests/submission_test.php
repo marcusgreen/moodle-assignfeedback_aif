@@ -473,13 +473,9 @@ final class submission_test extends \advanced_testcase {
         // Verify all three feedback records exist.
         $this->assertEquals(3, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
 
-        // Call the private delete_feedbackaif method via reflection.
+        // Delete feedback for all three users via the utility method.
         $this->setUser($env->teacher);
-        $plugin = $this->get_aif_plugin($env->assignobj);
-        $method = new \ReflectionMethod($plugin, 'delete_feedbackaif');
-
-        // Delete feedback for all three users at once.
-        $method->invoke($plugin, $userids);
+        \assignfeedback_aif\local\feedback_utils::delete_feedback_for_users($env->assign->id, $userids);
 
         // All feedback records must be gone.
         $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));

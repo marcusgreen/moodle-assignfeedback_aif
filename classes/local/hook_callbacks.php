@@ -128,6 +128,16 @@ class hook_callbacks {
             return;
         }
 
+        // Teacher warning: autogenerate is on but AI is not available.
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
+        if ($aifconfig && !empty($aifconfig->autogenerate) && !self::is_ai_available_for_user($USER, $context)) {
+            $html = $OUTPUT->notification(
+                get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
+                \core\output\notification::NOTIFY_WARNING
+            );
+            $hook->add_html($html);
+        }
+
         // Check if there are pending adhoc tasks for this assignment.
         $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
         $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
@@ -145,7 +155,7 @@ class hook_callbacks {
         }
 
         // Skip if view_summary() already rendered a spinner for this page.
-        if (\assign_feedback_aif::is_spinner_rendered()) {
+        if (output_helper::is_spinner_rendered()) {
             return;
         }
 

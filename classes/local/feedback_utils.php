@@ -140,4 +140,123 @@ class feedback_utils {
         }
         return null;
     }
+
+    /**
+     * Save or update the assignment-level plugin settings (prompt, autogenerate).
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @param string $prompt The AI prompt text.
+     * @param int $autogenerate Whether to auto-generate feedback on submission (0 or 1).
+     * @return bool True on success.
+     */
+    public static function save_settings(int $assignmentid, string $prompt, int $autogenerate): bool {
+        global $DB;
+        $feedback = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
+        if ($feedback) {
+            $feedback->prompt = $prompt;
+            $feedback->autogenerate = $autogenerate;
+            $DB->update_record('assignfeedback_aif', $feedback);
+        } else {
+            $clock = \core\di::get(\core\clock::class);
+            $feedback = new \stdClass();
+            $feedback->prompt = $prompt;
+            $feedback->autogenerate = $autogenerate;
+            $feedback->assignment = $assignmentid;
+            $feedback->timecreated = $clock->now()->getTimestamp();
+            $DB->insert_record('assignfeedback_aif', $feedback);
+        }
+        return true;
+    }
+
+    /**
+     * Save or update a per-user feedback record.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @param int $userid The user ID whose feedback is being saved.
+     * @param string $feedback The feedback HTML text.
+     * @param int $feedbackformat The text format (e.g. FORMAT_HTML).
+     * @return bool True on success, false if no config record exists.
+     */
+    public static function save_feedback(
+        int $assignmentid,
+        int $userid,
+        string $feedback,
+        int $feedbackformat
+    ): bool {
+        global $DB;
+        $clock = \core\di::get(\core\clock::class);
+        $record = self::get_feedbackaif($assignmentid, $userid);
+
+        if ($record) {
+            $record->timemodified = $clock->now()->getTimestamp();
+            $record->feedback = $feedback;
+            $record->feedbackformat = $feedbackformat;
+            $DB->update_record('assignfeedback_aif_feedback', $record);
+        } else {
+            $aif = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
+            if (!$aif) {
+                debugging(
+                    'assignfeedback_aif: No config record found for assignment, cannot save feedback.',
+                    DEBUG_DEVELOPER
+                );
+                return false;
+            }
+            $submission = $DB->get_record('assign_submission', [
+                'assignment' => $assignmentid,
+                'userid' => $userid,
+                'latest' => 1,
+            ]);
+            $newrecord = new \stdClass();
+            $newrecord->aif = $aif->id;
+            $newrecord->submission = $submission ? $submission->id : null;
+            $newrecord->feedback = $feedback;
+            $newrecord->feedbackformat = $feedbackformat;
+            $newrecord->timecreated = $clock->now()->getTimestamp();
+            $DB->insert_record('assignfeedback_aif_feedback', $newrecord);
+        }
+        return true;
+    }
+
+    /**
+     * Delete AI feedback records for specific users.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @param array $users Array of user IDs to delete feedback for.
+     */
+    public static function delete_feedback_for_users(int $assignmentid, array $users): void {
+        global $DB;
+        $aifrecord = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
+        if (!$aifrecord) {
+            return;
+        }
+        foreach ($users as $userid) {
+            $submission = $DB->get_record('assign_submission', [
+                'assignment' => $assignmentid,
+                'userid' => $userid,
+                'latest' => 1,
+            ]);
+            if ($submission) {
+                $DB->delete_records('assignfeedback_aif_feedback', [
+                    'aif' => $aifrecord->id,
+                    'submission' => $submission->id,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Delete all plugin data for an assignment (cleanup on instance deletion).
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @return bool True on success.
+     */
+    public static function delete_all_feedback(int $assignmentid): bool {
+        global $DB;
+        $records = $DB->get_records('assignfeedback_aif', ['assignment' => $assignmentid], '', 'id');
+        foreach ($records as $record) {
+            $DB->delete_records('assignfeedback_aif_feedback', ['aif' => $record->id]);
+        }
+        $DB->delete_records('assignfeedback_aif', ['assignment' => $assignmentid]);
+        return true;
+    }
 }
