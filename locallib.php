@@ -565,6 +565,17 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
+     * Return a list of the file areas used by this plugin.
+     *
+     * This is used by mod_assign during reset_userdata and delete_instance to clean up stored files.
+     *
+     * @return array Associative array mapping filearea => human readable name.
+     */
+    public function get_file_areas(): array {
+        return [self::FILEAREA => $this->get_name()];
+    }
+
+    /**
      * Returns true if there are no AI feedback entries for the given grade.
      *
      * Also returns false when feedback generation is pending so that the
