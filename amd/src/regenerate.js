@@ -18,7 +18,11 @@
  *
  * After the teacher confirms regeneration, queues a background task and
  * displays a progress bar that polls the stored_progress API for updates.
- * Automatically reloads the page when feedback generation completes.
+ * Automatically injects feedback into the editor when generation completes.
+ *
+ * Note: We use custom polling instead of core/stored_progress because we need
+ * custom completion behaviour (editor injection, error UI with retry) that the
+ * core stored_progress JS module does not support.
  *
  * @module     assignfeedback_aif/regenerate
  * @copyright  2026 ISB Bayern
@@ -187,10 +191,10 @@ const doRegenerate = async(button, assignmentId, userId) => {
         }])[0];
 
         if (result.success) {
-            addToast(result.message, {type: 'success'});
+            await addToast(result.message, {type: 'success'});
             await showProgressBar(button, result.progressrecordid, result.message);
         } else {
-            addToast(result.message, {type: 'danger'});
+            await addToast(result.message, {type: 'danger'});
             button.disabled = false;
             button.textContent = originalText;
         }
@@ -224,7 +228,7 @@ const showProgressBar = async(button, progressRecordId, initialMessage) => {
     }
 
     // Hide the button.
-    button.style.display = 'none';
+    button.classList.add('d-none');
 
     // Render the progress bar template.
     const target = editorElement ? editorElement.closest('.fitem') : button;
@@ -297,7 +301,7 @@ const pollProgress = async(container, progressRecordId) => {
             // Restore the button so the teacher can retry.
             const btn = document.querySelector('[data-action="regenerate-aif"]');
             if (btn) {
-                btn.style.display = '';
+                btn.classList.remove('d-none');
                 btn.disabled = false;
             }
             return;
@@ -392,7 +396,7 @@ const injectFeedbackIntoEditor = async(container) => {
             // Restore the button.
             const button = document.querySelector('[data-action="regenerate-aif"]');
             if (button) {
-                button.style.display = '';
+                button.classList.remove('d-none');
                 button.disabled = false;
                 button.textContent = await getString('generatefeedbackai', 'assignfeedback_aif');
             }

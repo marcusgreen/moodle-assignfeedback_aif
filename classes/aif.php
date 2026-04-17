@@ -47,23 +47,19 @@ class aif {
      * via \core\di::set(ai_request_provider::class, $mock).
      *
      * @param string $prompt The prompt to send to the AI.
-     * @param string|null $purpose The purpose of the request (for local_ai_manager). Defaults to 'feedback'.
+     * @param string $purpose The purpose of the request (for local_ai_manager).
      * @param array $options Additional options (e.g., 'image' for ITT requests).
      * @param int $userid The user to attribute the AI request to. Defaults to current $USER.
      * @return string The AI response.
      * @throws \moodle_exception
      */
-    public function perform_request(string $prompt, ?string $purpose = null, array $options = [], int $userid = 0): string {
+    public function perform_request(string $prompt, string $purpose = 'feedback', array $options = [], int $userid = 0): string {
         if ($userid === 0) {
             global $USER;
             $userid = $USER->id;
         }
 
         $provider = \core\di::get(ai_request_provider::class);
-
-        if ($purpose === null) {
-            $purpose = 'feedback';
-        }
 
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
 
@@ -130,9 +126,11 @@ class aif {
         }
 
         // Standard mode: inject the teacher's prompt into the admin template.
+        // The template is expected to be configured via admin settings. The hardcoded
+        // fallback matches the default defined in settings.php.
         $template = get_config('assignfeedback_aif', 'prompttemplate');
         if (empty($template)) {
-            $template = get_string('defaultprompttemplate', 'assignfeedback_aif');
+            $template = 'You are an experienced teacher. Provide feedback on: {{submission}}';
         }
 
         $replacements = [
@@ -418,15 +416,10 @@ class aif {
 
         // Add MIME types from AI Manager ITT backend.
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
-        if ($backend === 'local_ai_manager') {
-            try {
-                $purposeoptions = \local_ai_manager\ai_manager_utils::get_available_purpose_options('itt');
-                if (!empty($purposeoptions['allowedmimetypes']) && is_array($purposeoptions['allowedmimetypes'])) {
-                    $mimetypes = array_merge($mimetypes, $purposeoptions['allowedmimetypes']);
-                }
-            } catch (\Exception $e) {
-                // AI Manager not available, continue with native formats only.
-                debugging('AI Manager ITT purpose unavailable: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        if ($backend === 'local_ai_manager' && class_exists(\local_ai_manager\ai_manager_utils::class)) {
+            $purposeoptions = \local_ai_manager\ai_manager_utils::get_available_purpose_options('itt');
+            if (!empty($purposeoptions['allowedmimetypes']) && is_array($purposeoptions['allowedmimetypes'])) {
+                $mimetypes = array_merge($mimetypes, $purposeoptions['allowedmimetypes']);
             }
         }
 
@@ -468,18 +461,13 @@ class aif {
      */
     protected function is_mimetype_supported_by_ai_backend(string $mimetype): bool {
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
-        if ($backend !== 'local_ai_manager') {
+        if ($backend !== 'local_ai_manager' || !class_exists(\local_ai_manager\ai_manager_utils::class)) {
             return false;
         }
 
-        try {
-            $purposeoptions = \local_ai_manager\ai_manager_utils::get_available_purpose_options('itt');
-            if (!empty($purposeoptions['allowedmimetypes']) && is_array($purposeoptions['allowedmimetypes'])) {
-                return in_array($mimetype, $purposeoptions['allowedmimetypes']);
-            }
-        } catch (\Exception $e) {
-            // If the purpose or connector is not available, fall back to conversion.
-            return false;
+        $purposeoptions = \local_ai_manager\ai_manager_utils::get_available_purpose_options('itt');
+        if (!empty($purposeoptions['allowedmimetypes']) && is_array($purposeoptions['allowedmimetypes'])) {
+            return in_array($mimetype, $purposeoptions['allowedmimetypes']);
         }
 
         return false;

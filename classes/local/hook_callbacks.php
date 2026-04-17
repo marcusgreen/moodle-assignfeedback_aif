@@ -73,8 +73,6 @@ class hook_callbacks {
      * students need to be warned about data being sent to AI.
      *
      * For teachers on the grading overview: shows a spinner when adhoc tasks are pending.
-     * Also warns teachers when autogenerate is active but AI is not enabled via
-     * block_ai_control, so students cannot receive AI feedback.
      * For students on the submission page: shows a data sharing notice when autogenerate
      * is enabled, or an info notice when autogenerate is active but AI is not enabled.
      *
@@ -130,16 +128,6 @@ class hook_callbacks {
             return;
         }
 
-        // Warn teacher when autogenerate is active but AI is not enabled.
-        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
-        if ($aifconfig && !empty($aifconfig->autogenerate) && !self::is_ai_active_for_context($context)) {
-            $html = $OUTPUT->notification(
-                get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
-                \core\output\notification::NOTIFY_WARNING
-            );
-            $hook->add_html($html);
-        }
-
         // Check if there are pending adhoc tasks for this assignment.
         $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
         $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
@@ -178,7 +166,7 @@ class hook_callbacks {
      * Check if AI feedback is available for a user via local_ai_manager.
      *
      * Uses the full ai_manager availability stack which evaluates tenant config,
-     * purpose configuration, quotas, and block_ai_control restrictions via hooks.
+     * purpose configuration, and quotas.
      *
      * @param \stdClass $user The user to check availability for.
      * @param \context $context The module context.
@@ -189,54 +177,23 @@ class hook_callbacks {
             return false;
         }
 
-        try {
-            $aiconfig = \local_ai_manager\ai_manager_utils::get_ai_config($user, $context->id, null, ['feedback']);
+        $aiconfig = \local_ai_manager\ai_manager_utils::get_ai_config($user, $context->id, null, ['feedback']);
 
-            // General availability must be 'available'.
-            if ($aiconfig['availability']['available'] !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
-                return false;
-            }
-
-            // The 'feedback' purpose must be 'available'.
-            foreach ($aiconfig['purposes'] as $purposeconfig) {
-                if (
-                    $purposeconfig['purpose'] === 'feedback'
-                        && $purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
-                ) {
-                    return true;
-                }
-            }
-        } catch (\Exception $e) {
+        // General availability must be 'available'.
+        if ($aiconfig['availability']['available'] !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
             return false;
+        }
+
+        // The 'feedback' purpose must be 'available'.
+        foreach ($aiconfig['purposes'] as $purposeconfig) {
+            if (
+                $purposeconfig['purpose'] === 'feedback'
+                    && $purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
+            ) {
+                return true;
+            }
         }
 
         return false;
-    }
-
-    /**
-     * Check if AI is active for the given module context via block_ai_control.
-     *
-     * Used for teacher warnings only, since teachers are exempt from
-     * block_ai_control restrictions in the ai_manager hook chain.
-     *
-     * @param \context $context The module context to check.
-     * @return bool True if AI is active, false otherwise.
-     */
-    private static function is_ai_active_for_context(\context $context): bool {
-        if (!class_exists(\block_ai_control\local\aiconfig::class)) {
-            return true;
-        }
-
-        $coursecontext = $context->get_course_context(false);
-        if (!$coursecontext) {
-            return false;
-        }
-
-        try {
-            $aiconfig = new \block_ai_control\local\aiconfig($coursecontext->id);
-            return $aiconfig->record_exists() && $aiconfig->is_enabled();
-        } catch (\Exception $e) {
-            return false;
-        }
     }
 }

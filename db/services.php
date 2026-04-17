@@ -54,11 +54,4 @@ $functions = [
         'ajax' => true,
         'capabilities' => 'mod/assign:grade',
     ],
-    'assignfeedback_aif_get_expert_template' => [
-        'classname' => 'assignfeedback_aif\external\get_expert_template',
-        'description' => 'Get the expert mode prompt template for AI feedback',
-        'type' => 'read',
-        'ajax' => true,
-        'capabilities' => '',
-    ],
 ];

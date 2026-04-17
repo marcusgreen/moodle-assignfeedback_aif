@@ -76,6 +76,7 @@ class check_feedback_status extends external_api {
         $cm = get_coursemodule_from_instance('assign', $assignment->id, $assignment->course, false, MUST_EXIST);
         $context = context_module::instance($cm->id);
         self::validate_context($context);
+        require_capability('assignfeedback/aif:viewstatus', $context);
 
         if ($params['userid'] > 0) {
             // Per-user mode: check if feedback exists for a specific user.
@@ -129,18 +130,18 @@ class check_feedback_status extends external_api {
 
         $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
         $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
-        $pending = false;
+        $pendingorrunning = false;
         foreach ($tasks as $task) {
             $data = $task->get_custom_data();
             if (isset($data->assignment) && (int) $data->assignment === (int) $params['assignmentid']) {
-                $pending = true;
+                $pendingorrunning = true;
                 break;
             }
         }
 
         // The feedbackexists=true item means "done" (no more pending tasks).
         return [
-            'feedbackexists' => !$pending,
+            'feedbackexists' => !$pendingorrunning,
             'feedbackhtml' => '',
             'progressrecordid' => 0,
         ];

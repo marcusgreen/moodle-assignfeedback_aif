@@ -118,10 +118,9 @@ final class aif_test extends \advanced_testcase {
             $assignmentname
         );
 
-        // Should use the default template and include the submission text.
+        // Should use the minimal fallback template and include the submission text.
         $this->assertNotEmpty($result);
         $this->assertStringContainsString($submissiontext, $result);
-        $this->assertStringContainsString($assignmentname, $result);
     }
 
     /**

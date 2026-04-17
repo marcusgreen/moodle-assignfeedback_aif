@@ -230,7 +230,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
             $aifeedback = $aif->perform_request(
                 $promptdata['prompt'],
-                null,
+                'feedback',
                 $promptdata['options'],
                 $requestuser ? $requestuser->id : 0
             );
