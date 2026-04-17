@@ -266,6 +266,8 @@ class behat_assignfeedback_aif extends behat_base {
     }
 
     /**
+     * Assert the number of AI feedback records for a student in an assignment.
+     *
      * @Then /^there should be (\d+) AI feedback records? for "(?P<username>[^"]*)" in "(?P<assignment>[^"]*)"$/
      *
      * @param int $count Expected count.

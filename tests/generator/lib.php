@@ -23,7 +23,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class assignfeedback_aif_generator extends component_generator_base {
-
     /**
      * Create a pre-existing AI feedback record for testing.
      *

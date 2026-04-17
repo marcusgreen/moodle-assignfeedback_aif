@@ -23,7 +23,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class behat_assignfeedback_aif_generator extends behat_generator_base {
-
     /**
      * Get the list of creatable entities for assignfeedback_aif.
      *
