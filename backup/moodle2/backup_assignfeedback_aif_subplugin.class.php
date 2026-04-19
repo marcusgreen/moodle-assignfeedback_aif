@@ -23,6 +23,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * Provides the information required to backup the assignfeedback_aif subplugin.
  *
@@ -61,6 +63,9 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
 
         // Per-submission feedback record. Includes the old grade id so the
         // restore handler can resolve the new grade id via the grade mapping.
+        // Also carries a copy of the per-assignment config so the restore
+        // handler can (re)create the assignfeedback_aif row if the separate
+        // config element has not been processed yet.
         $feedback = new backup_nested_element('feedback_aif', null, [
             'grade',
             'feedback',
@@ -68,6 +73,9 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
             'timemodified',
             'timecreated',
             'skippedfiles',
+            'configprompt',
+            'configautogenerate',
+            'configtimecreated',
         ]);
 
         // Connect XML elements into the tree.
@@ -87,9 +95,16 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
         // Feedback source: join via the grade's user latest submission.
         // The "grade" column captures the source grade id so the restore handler
         // can remap it to the new grade id via the grade mapping.
+        // Config fields (configprompt, configautogenerate, configtimecreated)
+        // are included so the restore handler can (re)create the
+        // assignfeedback_aif row if the separate config element has not yet
+        // been processed.
         $feedback->set_source_sql(
             'SELECT :parentgradeid AS grade, aiff.feedback, aiff.feedbackformat,
-                    aiff.timemodified, aiff.timecreated, aiff.skippedfiles
+                    aiff.timemodified, aiff.timecreated, aiff.skippedfiles,
+                    aif.prompt AS configprompt,
+                    aif.autogenerate AS configautogenerate,
+                    aif.timecreated AS configtimecreated
                FROM {assignfeedback_aif_feedback} aiff
                JOIN {assignfeedback_aif} aif ON aif.id = aiff.aif
                JOIN {assign_submission} s ON s.id = aiff.submission

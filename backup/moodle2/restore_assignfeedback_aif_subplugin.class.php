@@ -23,6 +23,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * Restore subplugin class for assignfeedback_aif.
  *
@@ -109,7 +111,17 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
 
         $aif = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
         if (!$aif) {
-            return;
+            // The separate config element was not processed (for example when
+            // the backup was produced before the config element existed, or
+            // when that path failed to match). Create the row from the
+            // config data embedded in the feedback element.
+            $aif = (object) [
+                'assignment' => $assignmentid,
+                'prompt' => $data->configprompt ?? null,
+                'autogenerate' => $data->configautogenerate ?? 0,
+                'timecreated' => $data->configtimecreated ?? 0,
+            ];
+            $aif->id = $DB->insert_record('assignfeedback_aif', $aif);
         }
 
         $grade = $DB->get_record('assign_grades', ['id' => $newgradeid]);
