@@ -23,8 +23,6 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Provides the information required to backup the assignfeedback_aif subplugin.
  *
@@ -42,7 +40,6 @@ defined('MOODLE_INTERNAL') || die();
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class backup_assignfeedback_aif_subplugin extends backup_subplugin {
-
     /**
      * Returns the subplugin information to attach to the grade element.
      *

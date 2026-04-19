@@ -23,8 +23,6 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Restore subplugin class for assignfeedback_aif.
  *
@@ -37,7 +35,6 @@ defined('MOODLE_INTERNAL') || die();
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class restore_assignfeedback_aif_subplugin extends restore_subplugin {
-
     /**
      * Returns the paths handled by the subplugin at grade level.
      *
