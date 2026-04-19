@@ -101,7 +101,7 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
         }
 
         // Map the source grade id to the new grade id via the core grade mapping.
-        $oldgradeid = (int) ($data->grade ?? 0);
+        $oldgradeid = (int) ($data->oldgradeid ?? 0);
         $newgradeid = $this->get_mappingid('grade', $oldgradeid);
         if (empty($newgradeid)) {
             return;

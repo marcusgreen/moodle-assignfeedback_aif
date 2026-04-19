@@ -65,7 +65,7 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
         // handler can (re)create the assignfeedback_aif row if the separate
         // config element has not been processed yet.
         $feedback = new backup_nested_element('feedback_aif', null, [
-            'grade',
+            'oldgradeid',
             'feedback',
             'feedbackformat',
             'timemodified',
@@ -91,14 +91,14 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
         );
 
         // Feedback source: join via the grade's user latest submission.
-        // The "grade" column captures the source grade id so the restore handler
-        // can remap it to the new grade id via the grade mapping.
+        // The "oldgradeid" column captures the source grade id so the restore
+        // handler can remap it to the new grade id via the grade mapping.
         // Config fields (configprompt, configautogenerate, configtimecreated)
         // are included so the restore handler can (re)create the
         // assignfeedback_aif row if the separate config element has not yet
         // been processed.
         $feedback->set_source_sql(
-            'SELECT :parentgradeid AS grade, aiff.feedback, aiff.feedbackformat,
+            'SELECT g.id AS oldgradeid, aiff.feedback, aiff.feedbackformat,
                     aiff.timemodified, aiff.timecreated, aiff.skippedfiles,
                     aif.prompt AS configprompt,
                     aif.autogenerate AS configautogenerate,
@@ -108,17 +108,14 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
                JOIN {assign_submission} s ON s.id = aiff.submission
                JOIN {assign_grades} g ON g.assignment = aif.assignment AND g.userid = s.userid
               WHERE g.id = :gradeid AND s.latest = 1',
-            [
-                'gradeid' => backup::VAR_PARENTID,
-                'parentgradeid' => backup::VAR_PARENTID,
-            ]
+            ['gradeid' => backup::VAR_PARENTID]
         );
 
         // Annotate files stored in the editor filearea (itemid = grade id).
         $feedback->annotate_files(
             'assignfeedback_aif',
             'assignfeedback_aif_feedback',
-            'grade'
+            'oldgradeid'
         );
 
         return $subplugin;
