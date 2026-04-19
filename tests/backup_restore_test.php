@@ -61,9 +61,6 @@ final class backup_restore_test extends \advanced_testcase {
         $this->resetAfterTest();
         $this->setAdminUser();
 
-        // Reset the restore subplugin trace so we only see entries from this test.
-        \restore_assignfeedback_aif_subplugin::$trace = [];
-
         // Backup file logger off so files can be cleaned up cross-platform.
         $CFG->backup_file_logger_level = \backup::LOG_NONE;
 
@@ -162,24 +159,11 @@ final class backup_restore_test extends \advanced_testcase {
         ]);
         $this->assertNotFalse($newsubmission, 'Student submission must be restored.');
 
-        // Diagnostic: list all feedback rows regardless of FK to aid debugging
-        // a failed restore scenario in CI.
-        $allfeedbacks = $DB->get_records('assignfeedback_aif_feedback');
-        $diag = 'All assignfeedback_aif_feedback rows: ' . json_encode($allfeedbacks)
-            . ' | newconfig.id=' . $newconfig->id
-            . ' | newsubmission.id=' . $newsubmission->id
-            . ' | all submissions for new assign: '
-            . json_encode($DB->get_records('assign_submission', ['assignment' => $newassign->id]))
-            . ' | all grades for new assign: '
-            . json_encode($DB->get_records('assign_grades', ['assignment' => $newassign->id]))
-            . ' | restore trace: '
-            . json_encode(\restore_assignfeedback_aif_subplugin::$trace);
-
         $newfeedbacks = $DB->get_records('assignfeedback_aif_feedback', [
             'aif' => $newconfig->id,
             'submission' => $newsubmission->id,
         ]);
-        $this->assertCount(1, $newfeedbacks, $diag);
+        $this->assertCount(1, $newfeedbacks);
         $newfeedback = reset($newfeedbacks);
         $this->assertSame('Original AI feedback text', $newfeedback->feedback);
         $this->assertEquals(FORMAT_HTML, (int) $newfeedback->feedbackformat);

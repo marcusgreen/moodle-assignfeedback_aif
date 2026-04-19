@@ -66,6 +66,7 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
         // config element has not been processed yet.
         $feedback = new backup_nested_element('feedback_aif', null, [
             'oldgradeid',
+            'oldsubmissionid',
             'feedback',
             'feedbackformat',
             'timemodified',
@@ -98,7 +99,8 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
         // assignfeedback_aif row if the separate config element has not yet
         // been processed.
         $feedback->set_source_sql(
-            'SELECT g.id AS oldgradeid, aiff.feedback, aiff.feedbackformat,
+            'SELECT g.id AS oldgradeid, aiff.submission AS oldsubmissionid,
+                    aiff.feedback, aiff.feedbackformat,
                     aiff.timemodified, aiff.timecreated, aiff.skippedfiles,
                     aif.prompt AS configprompt,
                     aif.autogenerate AS configautogenerate,

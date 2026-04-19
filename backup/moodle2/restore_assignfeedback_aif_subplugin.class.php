@@ -35,9 +35,6 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class restore_assignfeedback_aif_subplugin extends restore_subplugin {
-    /** @var array Diagnostic trace for CI debugging; reset per test. */
-    public static array $trace = [];
-
     /**
      * Returns the paths handled by the subplugin at grade level.
      *
@@ -70,10 +67,8 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
         global $DB;
 
         $data = (object) $data;
-        self::$trace[] = ['handler' => 'config', 'data' => (array) $data];
         $assignmentid = $this->get_new_parentid('assign');
         if (empty($assignmentid)) {
-            self::$trace[] = ['handler' => 'config', 'exit' => 'no assignmentid'];
             return;
         }
 
@@ -100,10 +95,8 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
         global $DB;
 
         $data = (object) $data;
-        self::$trace[] = ['handler' => 'feedback', 'data' => (array) $data];
         $assignmentid = $this->get_new_parentid('assign');
         if (empty($assignmentid)) {
-            self::$trace[] = ['handler' => 'feedback', 'exit' => 'no assignmentid'];
             return;
         }
 
@@ -111,7 +104,6 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
         $oldgradeid = (int) ($data->oldgradeid ?? 0);
         $newgradeid = $this->get_mappingid('grade', $oldgradeid);
         if (empty($newgradeid)) {
-            self::$trace[] = ['handler' => 'feedback', 'exit' => 'no grade mapping', 'oldgradeid' => $oldgradeid];
             return;
         }
 
@@ -132,31 +124,42 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
 
         $grade = $DB->get_record('assign_grades', ['id' => $newgradeid]);
         if (!$grade) {
-            self::$trace[] = ['handler' => 'feedback', 'exit' => 'no grade row', 'newgradeid' => $newgradeid];
             return;
         }
 
-        $submission = $DB->get_record('assign_submission', [
-            'assignment' => $grade->assignment,
-            'userid' => $grade->userid,
-            'latest' => 1,
-        ]);
-        if (!$submission) {
-            self::$trace[] = ['handler' => 'feedback', 'exit' => 'no submission', 'grade' => (array) $grade];
-            return;
+        // Resolve the new submission via the assign_submission mapping. The
+        // 'latest' flag of the submission row is not yet reliable at the
+        // point this handler runs during a restore, so an assignment+userid
+        // lookup with latest=1 produces zero matches. Mapping by the source
+        // submission id is the safe path.
+        $oldsubmissionid = (int) ($data->oldsubmissionid ?? 0);
+        $newsubmissionid = $oldsubmissionid
+            ? (int) $this->get_mappingid('submission', $oldsubmissionid)
+            : 0;
+        if (empty($newsubmissionid)) {
+            // Fallback for older backups that did not include oldsubmissionid:
+            // attempt the legacy lookup by assignment+userid+latest.
+            $submission = $DB->get_record('assign_submission', [
+                'assignment' => $grade->assignment,
+                'userid' => $grade->userid,
+                'latest' => 1,
+            ]);
+            if (!$submission) {
+                return;
+            }
+            $newsubmissionid = (int) $submission->id;
         }
 
         $record = (object) [
             'aif' => $aif->id,
-            'submission' => $submission->id,
+            'submission' => $newsubmissionid,
             'feedback' => $data->feedback ?? null,
             'feedbackformat' => $data->feedbackformat ?? FORMAT_HTML,
             'timemodified' => $data->timemodified ?? 0,
             'timecreated' => $data->timecreated ?? 0,
             'skippedfiles' => $data->skippedfiles ?? null,
         ];
-        $newid = $DB->insert_record('assignfeedback_aif_feedback', $record);
-        self::$trace[] = ['handler' => 'feedback', 'inserted' => $newid, 'record' => (array) $record];
+        $DB->insert_record('assignfeedback_aif_feedback', $record);
 
         // Restore any editor files for this grade's feedback area.
         $this->add_related_files(
