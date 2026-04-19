@@ -107,7 +107,7 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
                JOIN {assignfeedback_aif} aif ON aif.id = aiff.aif
                JOIN {assign_submission} s ON s.id = aiff.submission
                JOIN {assign_grades} g ON g.assignment = aif.assignment AND g.userid = s.userid
-              WHERE g.id = :gradeid AND s.latest = 1',
+              WHERE g.id = :gradeid',
             ['gradeid' => backup::VAR_PARENTID]
         );
 
