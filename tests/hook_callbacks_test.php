@@ -102,35 +102,80 @@ final class hook_callbacks_test extends \advanced_testcase {
     }
 
     /**
-     * Test student sees AI unavailability reason when autogenerate is on but AI is not available.
+     * Test student sees no notice when autogenerate is on but AI is hidden.
      *
-     * When AI is unavailable, the student should see the actual error message from the
-     * AI backend (via ai_request_provider) rather than a generic message.
+     * When AI is hidden (e.g. tenant not enabled, no capability), the student
+     * should not see any notice at all — neither data sharing nor unavailability.
      *
      * @covers ::before_footer
      */
-    public function test_student_sees_unavailability_reason_when_ai_unavailable(): void {
+    public function test_student_sees_no_notice_when_ai_hidden(): void {
         $this->resetAfterTest();
 
         $env = $this->create_test_environment();
         $this->create_aif_config($env, 'Test prompt', 1);
 
-        // Without AI manager config, AI is not available for the student.
+        // Without AI manager config, AI is hidden for the student.
         $this->setup_ai_availability($env->student, false);
 
         $html = $this->dispatch_before_footer($env->cm, $env->student);
 
-        // Student should NOT see the data sharing notice (AI is unavailable).
+        // Student should NOT see any notice when AI is hidden.
         $this->assertStringNotContainsString(
             get_string('studentsubmissionainotice', 'assignfeedback_aif'),
             $html,
-            'Student should NOT see data sharing notice when AI is not available'
+            'Student should NOT see data sharing notice when AI is hidden'
+        );
+        $this->assertEmpty(
+            $html,
+            'No notification should be shown when AI is hidden'
+        );
+    }
+
+    /**
+     * Test student sees warning with errormessage when AI is disabled.
+     *
+     * When AI is disabled (e.g. user is locked), the student should see
+     * a warning notification with the errormessage from the ai_manager.
+     *
+     * @covers ::before_footer
+     */
+    public function test_student_sees_warning_when_ai_disabled(): void {
+        $this->resetAfterTest();
+
+        if (!class_exists(\local_ai_manager\ai_manager_utils::class)) {
+            $this->markTestSkipped('local_ai_manager plugin is not installed.');
+        }
+
+        $env = $this->create_test_environment();
+        $this->create_aif_config($env, 'Test prompt', 1);
+
+        // Set up AI as available first, then lock the user to trigger 'disabled' state.
+        $this->setup_ai_availability($env->student, true);
+
+        // Lock the user so determine_availability returns AVAILABILITY_DISABLED.
+        $userinfo = new \local_ai_manager\local\userinfo($env->student->id);
+        $userinfo->set_locked(true);
+        $userinfo->store();
+
+        $html = $this->dispatch_before_footer($env->cm, $env->student);
+
+        // Student should NOT see the data sharing notice.
+        $this->assertStringNotContainsString(
+            get_string('studentsubmissionainotice', 'assignfeedback_aif'),
+            $html,
+            'Student should NOT see data sharing notice when AI is disabled'
         );
 
-        // Student should see some notification (the AI backend's actual error message).
+        // Student should see a warning notification with the errormessage from ai_manager.
         $this->assertNotEmpty(
             $html,
-            'Student should see an unavailability notification when AI is not available'
+            'Student should see a warning notification when AI is disabled'
+        );
+        $this->assertStringContainsString(
+            get_string('error_http403blocked', 'local_ai_manager'),
+            $html,
+            'Warning should contain the errormessage from ai_manager'
         );
     }
 
@@ -154,71 +199,6 @@ final class hook_callbacks_test extends \advanced_testcase {
         $this->assertEmpty(
             $html,
             'No notification should be shown when autogenerate is off'
-        );
-    }
-
-    /**
-     * Test teacher sees warning when autogenerate is on but AI is not available.
-     *
-     * @covers ::before_footer
-     */
-    public function test_teacher_sees_warning_when_ai_control_inactive(): void {
-        $this->resetAfterTest();
-
-        $env = $this->create_test_environment();
-        $this->create_aif_config($env, 'Test prompt', 1);
-
-        // Without AI manager config, AI is not available for the teacher.
-        $this->setup_ai_availability($env->teacher, false);
-
-        $html = $this->dispatch_before_footer($env->cm, $env->teacher);
-
-        $this->assertStringContainsString(
-            get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
-            $html,
-            'Teacher should see warning when AI is not available'
-        );
-    }
-
-    /**
-     * Test teacher sees no warning when AI is available.
-     *
-     * @covers ::before_footer
-     */
-    public function test_teacher_sees_no_warning_when_ai_control_active(): void {
-        $this->resetAfterTest();
-
-        $env = $this->create_test_environment();
-        $this->create_aif_config($env, 'Test prompt', 1);
-
-        // Set up real ai_manager infrastructure so AI is available for the teacher.
-        $this->setup_ai_availability($env->teacher, true);
-
-        $html = $this->dispatch_before_footer($env->cm, $env->teacher);
-
-        $this->assertStringNotContainsString(
-            get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
-            $html,
-            'Teacher should NOT see warning when AI is active'
-        );
-    }
-
-    /**
-     * Test teacher sees no warning when autogenerate is off.
-     *
-     * @covers ::before_footer
-     */
-    public function test_teacher_sees_no_warning_when_autogenerate_off(): void {
-        $this->resetAfterTest();
-
-        $env = $this->create_test_environment();
-        $this->create_aif_config($env, 'Test prompt', 0);
-
-        $html = $this->dispatch_before_footer($env->cm, $env->teacher);
-
-        $this->assertStringNotContainsString(
-            get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
-            $html
         );
     }
 

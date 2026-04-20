@@ -25,7 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['aicontrolinactive_teacher'] = 'Die automatische KI-Feedback-Generierung ist für diese Aufgabe aktiviert, aber die KI ist derzeit im KI-Kontrollzentrum nicht freigeschaltet. Lernende erhalten kein KI-Feedback, bis Sie die KI für diesen Kurs aktivieren.';
+$string['aicontrolnotice'] = 'Wenn die automatische Feedback-Generierung aktiviert ist, stellen Sie bitte sicher, dass die KI im KI-Kontrollzentrum für die gesamte Dauer der Übung für die Schüler/innen aktiviert ist. Andernfalls können die Schüler/innen das KI-Feedback nicht nutzen.';
 $string['aif:viewstatus'] = 'Status der KI-Feedback-Generierung anzeigen';
 $string['ainavailable'] = 'KI-Backend ist für diesen Zweck nicht verfügbar';
 $string['analysisnosubmission'] = 'Keine Abgabeinhalte für diese/n Lernende/n gefunden.';

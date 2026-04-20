@@ -25,7 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['aicontrolinactive_teacher'] = 'Automatic AI feedback generation is enabled for this assignment, but AI is currently not activated in the AI Control Center. Students will not receive AI feedback until you activate AI for this course.';
+$string['aicontrolnotice'] = 'When automatic feedback generation is enabled, please ensure that AI is activated in the AI Control Center for the entire duration of the exercise. Otherwise, students will not be able to use the AI feedback feature.';
 $string['aif:viewstatus'] = 'View AI feedback generation status';
 $string['ainavailable'] = 'AI backend is not available for this purpose';
 $string['analysisnosubmission'] = 'No submission content found for this student.';

@@ -119,6 +119,10 @@ class output_helper {
      * The JS AMD call is registered only once to prevent duplicate
      * warning boxes when multiple feedback views exist on a page.
      *
+     * The warning box is rendered inside the view_summary content and then
+     * repositioned via JS before the expand/collapse toggle so it remains
+     * always visible regardless of the feedback collapse state.
+     *
      * @return string HTML for the warning box container.
      */
     public static function render_warningbox(): string {
@@ -131,6 +135,11 @@ class output_helper {
             $PAGE->requires->js_call_amd(
                 'local_ai_manager/warningbox',
                 'renderWarningBox',
+                ['[data-aif="aiwarning"]']
+            );
+            $PAGE->requires->js_call_amd(
+                'assignfeedback_aif/warningbox_position',
+                'init',
                 ['[data-aif="aiwarning"]']
             );
             self::$warningboxregistered = true;

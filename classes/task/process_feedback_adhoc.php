@@ -235,7 +235,8 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
                 $requestuser ? $requestuser->id : 0
             );
         } catch (\Exception $e) {
-            $this->save_error_feedback($record, $e->getMessage());
+            $debuginfo = ($e instanceof \moodle_exception && !empty($e->debuginfo)) ? $e->debuginfo : '';
+            $this->save_error_feedback($record, $e->getMessage(), $debuginfo);
             mtrace("AI request failed for submission {$record->subid}: " . $e->getMessage());
             return $e->getMessage();
         } finally {
@@ -347,8 +348,13 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
      * @param object $record The submission record.
      * @param string $errormsg The error message to store.
      */
-    private function save_error_feedback(object $record, string $errormsg): void {
+    private function save_error_feedback(object $record, string $errormsg, string $debuginfo = ''): void {
         global $DB;
+
+        $errorentry = ['_error' => $errormsg];
+        if ($debuginfo !== '') {
+            $errorentry['_debuginfo'] = $debuginfo;
+        }
 
         $clock = \core\di::get(\core\clock::class);
         $data = (object) [
@@ -357,7 +363,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
             'feedbackformat' => FORMAT_HTML,
             'timecreated' => $clock->now()->getTimestamp(),
             'submission' => $record->subid,
-            'skippedfiles' => json_encode([['_error' => $errormsg]]),
+            'skippedfiles' => json_encode([$errorentry]),
         ];
         $DB->insert_record('assignfeedback_aif_feedback', $data);
     }

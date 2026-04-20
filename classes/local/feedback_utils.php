@@ -127,6 +127,8 @@ class feedback_utils {
      * @return string|null The error message, or null if no error.
      */
     public static function get_error_from_feedback(\stdClass $record): ?string {
+        global $CFG;
+
         if (empty($record->skippedfiles)) {
             return null;
         }
@@ -134,7 +136,11 @@ class feedback_utils {
         if (!empty($skipped) && is_array($skipped)) {
             foreach ($skipped as $entry) {
                 if (is_array($entry) && isset($entry['_error'])) {
-                    return get_string('feedbackgenerationerror', 'assignfeedback_aif', $entry['_error']);
+                    $msg = get_string('feedbackgenerationerror', 'assignfeedback_aif', $entry['_error']);
+                    if (!empty($entry['_debuginfo']) && !empty($CFG->debugdisplay) && $CFG->debug >= DEBUG_DEVELOPER) {
+                        $msg .= \html_writer::tag('pre', s($entry['_debuginfo']), ['class' => 'mt-2 small']);
+                    }
+                    return $msg;
                 }
             }
         }

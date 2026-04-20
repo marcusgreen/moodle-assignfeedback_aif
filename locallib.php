@@ -109,6 +109,34 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->addHelpButton('assignfeedback_aif_autogenerate', 'autogenerate', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_autogenerate', 'assignfeedback_aif_enabled', 'notchecked');
 
+        // Show info box about AI control center when block_ai_control is installed and active.
+        $enabledblocks = \core_plugin_manager::instance()->get_enabled_plugins('block');
+        if (isset($enabledblocks['ai_control'])) {
+            $mform->addElement(
+                'static',
+                'assignfeedback_aif_aicontrolnotice',
+                '',
+                \html_writer::div(
+                    get_string('aicontrolnotice', 'assignfeedback_aif'),
+                    'alert alert-info'
+                )
+            );
+            $mform->hideIf('assignfeedback_aif_aicontrolnotice', 'assignfeedback_aif_enabled', 'notchecked');
+            $mform->hideIf('assignfeedback_aif_aicontrolnotice', 'assignfeedback_aif_autogenerate', 'notchecked');
+        }
+
+        // Show data sharing notice from AI Manager.
+        $mform->addElement(
+            'static',
+            'assignfeedback_aif_datasharingnotice',
+            '',
+            \html_writer::div(
+                get_string('aiisbeingused', 'local_ai_manager'),
+                'alert alert-warning'
+            )
+        );
+        $mform->hideIf('assignfeedback_aif_datasharingnotice', 'assignfeedback_aif_enabled', 'notchecked');
+
         $mform->addElement(
             'filemanager',
             'assignfeedback_aif_file',
@@ -452,7 +480,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             // Truncate for the grading table overview. Full feedback via "view" link.
             $shorttext = shorten_text(strip_tags($text), 140);
             $showviewlink = ($shorttext !== strip_tags($text));
-            return $shorttext . \assignfeedback_aif\local\output_helper::render_warningbox();
+            return \assignfeedback_aif\local\output_helper::render_warningbox() . $shorttext;
         }
 
         // No feedback yet — check for running task with stored progress or pending autogenerate.
@@ -525,7 +553,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $result = \html_writer::div($text, 'assignfeedback_aif-feedback');
         $result .= \assignfeedback_aif\local\output_helper::format_skipped_files_notice($record);
 
-        return $result . \assignfeedback_aif\local\output_helper::render_warningbox();
+        return $result;
     }
 
     /**

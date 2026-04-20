@@ -70,13 +70,12 @@ class hook_callbacks {
 
     /**
      * Show notifications on assign pages when AI feedback tasks are pending or when
-     * students need to be warned about data being sent to AI.
+     * students need to be informed about AI availability.
      *
+     * For students on the submission page: uses get_ai_config from local_ai_manager
+     * to determine AI availability. Shows a data sharing notice when AI is available,
+     * a warning with the errormessage when AI is disabled, or nothing when AI is hidden.
      * For teachers on the grading overview: shows a spinner when adhoc tasks are pending.
-     * Also warns teachers when autogenerate is active but AI is not enabled via
-     * block_ai_control, so students cannot receive AI feedback.
-     * For students on the submission page: shows a data sharing notice when autogenerate
-     * is enabled, or an info notice when autogenerate is active but AI is not enabled.
      *
      * @param \core\hook\output\before_footer_html_generation $hook The hook instance.
      */
@@ -98,25 +97,18 @@ class hook_callbacks {
             return;
         }
 
-        // Student submission page: show data sharing notice when autogenerate is enabled.
+        // Student submission page: show notice or warning when autogenerate is enabled.
         if ($PAGE->pagetype === 'mod-assign-view' && !has_capability('mod/assign:grade', $context)) {
             $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
             if ($aifconfig && !empty($aifconfig->autogenerate)) {
-                $unavailabilityreason = self::get_student_unavailability_reason($context);
-                if ($unavailabilityreason === null) {
-                    // AI is available: show normal data sharing notice.
-                    $html = $OUTPUT->notification(
-                        get_string('studentsubmissionainotice', 'assignfeedback_aif'),
-                        \core\output\notification::NOTIFY_INFO
-                    );
-                    $hook->add_html($html);
+                $action = optional_param('action', '', PARAM_ALPHA);
+                if ($action === 'editsubmission') {
+                    self::render_submission_infobox($hook, $context);
                 } else {
-                    // AI is not available: show the actual reason from the AI backend.
-                    $html = $OUTPUT->notification(
-                        $unavailabilityreason,
-                        \core\output\notification::NOTIFY_INFO
-                    );
-                    $hook->add_html($html);
+                    $notice = self::get_student_ai_notice($context);
+                    if ($notice !== null) {
+                        $hook->add_html($notice);
+                    }
                 }
             }
             return;
@@ -129,20 +121,6 @@ class hook_callbacks {
 
         if (!has_capability('mod/assign:grade', $context)) {
             return;
-        }
-
-        // Warn teacher when autogenerate is active but AI is not available.
-        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
-        if ($aifconfig && !empty($aifconfig->autogenerate)) {
-            $aiunavailable = self::get_student_unavailability_reason($context) !== null
-                || !self::is_ai_active_for_context($context);
-            if ($aiunavailable) {
-                $html = $OUTPUT->notification(
-                    get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
-                    \core\output\notification::NOTIFY_WARNING
-                );
-                $hook->add_html($html);
-            }
         }
 
         // Check if there are pending adhoc tasks for this assignment.
@@ -180,49 +158,111 @@ class hook_callbacks {
     }
 
     /**
-     * Get the reason why the AI backend is unavailable for a student.
+     * Render the local_ai_manager infobox on the edit submission page.
      *
-     * Delegates to the ai_request_provider which checks availability for the
-     * configured backend. Returns the specific error message from the AI
-     * Manager (e.g. "purpose not configured", "quota reached") rather than
-     * a generic message.
+     * Shows the data sharing notice ("entered data will be sent to an external AI system")
+     * so students are aware before typing their submission.
      *
+     * @param \core\hook\output\before_footer_html_generation $hook The hook instance.
      * @param \context $context The module context.
-     * @return string|null The unavailability reason, or null if AI is available.
      */
-    private static function get_student_unavailability_reason(\context $context): ?string {
-        try {
-            $provider = \core\di::get(\assignfeedback_aif\local\ai_request_provider::class);
-            return $provider->get_unavailability_reason('feedback', $context->id);
-        } catch (\Exception $e) {
-            return get_string('ainavailable', 'assignfeedback_aif');
+    private static function render_submission_infobox(
+        \core\hook\output\before_footer_html_generation $hook,
+        \context $context
+    ): void {
+        global $PAGE, $USER;
+
+        if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
+            return;
         }
+        if (!class_exists('\local_ai_manager\ai_manager_utils')) {
+            return;
+        }
+
+        $aiconfig = \local_ai_manager\ai_manager_utils::get_ai_config($USER, $context->id, null, ['feedback']);
+        $status = $aiconfig['availability']['available'] ?? '';
+        if ($status !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
+            return;
+        }
+
+        $hook->add_html('<div data-aif="submission-infobox"></div>');
+        $PAGE->requires->js_call_amd(
+            'local_ai_manager/infobox',
+            'renderInfoBox',
+            ['assignfeedback_aif', $USER->id, '[data-aif="submission-infobox"]', ['feedback']]
+        );
     }
 
     /**
-     * Check if AI is active for the given module context via block_ai_control.
+     * Get the AI notice HTML for a student on the submission page.
      *
-     * Used for teacher warnings only, since teachers are exempt from
-     * block_ai_control restrictions in the ai_manager hook chain.
+     * Uses get_ai_config from local_ai_manager to determine the availability
+     * status and returns the appropriate notification:
+     * - available: data sharing info notice
+     * - disabled: warning with the errormessage from ai_manager
+     * - hidden: null (no notice, student should not know about AI)
      *
-     * @param \context $context The module context to check.
-     * @return bool True if AI is active, false otherwise.
+     * Falls back to the ai_request_provider for the core_ai_subsystem backend.
+     *
+     * @param \context $context The module context.
+     * @return string|null The notification HTML, or null if nothing should be shown.
      */
-    private static function is_ai_active_for_context(\context $context): bool {
-        if (!class_exists(\block_ai_control\local\aiconfig::class)) {
-            return true;
+    private static function get_student_ai_notice(\context $context): ?string {
+        global $OUTPUT, $USER;
+
+        $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
+
+        if ($backend === 'local_ai_manager' && class_exists('\local_ai_manager\ai_manager_utils')) {
+            $aiconfig = \local_ai_manager\ai_manager_utils::get_ai_config($USER, $context->id, null, ['feedback']);
+
+            // Check general availability first.
+            $generalstatus = $aiconfig['availability']['available'] ?? '';
+            if ($generalstatus === \local_ai_manager\ai_manager_utils::AVAILABILITY_HIDDEN) {
+                return null;
+            }
+            if ($generalstatus !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
+                $message = $aiconfig['availability']['errormessage']
+                    ?: get_string('ainavailable', 'assignfeedback_aif');
+                return $OUTPUT->notification($message, \core\output\notification::NOTIFY_WARNING);
+            }
+
+            // General is available — check purpose-specific availability for 'feedback'.
+            foreach ($aiconfig['purposes'] as $purposeconfig) {
+                if ($purposeconfig['purpose'] !== 'feedback') {
+                    continue;
+                }
+                if ($purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_HIDDEN) {
+                    return null;
+                }
+                if ($purposeconfig['available'] !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
+                    $message = $purposeconfig['errormessage']
+                        ?: get_string('ainavailable', 'assignfeedback_aif');
+                    return $OUTPUT->notification($message, \core\output\notification::NOTIFY_WARNING);
+                }
+                break;
+            }
+
+            // AI is available: show data sharing notice.
+            return $OUTPUT->notification(
+                get_string('studentsubmissionainotice', 'assignfeedback_aif'),
+                \core\output\notification::NOTIFY_INFO
+            );
         }
 
-        $coursecontext = $context->get_course_context(false);
-        if (!$coursecontext) {
-            return false;
-        }
-
+        // Fallback for core_ai_subsystem backend.
         try {
-            $aiconfig = new \block_ai_control\local\aiconfig($coursecontext->id);
-            return $aiconfig->record_exists() && $aiconfig->is_enabled();
+            $provider = \core\di::get(\assignfeedback_aif\local\ai_request_provider::class);
+            $reason = $provider->get_unavailability_reason('feedback', $context->id);
         } catch (\Exception $e) {
-            return false;
+            $reason = get_string('ainavailable', 'assignfeedback_aif');
         }
+
+        if ($reason === null) {
+            return $OUTPUT->notification(
+                get_string('studentsubmissionainotice', 'assignfeedback_aif'),
+                \core\output\notification::NOTIFY_INFO
+            );
+        }
+        return $OUTPUT->notification($reason, \core\output\notification::NOTIFY_WARNING);
     }
 }
