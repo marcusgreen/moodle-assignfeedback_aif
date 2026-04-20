@@ -95,18 +95,21 @@ final class hook_callbacks_test extends \advanced_testcase {
             'Student should see data sharing notice when AI is available'
         );
         $this->assertStringNotContainsString(
-            get_string('aicontrolinactive_student', 'assignfeedback_aif'),
+            get_string('ainavailable', 'assignfeedback_aif'),
             $html,
-            'Student should NOT see AI inactive notice when AI is available'
+            'Student should NOT see unavailability message when AI is available'
         );
     }
 
     /**
-     * Test student sees AI inactive notice when autogenerate is on but AI is not available.
+     * Test student sees AI unavailability reason when autogenerate is on but AI is not available.
+     *
+     * When AI is unavailable, the student should see the actual error message from the
+     * AI backend (via ai_request_provider) rather than a generic message.
      *
      * @covers ::before_footer
      */
-    public function test_student_sees_inactive_notice_when_ai_unavailable(): void {
+    public function test_student_sees_unavailability_reason_when_ai_unavailable(): void {
         $this->resetAfterTest();
 
         $env = $this->create_test_environment();
@@ -117,15 +120,17 @@ final class hook_callbacks_test extends \advanced_testcase {
 
         $html = $this->dispatch_before_footer($env->cm, $env->student);
 
-        $this->assertStringContainsString(
-            get_string('aicontrolinactive_student', 'assignfeedback_aif'),
-            $html,
-            'Student should see AI inactive notice when AI is not available'
-        );
+        // Student should NOT see the data sharing notice (AI is unavailable).
         $this->assertStringNotContainsString(
             get_string('studentsubmissionainotice', 'assignfeedback_aif'),
             $html,
             'Student should NOT see data sharing notice when AI is not available'
+        );
+
+        // Student should see some notification (the AI backend's actual error message).
+        $this->assertNotEmpty(
+            $html,
+            'Student should see an unavailability notification when AI is not available'
         );
     }
 
@@ -146,9 +151,9 @@ final class hook_callbacks_test extends \advanced_testcase {
             get_string('studentsubmissionainotice', 'assignfeedback_aif'),
             $html
         );
-        $this->assertStringNotContainsString(
-            get_string('aicontrolinactive_student', 'assignfeedback_aif'),
-            $html
+        $this->assertEmpty(
+            $html,
+            'No notification should be shown when autogenerate is off'
         );
     }
 
@@ -250,11 +255,11 @@ final class hook_callbacks_test extends \advanced_testcase {
     /**
      * Set up local_ai_manager infrastructure so that AI is available/unavailable for a user.
      *
+     * Sets the plugin backend to local_ai_manager.
      * When $available is true, configures tenant, capability, tool instance and purpose
      * mapping so that get_ai_config returns 'feedback' as available.
      * When $available is false with ai_manager installed, the default unconfigured state
-     * already results in unavailability. Without ai_manager, is_ai_available_for_user
-     * returns false natively.
+     * already results in unavailability.
      *
      * @param \stdClass $user The user to configure AI availability for.
      * @param bool $available Whether AI should be reported as available.
@@ -266,6 +271,9 @@ final class hook_callbacks_test extends \advanced_testcase {
             }
             return;
         }
+
+        // Use local_ai_manager backend so the provider delegates to the AI Manager.
+        set_config('backend', 'local_ai_manager', 'assignfeedback_aif');
 
         if (!$available) {
             // Default state: no config means AI is not available.

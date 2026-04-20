@@ -73,6 +73,8 @@ class hook_callbacks {
      * students need to be warned about data being sent to AI.
      *
      * For teachers on the grading overview: shows a spinner when adhoc tasks are pending.
+     * Also warns teachers when autogenerate is active but AI is not enabled via
+     * block_ai_control, so students cannot receive AI feedback.
      * For students on the submission page: shows a data sharing notice when autogenerate
      * is enabled, or an info notice when autogenerate is active but AI is not enabled.
      *
@@ -100,7 +102,8 @@ class hook_callbacks {
         if ($PAGE->pagetype === 'mod-assign-view' && !has_capability('mod/assign:grade', $context)) {
             $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
             if ($aifconfig && !empty($aifconfig->autogenerate)) {
-                if (self::is_ai_available_for_user($USER, $context)) {
+                $unavailabilityreason = self::get_student_unavailability_reason($context);
+                if ($unavailabilityreason === null) {
                     // AI is available: show normal data sharing notice.
                     $html = $OUTPUT->notification(
                         get_string('studentsubmissionainotice', 'assignfeedback_aif'),
@@ -108,9 +111,9 @@ class hook_callbacks {
                     );
                     $hook->add_html($html);
                 } else {
-                    // AI is not available: inform student that AI feedback is not active.
+                    // AI is not available: show the actual reason from the AI backend.
                     $html = $OUTPUT->notification(
-                        get_string('aicontrolinactive_student', 'assignfeedback_aif'),
+                        $unavailabilityreason,
                         \core\output\notification::NOTIFY_INFO
                     );
                     $hook->add_html($html);
@@ -128,14 +131,18 @@ class hook_callbacks {
             return;
         }
 
-        // Teacher warning: autogenerate is on but AI is not available.
+        // Warn teacher when autogenerate is active but AI is not available.
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
-        if ($aifconfig && !empty($aifconfig->autogenerate) && !self::is_ai_available_for_user($USER, $context)) {
-            $html = $OUTPUT->notification(
-                get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
-                \core\output\notification::NOTIFY_WARNING
-            );
-            $hook->add_html($html);
+        if ($aifconfig && !empty($aifconfig->autogenerate)) {
+            $aiunavailable = self::get_student_unavailability_reason($context) !== null
+                || !self::is_ai_active_for_context($context);
+            if ($aiunavailable) {
+                $html = $OUTPUT->notification(
+                    get_string('aicontrolinactive_teacher', 'assignfeedback_aif'),
+                    \core\output\notification::NOTIFY_WARNING
+                );
+                $hook->add_html($html);
+            }
         }
 
         // Check if there are pending adhoc tasks for this assignment.
@@ -155,7 +162,7 @@ class hook_callbacks {
         }
 
         // Skip if view_summary() already rendered a spinner for this page.
-        if (output_helper::is_spinner_rendered()) {
+        if (\assign_feedback_aif::is_spinner_rendered()) {
             return;
         }
 
@@ -173,37 +180,49 @@ class hook_callbacks {
     }
 
     /**
-     * Check if AI feedback is available for a user via local_ai_manager.
+     * Get the reason why the AI backend is unavailable for a student.
      *
-     * Uses the full ai_manager availability stack which evaluates tenant config,
-     * purpose configuration, and quotas.
+     * Delegates to the ai_request_provider which checks availability for the
+     * configured backend. Returns the specific error message from the AI
+     * Manager (e.g. "purpose not configured", "quota reached") rather than
+     * a generic message.
      *
-     * @param \stdClass $user The user to check availability for.
      * @param \context $context The module context.
-     * @return bool True if the 'feedback' purpose is available for the user.
+     * @return string|null The unavailability reason, or null if AI is available.
      */
-    private static function is_ai_available_for_user(\stdClass $user, \context $context): bool {
-        if (!class_exists(\local_ai_manager\ai_manager_utils::class)) {
+    private static function get_student_unavailability_reason(\context $context): ?string {
+        try {
+            $provider = \core\di::get(\assignfeedback_aif\local\ai_request_provider::class);
+            return $provider->get_unavailability_reason('feedback', $context->id);
+        } catch (\Exception $e) {
+            return get_string('ainavailable', 'assignfeedback_aif');
+        }
+    }
+
+    /**
+     * Check if AI is active for the given module context via block_ai_control.
+     *
+     * Used for teacher warnings only, since teachers are exempt from
+     * block_ai_control restrictions in the ai_manager hook chain.
+     *
+     * @param \context $context The module context to check.
+     * @return bool True if AI is active, false otherwise.
+     */
+    private static function is_ai_active_for_context(\context $context): bool {
+        if (!class_exists(\block_ai_control\local\aiconfig::class)) {
+            return true;
+        }
+
+        $coursecontext = $context->get_course_context(false);
+        if (!$coursecontext) {
             return false;
         }
 
-        $aiconfig = \local_ai_manager\ai_manager_utils::get_ai_config($user, $context->id, null, ['feedback']);
-
-        // General availability must be 'available'.
-        if ($aiconfig['availability']['available'] !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
+        try {
+            $aiconfig = new \block_ai_control\local\aiconfig($coursecontext->id);
+            return $aiconfig->record_exists() && $aiconfig->is_enabled();
+        } catch (\Exception $e) {
             return false;
         }
-
-        // The 'feedback' purpose must be 'available'.
-        foreach ($aiconfig['purposes'] as $purposeconfig) {
-            if (
-                $purposeconfig['purpose'] === 'feedback'
-                    && $purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
-            ) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

@@ -68,6 +68,9 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
         $defaultprompt = get_config('assignfeedback_aif', 'prompt');
 
+        // Local ai_manager infobox (data sharing notice).
+        \assignfeedback_aif\local\output_helper::render_ai_manager_infobox($mform);
+
         $mform->addElement(
             'textarea',
             'assignfeedback_aif_prompt',

@@ -14,3 +14,9 @@
     overflow-x: auto;
     max-width: 100%;
 }
+
+/* Allow stored progress bar text to wrap and show full error messages. */
+.progressbar_container.stored-progress-bar > div > div > div {
+    text-overflow: inherit;
+    white-space: break-spaces;
+}

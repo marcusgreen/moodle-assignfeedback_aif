@@ -25,7 +25,6 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['aicontrolinactive_student'] = 'Sie können Ihre Dateien für diese Aufgabe hochladen, aber KI-Feedback ist derzeit nicht verfügbar. Ihre Lehrkraft hat die KI-Funktion für diesen Kurs noch nicht aktiviert.';
 $string['aicontrolinactive_teacher'] = 'Die automatische KI-Feedback-Generierung ist für diese Aufgabe aktiviert, aber die KI ist derzeit im KI-Kontrollzentrum nicht freigeschaltet. Lernende erhalten kein KI-Feedback, bis Sie die KI für diesen Kurs aktivieren.';
 $string['aif:viewstatus'] = 'Status der KI-Feedback-Generierung anzeigen';
 $string['ainavailable'] = 'KI-Backend ist für diesen Zweck nicht verfügbar';
@@ -36,7 +35,7 @@ $string['analysisskippedfiles'] = 'Dateien, die nicht analysiert werden können 
 $string['autogenerate'] = 'Feedback bei Abgabe automatisch generieren';
 $string['autogenerate_help'] = 'Wenn aktiviert, wird KI-Feedback automatisch generiert, wenn Lernende ihre Aufgabe abgeben. Die Feedback-Generierung läuft als Hintergrundaufgabe und kann einige Minuten dauern.<br><br><strong>Übungsmodus:</strong> Wenn der Bewertungsworkflow <strong>deaktiviert</strong> ist, sehen Lernende das KI-Feedback sofort nach der Generierung ohne Überprüfung durch die Lehrkraft. Ein separater Hinweis zeigt an, dass das Feedback nicht überprüft wurde.<br><br><strong>Lehrkraft-geprüfter Modus:</strong> Wenn der Bewertungsworkflow <strong>aktiviert</strong> ist, sehen Lernende das KI-Feedback erst, nachdem die Lehrkraft die Bewertung freigegeben hat. So können Lehrkräfte das Feedback vor der Anzeige überprüfen und bearbeiten.';
 $string['backends'] = 'KI-Backend-System';
-$string['backends_text'] = 'Das Core-KI-System wurde mit Moodle 4.5 eingeführt. Der lokale KI-Manager bietet erweiterte Funktionen wie Nutzungskontingente, rollenbasierte Konfiguration und zweckspezifische KI-Werkzeuge.';
+$string['backends_text'] = 'Das Core-KI-System wurde mit Moodle 4.5 eingeführt. Local AI manager bietet erweiterte Funktionen wie Nutzungskontingente, rollenbasierte Konfiguration und zweckspezifische KI-Werkzeuge.';
 $string['batchdeletefeedbackcomplete'] = 'KI-Feedback wurde für die ausgewählten Lernenden gelöscht.';
 $string['batchoperationconfirmdeletefeedbackai'] = 'KI-Feedback für alle ausgewählten Nutzer/innen löschen?';
 $string['batchoperationconfirmgeneratefeedbackai'] = 'KI-Feedback für alle ausgewählten Nutzer/innen generieren?';
@@ -73,7 +72,7 @@ $string['file'] = 'Prompt-Datei';
 $string['file_help'] = 'Laden Sie eine Textdatei mit dem Prompt für die KI-Feedback-Generierung hoch. Der Dateiinhalt wird anstelle des obigen Textfeldes als Prompt verwendet.';
 $string['generatefeedbackai'] = 'KI-Feedback generieren';
 $string['introattachmentsheading'] = '[Zusätzliche Referenzdateien der Lehrkraft]';
-$string['localaimanager'] = 'Lokaler KI-Manager';
+$string['localaimanager'] = 'Local AI manager';
 $string['pluginname'] = 'KI-gestütztes Feedback';
 $string['pluginname_userfaced'] = 'Feedbacktyp „KI-gestütztes Feedback" in der Aufgabenaktivität';
 $string['practicedisclaimer'] = 'Übungsmodus-Haftungsausschluss';
@@ -93,7 +92,7 @@ $string['prompt_text'] = 'Der Standard-Prompt, der einer neuen Instanz hinzugef�
 $string['prompttemplate'] = 'Prompt-Vorlage';
 $string['prompttemplate_text'] = 'Die strukturierte Vorlage für den Aufbau des KI-Prompts. Verwenden Sie Platzhalter: {{submission}}, {{rubric_section}}, {{rubric}}, {{prompt}}, {{assignmentname}}, {{description_section}}, {{instructions_section}}, {{description}}, {{activityinstructions}}, {{language}}. Abschnittsplatzhalter ({{description_section}}, {{instructions_section}}, {{rubric_section}}) enthalten den vollständigen Abschnitt mit Überschrift und sind leer, wenn kein Inhalt vorhanden ist.';
 $string['purposeplacedescription_feedback'] = 'KI-Feedback zu Abgaben von Lernenden generieren';
-$string['purposeplacedescription_itt'] = 'Eingereichte Dokumente und Bilder für KI-Feedback analysieren';
+$string['purposeplacedescription_itt'] = 'Eingereichte Dokumente und Bilder für KI-Feedback in Text konvertieren';
 $string['regenerate'] = 'KI-Feedback neu generieren';
 $string['regenerate_queued'] = 'Die Neugenerierung des KI-Feedbacks wurde in die Warteschlange eingereiht. Bitte warten Sie, bis die Hintergrundaufgabe abgeschlossen ist.';
 $string['regenerating'] = 'Wird neu generiert...';

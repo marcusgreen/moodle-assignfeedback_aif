@@ -25,7 +25,6 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['aicontrolinactive_student'] = 'You can upload your files for this assignment, but AI feedback is currently not available. Your teacher has not yet enabled the AI feature for this course.';
 $string['aicontrolinactive_teacher'] = 'Automatic AI feedback generation is enabled for this assignment, but AI is currently not activated in the AI Control Center. Students will not receive AI feedback until you activate AI for this course.';
 $string['aif:viewstatus'] = 'View AI feedback generation status';
 $string['ainavailable'] = 'AI backend is not available for this purpose';
@@ -95,7 +94,7 @@ $string['prompt_text'] = 'The default prompt that will be added to a new instanc
 $string['prompttemplate'] = 'Prompt template';
 $string['prompttemplate_text'] = 'The structured template for building the AI prompt. Use placeholders: {{submission}}, {{rubric_section}}, {{rubric}}, {{prompt}}, {{assignmentname}}, {{description_section}}, {{instructions_section}}, {{description}}, {{activityinstructions}}, {{language}}. Section placeholders ({{description_section}}, {{instructions_section}}, {{rubric_section}}) include the full section with heading and are empty when no content exists. These will be replaced with actual values.';
 $string['purposeplacedescription_feedback'] = 'Generating AI feedback on student submissions';
-$string['purposeplacedescription_itt'] = 'Analysing submitted documents and images for AI feedback';
+$string['purposeplacedescription_itt'] = 'Converting submitted documents and images to text for AI feedback';
 $string['regenerate'] = 'Regenerate AI feedback';
 $string['regenerate_queued'] = 'AI feedback regeneration has been queued. Please wait for the background task to complete.';
 $string['regenerating'] = 'Regenerating...';

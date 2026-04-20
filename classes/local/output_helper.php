@@ -65,6 +65,28 @@ class output_helper {
     }
 
     /**
+     * Render local_ai_manager infobox (data sharing notice) into a settings form.
+     *
+     * Only adds the infobox when the local_ai_manager backend is configured.
+     * Unlike render_ai_manager_widgets(), this does not include the user quota
+     * since the settings form does not trigger AI requests.
+     *
+     * @param \MoodleQuickForm $mform The form to add the infobox to.
+     */
+    public static function render_ai_manager_infobox(\MoodleQuickForm $mform): void {
+        if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
+            return;
+        }
+        global $PAGE, $USER;
+        $mform->addElement('html', '<div data-aif="aiinfo-settings"></div>');
+        $PAGE->requires->js_call_amd(
+            'local_ai_manager/infobox',
+            'renderInfoBox',
+            ['assignfeedback_aif', $USER->id, '[data-aif="aiinfo-settings"]', ['feedback', 'itt']]
+        );
+    }
+
+    /**
      * Render an error notification with a retry button.
      *
      * Used in both view_summary() and view() when feedback generation failed.
