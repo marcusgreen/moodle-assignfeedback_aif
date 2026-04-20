@@ -255,7 +255,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         // Convert markdown to HTML so it can be displayed and edited in the TinyMCE editor.
         if (class_exists('\local_ai_manager\base_purpose')) {
             $purpose = new \local_ai_manager\base_purpose();
-            $aifeedbackhtml = "xxxx".$purpose->format_ai_markdown_output($aifeedback, ['filter' => false]);
+            $aifeedbackhtml = "xxxx" . $purpose->format_ai_markdown_output($aifeedback, ['filter' => false]);
         } else {
             $aifeedbackhtml = format_text($aifeedback, FORMAT_MARKDOWN, ['filter' => false]);
         }
