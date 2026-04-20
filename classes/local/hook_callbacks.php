@@ -216,7 +216,7 @@ class hook_callbacks {
      * @return string|null The notification HTML, or null if nothing should be shown.
      */
     private static function get_student_ai_notice(\context $context): ?string {
-        global $OUTPUT, $USER;
+        global $OUTPUT, $USER, $PAGE;
 
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
 
@@ -250,11 +250,18 @@ class hook_callbacks {
                 break;
             }
 
-            // AI is available: show data sharing notice.
-            return $OUTPUT->notification(
-                get_string('studentsubmissionainotice', 'assignfeedback_aif'),
-                \core\output\notification::NOTIFY_INFO
+            // AI is available: show data sharing notice via AI manager infobox widget.
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/infobox',
+                'renderInfoBox',
+                ['assignfeedback_aif', $USER->id, '[data-aif="student-ai-notice"]', ['feedback']]
             );
+            $PAGE->requires->js_call_amd(
+                'local_ai_manager/userquota',
+                'renderUserQuota',
+                ['[data-aif="aiuserquota"]', ['singleprompt', 'translate']]
+            );
+            return '<div data-aif="student-ai-notice"></div><div data-aif="aiuserquota"></div>';
         }
 
         // Fallback for core_ai_subsystem backend.

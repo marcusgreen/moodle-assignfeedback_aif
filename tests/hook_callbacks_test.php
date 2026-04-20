@@ -93,9 +93,9 @@ final class hook_callbacks_test extends \advanced_testcase {
         $html = $this->dispatch_before_footer($env->cm, $env->student);
 
         $this->assertStringContainsString(
-            get_string('studentsubmissionainotice', 'assignfeedback_aif'),
+            'data-aif="student-ai-notice"',
             $html,
-            'Student should see data sharing notice when AI is available'
+            'Student should see AI manager infobox widget when AI is available'
         );
         $this->assertStringNotContainsString(
             get_string('ainavailable', 'assignfeedback_aif'),

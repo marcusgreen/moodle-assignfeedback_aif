@@ -65,7 +65,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return void
      */
     public function get_settings(MoodleQuickForm $mform): void {
-        global $DB;
+        global $DB, $PAGE, $USER;
 
         $defaultprompt = get_config('assignfeedback_aif', 'prompt');
 
@@ -77,7 +77,11 @@ class assign_feedback_aif extends assign_feedback_plugin {
         );
         $mform->setDefault('assignfeedback_aif_prompt', $defaultprompt);
         $mform->setType('assignfeedback_aif_prompt', PARAM_RAW);
-
+        $PAGE->requires->js_call_amd(
+            'local_ai_manager/infobox',
+            'renderInfoBox',
+            ['local_myplugin', $USER->id, '[data-myplugin="aiinfo"]', ['singleprompt', 'translate']]
+        );
         // Expert mode template button (only shown when admin setting is enabled).
         if (get_config('assignfeedback_aif', 'enableexpertmode')) {
             $mform->addElement(
