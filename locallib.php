@@ -65,11 +65,9 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return void
      */
     public function get_settings(MoodleQuickForm $mform): void {
+        global $DB;
 
         $defaultprompt = get_config('assignfeedback_aif', 'prompt');
-
-        // Local ai_manager infobox (data sharing notice).
-        \assignfeedback_aif\local\output_helper::render_ai_manager_infobox($mform);
 
         $mform->addElement(
             'textarea',
@@ -125,17 +123,19 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $mform->hideIf('assignfeedback_aif_aicontrolnotice', 'assignfeedback_aif_autogenerate', 'notchecked');
         }
 
-        // Show data sharing notice from AI Manager.
-        $mform->addElement(
-            'static',
-            'assignfeedback_aif_datasharingnotice',
-            '',
-            \html_writer::div(
-                get_string('aiisbeingused', 'local_ai_manager'),
-                'alert alert-warning'
-            )
-        );
-        $mform->hideIf('assignfeedback_aif_datasharingnotice', 'assignfeedback_aif_enabled', 'notchecked');
+        // Show data sharing notice from AI Manager (only when the plugin is installed).
+        if (\core_plugin_manager::instance()->get_plugin_info('local_ai_manager')) {
+            $mform->addElement(
+                'static',
+                'assignfeedback_aif_datasharingnotice',
+                '',
+                \html_writer::div(
+                    get_string('aiisbeingused', 'local_ai_manager'),
+                    'alert alert-warning'
+                )
+            );
+            $mform->hideIf('assignfeedback_aif_datasharingnotice', 'assignfeedback_aif_enabled', 'notchecked');
+        }
 
         $mform->addElement(
             'filemanager',
@@ -154,7 +154,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
         // Read settings from the plugin's own table rather than assign_plugin_config
         // because the AIF config record stores additional fields (autogenerate, prompt)
         // that go beyond what the base class get_config()/set_config() supports.
-        global $DB;
 
         $instance = $this->assignment->get_default_instance();
         if ($instance && !empty($instance->id)) {

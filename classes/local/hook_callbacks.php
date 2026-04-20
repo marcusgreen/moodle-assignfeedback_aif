@@ -104,6 +104,14 @@ class hook_callbacks {
                 $action = optional_param('action', '', PARAM_ALPHA);
                 if ($action === 'editsubmission') {
                     self::render_submission_infobox($hook, $context);
+                } else if (!$DB->record_exists('assign_submission', [
+                    'assignment' => (int) $cm->instance,
+                    'userid' => $USER->id,
+                    'status' => 'submitted',
+                    'latest' => 1,
+                ])) {
+                    // Student has no submission yet — show the AI manager infobox.
+                    self::render_submission_infobox($hook, $context);
                 } else {
                     $notice = self::get_student_ai_notice($context);
                     if ($notice !== null) {

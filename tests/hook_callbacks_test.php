@@ -84,6 +84,9 @@ final class hook_callbacks_test extends \advanced_testcase {
         $env = $this->create_test_environment();
         $this->create_aif_config($env, 'Test prompt', 1);
 
+        // Student must have a submission so the notice path is taken (not the infobox path).
+        $this->create_and_submit($env, 'My submission text');
+
         // Set up real ai_manager infrastructure so AI is available for the student.
         $this->setup_ai_availability($env->student, true);
 
@@ -150,6 +153,9 @@ final class hook_callbacks_test extends \advanced_testcase {
         $env = $this->create_test_environment();
         $this->create_aif_config($env, 'Test prompt', 1);
 
+        // Student must have a submission so the notice path is taken (not the infobox path).
+        $this->create_and_submit($env, 'My submission text');
+
         // Set up AI as available first, then lock the user to trigger 'disabled' state.
         $this->setup_ai_availability($env->student, true);
 
@@ -176,6 +182,33 @@ final class hook_callbacks_test extends \advanced_testcase {
             get_string('error_http403blocked', 'local_ai_manager'),
             $html,
             'Warning should contain the errormessage from ai_manager'
+        );
+    }
+
+    /**
+     * Test student without submission sees infobox when AI is available.
+     *
+     * When a student has not yet submitted and AI is available, the AI manager
+     * infobox widget should be rendered instead of the plain notification.
+     *
+     * @covers ::before_footer
+     */
+    public function test_student_without_submission_sees_infobox(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_aif_config($env, 'Test prompt', 1);
+
+        // Set up real ai_manager infrastructure so AI is available for the student.
+        $this->setup_ai_availability($env->student, true);
+
+        // No submission created — student should see the infobox container.
+        $html = $this->dispatch_before_footer($env->cm, $env->student);
+
+        $this->assertStringContainsString(
+            'data-aif="submission-infobox"',
+            $html,
+            'Student without submission should see the AI manager infobox'
         );
     }
 

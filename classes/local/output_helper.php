@@ -49,6 +49,9 @@ class output_helper {
         if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
             return;
         }
+        if (!class_exists('\local_ai_manager\ai_manager_utils')) {
+            return;
+        }
         global $PAGE;
         $mform->addElement('html', '<div data-aif="aiinfo"></div>');
         $mform->addElement('html', '<div data-aif="aiuserquota" class="mb-2"></div>');
@@ -75,6 +78,9 @@ class output_helper {
      */
     public static function render_ai_manager_infobox(\MoodleQuickForm $mform): void {
         if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
+            return;
+        }
+        if (!class_exists('\local_ai_manager\ai_manager_utils')) {
             return;
         }
         global $PAGE, $USER;
@@ -127,6 +133,9 @@ class output_helper {
      */
     public static function render_warningbox(): string {
         if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
+            return '';
+        }
+        if (!class_exists('\local_ai_manager\ai_manager_utils')) {
             return '';
         }
 
