@@ -81,7 +81,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $PAGE->requires->js_call_amd(
             'local_ai_manager/infobox',
             'renderInfoBox',
-            ['local_myplugin', $USER->id, '[data-myplugin="aiinfo"]', ['singleprompt', 'translate']]
+            ['assignfeedback_aif', $USER->id, '[data-assignfeedback_aif_element="infobox"]', ['feedback', 'itt']]
         );
         // Expert mode template button (only shown when admin setting is enabled).
         if (get_config('assignfeedback_aif', 'enableexpertmode')) {
@@ -116,6 +116,21 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
         }
 
+        // Show data sharing notice from AI Manager (only when the plugin is installed).
+        if (\core_plugin_manager::instance()->get_plugin_info('local_ai_manager')) {
+            $mform->addElement(
+                'static',
+                'assignfeedback_aif_datasharingnotice',
+                '',
+                \html_writer::div(
+                    '',
+                    '',
+                    ['data-assignfeedback_aif_element' => 'infobox']
+                )
+            );
+            $mform->hideIf('assignfeedback_aif_datasharingnotice', 'assignfeedback_aif_enabled', 'notchecked');
+        }
+
         // Auto-generate on submission checkbox.
         $mform->addElement(
             'advcheckbox',
@@ -143,20 +158,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
             );
             $mform->hideIf('assignfeedback_aif_aicontrolnotice', 'assignfeedback_aif_enabled', 'notchecked');
             $mform->hideIf('assignfeedback_aif_aicontrolnotice', 'assignfeedback_aif_autogenerate', 'notchecked');
-        }
-
-        // Show data sharing notice from AI Manager (only when the plugin is installed).
-        if (\core_plugin_manager::instance()->get_plugin_info('local_ai_manager')) {
-            $mform->addElement(
-                'static',
-                'assignfeedback_aif_datasharingnotice',
-                '',
-                \html_writer::div(
-                    get_string('aiisbeingused', 'local_ai_manager'),
-                    'alert alert-warning'
-                )
-            );
-            $mform->hideIf('assignfeedback_aif_datasharingnotice', 'assignfeedback_aif_enabled', 'notchecked');
         }
 
         $mform->addHelpButton('assignfeedback_aif_prompt', 'prompt', 'assignfeedback_aif');
