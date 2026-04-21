@@ -199,7 +199,7 @@ class hook_callbacks {
         $PAGE->requires->js_call_amd(
             'local_ai_manager/infobox',
             'renderInfoBox',
-            ['assignfeedback_aif', $USER->id, '[data-aif="submission-infobox"]', ['feedback']]
+            ['assignfeedback_aif', $USER->id, '[data-aif="submission-infobox"]', ['feedback', 'itt']]
         );
     }
 
@@ -256,12 +256,12 @@ class hook_callbacks {
             $PAGE->requires->js_call_amd(
                 'local_ai_manager/infobox',
                 'renderInfoBox',
-                ['assignfeedback_aif', $USER->id, '[data-aif="student-ai-notice"]', ['feedback']]
+                ['assignfeedback_aif', $USER->id, '[data-aif="student-ai-notice"]', ['feedback', 'itt']]
             );
             $PAGE->requires->js_call_amd(
                 'local_ai_manager/userquota',
                 'renderUserQuota',
-                ['[data-aif="aiuserquota"]', ['singleprompt', 'translate']]
+                ['[data-aif="aiuserquota"]', ['feedback', 'itt']]
             );
             return '<div data-aif="student-ai-notice"></div><div data-aif="aiuserquota"></div>';
         }
