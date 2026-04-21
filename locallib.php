@@ -144,11 +144,15 @@ class assign_feedback_aif extends assign_feedback_plugin {
         // Prompt file upload (only shown when admin setting is enabled).
         if (get_config('assignfeedback_aif', 'enablepromptfile')) {
             $mform->addElement(
-                'filemanager',
-                'assignfeedback_aif_file',
-                get_string('file', 'assignfeedback_aif'),
-                ['maxfiles' => 1, 'maxfilesize' => '10MB']
-            );
+            'filemanager',
+            'assignfeedback_aif_file',
+            get_string('file', 'assignfeedback_aif'),
+            null,
+            [
+                'maxfiles' => 1,
+                'maxbytes' => 1024 * 1024 * 10,
+            ]
+        );
 
             $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
             $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
