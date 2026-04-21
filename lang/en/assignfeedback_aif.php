@@ -58,6 +58,8 @@ Note: Submitted files are analysed using AI image-to-text (ITT). Documents not d
 $string['enabledbydefault'] = 'Enabled by default';
 $string['enableexpertmode'] = 'Enable expert mode';
 $string['enableexpertmode_text'] = 'When enabled, shows an "Expert mode template" button in the assignment settings, allowing teachers to use the full prompt template with all placeholders directly.';
+$string['enablepromptfile'] = 'Enable prompt file upload';
+$string['enablepromptfile_text'] = 'When enabled, teachers can upload a text file as a prompt in the assignment settings.';
 $string['err_retrievingfeedback'] = 'Error retrieving feedback from AI tool: {$a}';
 $string['err_retrievingfeedback_checkconfig'] = 'Unable to retrieve feedback. AI system configuration might be wrong, please contact your administrator.';
 $string['erroremptysubmission'] = 'No analysable submission content found. The submission was either empty or all submitted files could not be converted.';

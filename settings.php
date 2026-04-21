@@ -63,6 +63,14 @@ $settings->add(new admin_setting_configcheckbox(
     0
 ));
 
+// Prompt file upload.
+$settings->add(new admin_setting_configcheckbox(
+    'assignfeedback_aif/enablepromptfile',
+    get_string('enablepromptfile', 'assignfeedback_aif'),
+    get_string('enablepromptfile_text', 'assignfeedback_aif'),
+    0
+));
+
 // Prompt template.
 // The default template is hardcoded here because it contains structural placeholders
 // that are not translatable. Admins customise this in the settings UI.
@@ -95,7 +103,7 @@ Format your response in strict Markdown:
 - Use "- " for bullet lists.
 - Always leave a blank line before and after headings, lists, and code/math blocks.
 - Use **bold** and *italic* for emphasis.
-- For math equations use LaTeX: inline with $$ ... $$ and display blocks with \[ ... \].
+- For all math equations use always LaTeX style: inline with $$ ... $$ and display blocks with \( ... \).
 
 === LANGUAGE ===
 Respond in {{language}}.';

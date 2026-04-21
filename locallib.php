@@ -141,19 +141,22 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $mform->hideIf('assignfeedback_aif_datasharingnotice', 'assignfeedback_aif_enabled', 'notchecked');
         }
 
-        $mform->addElement(
-            'filemanager',
-            'assignfeedback_aif_file',
-            get_string('file', 'assignfeedback_aif'),
-            ['maxfiles' => 1, 'maxfilesize' => '10MB']
-        );
+        // Prompt file upload (only shown when admin setting is enabled).
+        if (get_config('assignfeedback_aif', 'enablepromptfile')) {
+            $mform->addElement(
+                'filemanager',
+                'assignfeedback_aif_file',
+                get_string('file', 'assignfeedback_aif'),
+                ['maxfiles' => 1, 'maxfilesize' => '10MB']
+            );
+
+            $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
+            $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
+        }
 
         $mform->addHelpButton('assignfeedback_aif_prompt', 'prompt', 'assignfeedback_aif');
         // Disable prompt if AI assisted feedback plugin is disabled.
         $mform->hideIf('assignfeedback_aif_prompt', 'assignfeedback_aif_enabled', 'notchecked');
-
-        $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
-        $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
 
         // Read settings from the plugin's own table rather than assign_plugin_config
         // because the AIF config record stores additional fields (autogenerate, prompt)
