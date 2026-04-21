@@ -82,7 +82,7 @@ class process_feedback extends \core\task\scheduled_task {
         foreach ($byassignment as $assignmentid => $userids) {
             $task = new process_feedback_adhoc();
             $task->set_custom_data([
-                'assignment' => $assignmentid,
+                'assignment' => intval($assignmentid),
                 'users' => $userids,
                 'action' => 'generate',
                 // Audit trail: distinguishes scheduled-task triggers from manual/batch triggers.

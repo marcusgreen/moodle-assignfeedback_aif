@@ -81,9 +81,10 @@ class observer {
         // Duplicate protection: queue_adhoc_task($task, true) prevents duplicates when both
         // the onlinetext and file submission plugins fire submission_updated for the same student.
         // This works because the custom_data is identical for both events.
+        // CARE: Identical means, also parameter types need to be identical (int vs string!).
         $task = new process_feedback_adhoc();
         $task->set_custom_data([
-            'assignment' => $assignmentid,
+            'assignment' => intval($assignmentid),
             'users' => [$userid],
             'action' => 'generate',
             'triggeredby' => 'auto',

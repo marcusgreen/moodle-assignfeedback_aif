@@ -121,7 +121,7 @@ class retry_feedback extends external_api {
         $task = new process_feedback_adhoc();
         $uniqadhoctaskid = uniqid();
         $task->set_custom_data([
-            'assignment' => $params['assignmentid'],
+            'assignment' => intval($params['assignmentid']),
             'users' => [$params['userid']],
             'action' => 'generate',
             'triggeredby' => $triggeredby,
