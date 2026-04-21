@@ -35,6 +35,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
     /** @var string File area for AI feedback. */
     const FILEAREA = 'assignfeedback_aif_feedback';
+
     /**
      * Should return the name of this plugin type.
      *
@@ -98,6 +99,23 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $PAGE->requires->js_call_amd('assignfeedback_aif/expertmode', 'init', [$prompttemplate]);
         }
 
+        // Prompt file upload (only shown when admin setting is enabled).
+        if (get_config('assignfeedback_aif', 'enablepromptfile')) {
+            $mform->addElement(
+                'filemanager',
+                'assignfeedback_aif_file',
+                get_string('file', 'assignfeedback_aif'),
+                null,
+                [
+                    'maxfiles' => 1,
+                    'maxbytes' => 1024 * 1024 * 10,
+                ]
+            );
+
+            $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
+            $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
+        }
+
         // Auto-generate on submission checkbox.
         $mform->addElement(
             'advcheckbox',
@@ -141,23 +159,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $mform->hideIf('assignfeedback_aif_datasharingnotice', 'assignfeedback_aif_enabled', 'notchecked');
         }
 
-        // Prompt file upload (only shown when admin setting is enabled).
-        if (get_config('assignfeedback_aif', 'enablepromptfile')) {
-            $mform->addElement(
-            'filemanager',
-            'assignfeedback_aif_file',
-            get_string('file', 'assignfeedback_aif'),
-            null,
-            [
-                'maxfiles' => 1,
-                'maxbytes' => 1024 * 1024 * 10,
-            ]
-        );
-
-            $mform->addHelpButton('assignfeedback_aif_file', 'file', 'assignfeedback_aif');
-            $mform->hideIf('assignfeedback_aif_file', 'assignfeedback_aif_enabled', 'notchecked');
-        }
-
         $mform->addHelpButton('assignfeedback_aif_prompt', 'prompt', 'assignfeedback_aif');
         // Disable prompt if AI assisted feedback plugin is disabled.
         $mform->hideIf('assignfeedback_aif_prompt', 'assignfeedback_aif_enabled', 'notchecked');
@@ -175,6 +176,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             }
         }
     }
+
     /**
      * Has the AI feedback been modified?
      *
@@ -373,7 +375,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $data->assignfeedbackaifformat
         );
     }
-
 
     /**
      * Return a list of detailed batch grading operations supported by this plugin.
