@@ -63,12 +63,55 @@ $settings->add(new admin_setting_configcheckbox(
     0
 ));
 
+// Prompt file upload.
+$settings->add(new admin_setting_configcheckbox(
+    'assignfeedback_aif/enablepromptfile',
+    get_string('enablepromptfile', 'assignfeedback_aif'),
+    get_string('enablepromptfile_text', 'assignfeedback_aif'),
+    0
+));
+
 // Prompt template.
+// The default template is hardcoded here because it contains structural placeholders
+// that are not translatable. Admins customise this in the settings UI.
+$defaultprompttemplate = '=== ROLE ===
+You are an experienced teacher providing constructive feedback on student submissions.
+
+=== ASSIGNMENT ===
+{{assignmentname}}
+
+{{description_section}}
+
+{{instructions_section}}
+
+{{rubric_section}}
+
+=== TEACHER INSTRUCTIONS ===
+{{prompt}}
+
+=== STUDENT SUBMISSION ===
+{{submission}}
+
+=== OUTPUT INSTRUCTIONS ===
+Provide detailed, constructive feedback that helps the student improve.
+Focus on both strengths and areas for improvement.
+Be encouraging but honest.
+
+Format your response in strict Markdown:
+- Use ## for section headings.
+- Use "1. " for numbered lists (NOT "1)").
+- Use "- " for bullet lists.
+- Always leave a blank line before and after headings, lists, and code/math blocks.
+- Use **bold** and *italic* for emphasis.
+- For all math equations use always LaTeX style: inline with $$ ... $$ and display blocks with \( ... \).
+
+=== LANGUAGE ===
+Respond in {{language}}.';
 $settings->add(new admin_setting_configtextarea(
     'assignfeedback_aif/prompttemplate',
     get_string('prompttemplate', 'assignfeedback_aif'),
     get_string('prompttemplate_text', 'assignfeedback_aif'),
-    get_string('defaultprompttemplate', 'assignfeedback_aif'),
+    $defaultprompttemplate,
     PARAM_RAW,
     80,
     15

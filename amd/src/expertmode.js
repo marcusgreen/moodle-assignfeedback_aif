@@ -18,8 +18,8 @@
  *
  * When clicked, inserts the admin-configured prompt template into the prompt
  * textarea. The {{prompt}} placeholder is pre-replaced with the teacher's
- * current prompt text or a placeholder instruction. If the assignment does
- * not use rubrics, the {{rubric_section}} placeholder is replaced with an empty string.
+ * current prompt text or a placeholder instruction. The {{rubric_section}} placeholder
+ * is resolved server-side during prompt building, so it is left as-is in expert mode.
  *
  * @module     assignfeedback_aif/expertmode
  * @copyright  2026 ISB Bayern
@@ -29,14 +29,16 @@
 
 import {getString} from 'core/str';
 import Notification from 'core/notification';
-import Ajax from 'core/ajax';
 
 /**
  * Initialize the expert mode button.
  *
- * Loads the admin-configured prompt template via AJAX when the button is clicked.
+ * The prompt template is passed directly from PHP via js_call_amd args,
+ * avoiding an extra AJAX round-trip.
+ *
+ * @param {string} template The admin-configured prompt template.
  */
-export const init = () => {
+export const init = (template) => {
     const button = document.getElementById('id_assignfeedback_aif_expertmodebtn');
     const promptTextarea = document.getElementById('id_assignfeedback_aif_prompt');
 
@@ -51,18 +53,6 @@ export const init = () => {
 
     button.addEventListener('click', async(e) => {
         e.preventDefault();
-
-        let template;
-        try {
-            const result = await Ajax.call([{
-                methodname: 'assignfeedback_aif_get_expert_template',
-                args: {},
-            }])[0];
-            template = result.template;
-        } catch (error) {
-            Notification.exception(error);
-            return;
-        }
 
         const confirmMessage = await getString('expertmodeconfirm', 'assignfeedback_aif');
         const placeholder = await getString('expertmodepromptplaceholder', 'assignfeedback_aif');
@@ -82,7 +72,8 @@ export const init = () => {
  * Insert the template into the textarea with placeholder replacements.
  *
  * Replaces {{prompt}} with the teacher's current prompt text or a placeholder.
- * Resolves {{rubric_section}} client-side: kept as-is when rubrics are active, cleared otherwise.
+ * The {{rubric_section}} placeholder is left as-is because it is resolved
+ * server-side during prompt building based on the actual grading method.
  *
  * @param {HTMLTextAreaElement} textarea The prompt textarea element.
  * @param {string} template The template text to insert.
@@ -97,13 +88,6 @@ const insertTemplate = (textarea, template, placeholder) => {
         result = result.replace('{{prompt}}', currentPrompt);
     } else {
         result = result.replace('{{prompt}}', placeholder);
-    }
-
-    // Clear {{rubric_section}} if assignment does not use rubric grading.
-    const gradingMethodSelect = document.getElementById('id_advancedgradingmethod_submissions');
-    const hasRubric = gradingMethodSelect && gradingMethodSelect.value === 'rubric';
-    if (!hasRubric) {
-        result = result.replace(/\{\{rubric_section\}\}\n?\n?/g, '');
     }
 
     textarea.value = result;

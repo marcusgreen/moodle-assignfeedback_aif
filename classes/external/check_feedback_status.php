@@ -21,6 +21,8 @@ use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
 use core\context\module as context_module;
+use core\output\stored_progress_bar;
+use assignfeedback_aif\task\process_feedback_adhoc;
 
 /**
  * External function to check whether AI feedback exists for a submission.
@@ -74,6 +76,7 @@ class check_feedback_status extends external_api {
         $cm = get_coursemodule_from_instance('assign', $assignment->id, $assignment->course, false, MUST_EXIST);
         $context = context_module::instance($cm->id);
         self::validate_context($context);
+        require_capability('assignfeedback/aif:viewstatus', $context);
 
         if ($params['userid'] > 0) {
             // Per-user mode: check if feedback exists for a specific user.
@@ -105,9 +108,20 @@ class check_feedback_status extends external_api {
                 $feedbackhtml = format_text($record->feedback, $format, ['context' => $context]);
             }
 
+            // Look up stored_progress for a running adhoc task so the client can
+            // switch from simple existence polling to real progress polling.
+            $progressrecordid = 0;
+            if (!$exists) {
+                $progressrecordid = self::find_progress_record(
+                    $params['assignmentid'],
+                    $params['userid']
+                );
+            }
+
             return [
                 'feedbackexists' => $exists,
                 'feedbackhtml' => $feedbackhtml,
+                'progressrecordid' => $progressrecordid,
             ];
         }
 
@@ -116,20 +130,52 @@ class check_feedback_status extends external_api {
 
         $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
         $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
-        $pending = false;
+        $pendingorrunning = false;
         foreach ($tasks as $task) {
             $data = $task->get_custom_data();
             if (isset($data->assignment) && (int) $data->assignment === (int) $params['assignmentid']) {
-                $pending = true;
+                $pendingorrunning = true;
                 break;
             }
         }
 
         // The feedbackexists=true item means "done" (no more pending tasks).
         return [
-            'feedbackexists' => !$pending,
+            'feedbackexists' => !$pendingorrunning,
             'feedbackhtml' => '',
+            'progressrecordid' => 0,
         ];
+    }
+
+    /**
+     * Find the stored_progress record for a running adhoc task matching the given assignment and user.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @param int $userid The user ID.
+     * @return int The stored_progress record ID, or 0 if none found.
+     */
+    private static function find_progress_record(int $assignmentid, int $userid): int {
+        global $DB;
+
+        $taskclass = process_feedback_adhoc::class;
+        $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
+        foreach ($tasks as $task) {
+            $data = $task->get_custom_data();
+            if (
+                isset($data->assignment) && (int) $data->assignment === $assignmentid
+                && isset($data->users) && in_array($userid, (array) $data->users)
+            ) {
+                $idnumber = stored_progress_bar::convert_to_idnumber(
+                    $taskclass . '_' . $task->get_id()
+                );
+                $record = $DB->get_record('stored_progress', ['idnumber' => $idnumber]);
+                if ($record && (float) ($record->percentcompleted ?? 0) < 100) {
+                    return (int) $record->id;
+                }
+            }
+        }
+
+        return 0;
     }
 
     /**
@@ -145,6 +191,12 @@ class check_feedback_status extends external_api {
                 'The formatted feedback HTML (only for per-user mode)',
                 VALUE_DEFAULT,
                 ''
+            ),
+            'progressrecordid' => new external_value(
+                PARAM_INT,
+                'Stored progress record ID for a running task (0 if none)',
+                VALUE_DEFAULT,
+                0
             ),
         ]);
     }

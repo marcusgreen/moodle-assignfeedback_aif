@@ -81,9 +81,10 @@ class observer {
         // Duplicate protection: queue_adhoc_task($task, true) prevents duplicates when both
         // the onlinetext and file submission plugins fire submission_updated for the same student.
         // This works because the custom_data is identical for both events.
+        // CARE: Identical means, also parameter types need to be identical (int vs string!).
         $task = new process_feedback_adhoc();
         $task->set_custom_data([
-            'assignment' => $assignmentid,
+            'assignment' => intval($assignmentid),
             'users' => [$userid],
             'action' => 'generate',
             'triggeredby' => 'auto',
@@ -91,6 +92,10 @@ class observer {
         // Run as the submitting user so quota and availability checks are correct.
         $task->set_userid($userid);
         manager::queue_adhoc_task($task, true);
+
+        // Delete any existing AI feedback for this user so the student does not
+        // see stale feedback while the new generation is pending.
+        self::delete_existing_feedback($assignmentid, $userid);
 
         // Ensure a grade record exists immediately so the student-facing
         // feedback section is rendered while feedback generation is pending.
@@ -119,6 +124,34 @@ class observer {
                 'submission' => $event->other['submissionid'],
                 'aif' => $aifid,
             ]);
+        }
+    }
+
+    /**
+     * Delete existing AI feedback records for a user in a specific assignment.
+     *
+     * Called during resubmission so stale feedback is removed immediately
+     * while the new generation is pending.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @param int $userid The user ID whose feedback should be deleted.
+     */
+    private static function delete_existing_feedback(int $assignmentid, int $userid): void {
+        global $DB;
+
+        $sql = "SELECT aiff.id
+                  FROM {assignfeedback_aif_feedback} aiff
+                  JOIN {assignfeedback_aif} aif ON aiff.aif = aif.id
+                  JOIN {assign_submission} sub ON aiff.submission = sub.id
+                 WHERE aif.assignment = :assignmentid
+                   AND sub.userid = :userid";
+        $feedbackids = $DB->get_fieldset_sql($sql, [
+            'assignmentid' => $assignmentid,
+            'userid' => $userid,
+        ]);
+
+        if (!empty($feedbackids)) {
+            $DB->delete_records_list('assignfeedback_aif_feedback', 'id', $feedbackids);
         }
     }
 }

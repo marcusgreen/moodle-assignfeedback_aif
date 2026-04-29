@@ -24,7 +24,7 @@ namespace assignfeedback_aif\task;
  * happens exclusively in the adhoc worker task.
  *
  * @package    assignfeedback_aif
- * @copyright  2025 Sumaiya Javed <sumaiya.javed@catalyst.net.nz>
+ * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class process_feedback extends \core\task\scheduled_task {
@@ -82,9 +82,10 @@ class process_feedback extends \core\task\scheduled_task {
         foreach ($byassignment as $assignmentid => $userids) {
             $task = new process_feedback_adhoc();
             $task->set_custom_data([
-                'assignment' => $assignmentid,
+                'assignment' => intval($assignmentid),
                 'users' => $userids,
                 'action' => 'generate',
+                // Audit trail: distinguishes scheduled-task triggers from manual/batch triggers.
                 'triggeredby' => 'auto',
             ]);
             \core\task\manager::queue_adhoc_task($task, true);

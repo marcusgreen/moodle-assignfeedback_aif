@@ -15,28 +15,32 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Hook callbacks for assignfeedback_aif.
+ * Behat data generator for assignfeedback_aif.
  *
  * @package    assignfeedback_aif
  * @copyright  2026 ISB Bayern
  * @author     Dr. Peter Mayer
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-$callbacks = [
-    [
-        // String literal because local_ai_manager is an optional dependency.
-        'hook' => 'local_ai_manager\hook\purpose_usage',
-        'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::handle_purpose_usage',
-    ],
-    [
-        'hook' => \core\hook\output\before_footer_html_generation::class,
-        'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::before_footer',
-    ],
-    [
-        'hook' => \core\hook\di_configuration::class,
-        'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::configure_di',
-    ],
-];
+class behat_assignfeedback_aif_generator extends behat_generator_base {
+    /**
+     * Get the list of creatable entities for assignfeedback_aif.
+     *
+     * @return array
+     */
+    protected function get_creatable_entities(): array {
+        return [
+            'feedbacks' => [
+                'singular' => 'feedback',
+                'datagenerator' => 'feedback',
+                'required' => [
+                    'assignment',
+                    'user',
+                ],
+                'switchids' => [
+                    'user' => 'userid',
+                ],
+            ],
+        ];
+    }
+}

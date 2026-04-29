@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Hook callbacks for assignfeedback_aif.
+ * Capability definitions for assignfeedback_aif.
  *
  * @package    assignfeedback_aif
  * @copyright  2026 ISB Bayern
@@ -25,18 +25,15 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$callbacks = [
-    [
-        // String literal because local_ai_manager is an optional dependency.
-        'hook' => 'local_ai_manager\hook\purpose_usage',
-        'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::handle_purpose_usage',
-    ],
-    [
-        'hook' => \core\hook\output\before_footer_html_generation::class,
-        'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::before_footer',
-    ],
-    [
-        'hook' => \core\hook\di_configuration::class,
-        'callback' => \assignfeedback_aif\local\hook_callbacks::class . '::configure_di',
+$capabilities = [
+    'assignfeedback/aif:viewstatus' => [
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'student' => CAP_ALLOW,
+            'teacher' => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
     ],
 ];

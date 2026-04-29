@@ -53,7 +53,16 @@ class ai_request_provider {
         $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
 
         if ($backend === 'local_ai_manager') {
-            return $this->get_unavailability_reason_local_ai_manager($purpose, $contextid);
+            // Check AI Manager availability first to get the detailed error message
+            // (e.g. "purpose not configured", "quota reached"). The AI Manager's hook
+            // chain already includes block_ai_control checks, so the direct check below
+            // is only a defence-in-depth fallback for edge cases.
+            $aimanagerreason = $this->get_unavailability_reason_local_ai_manager($purpose, $contextid);
+            if ($aimanagerreason !== null) {
+                return $aimanagerreason;
+            }
+            // Defence-in-depth: direct block_ai_control check in case the hook chain missed it.
+            return self::get_block_ai_control_restriction($contextid);
         }
 
         // Core AI subsystem: check if there is at least one enabled provider
@@ -88,7 +97,7 @@ class ai_request_provider {
             empty($aiconfig['availability']) ||
             $aiconfig['availability']['available'] !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE
         ) {
-            return $aiconfig['availability']['errormessage'] ?? get_string('ainavailable', 'assignfeedback_aif');
+            return $aiconfig['availability']['errormessage'] ?: get_string('ainavailable', 'assignfeedback_aif');
         }
 
         // Check specific purpose availability.
@@ -97,7 +106,7 @@ class ai_request_provider {
                 if ($purposeconfig['available'] === \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
                     return null;
                 }
-                return $purposeconfig['errormessage'] ?? get_string('ainavailable', 'assignfeedback_aif');
+                return $purposeconfig['errormessage'] ?: get_string('ainavailable', 'assignfeedback_aif');
             }
         }
 
@@ -169,5 +178,49 @@ class ai_request_provider {
         }
 
         return $responsedata['generatedcontent'];
+    }
+
+    /**
+     * Check if block_ai_control disables AI for the given context.
+     *
+     * This is a direct check independent of the local_ai_manager hook chain.
+     * Teachers with the block/ai_control:control capability are exempt.
+     * If block_ai_control is not installed, returns null (no restriction).
+     *
+     * @param int $contextid The module or course context ID.
+     * @return string|null Error message if AI is blocked, null if allowed.
+     */
+    private static function get_block_ai_control_restriction(int $contextid): ?string {
+        if (!class_exists(\block_ai_control\local\aiconfig::class)) {
+            return null;
+        }
+
+        $context = \core\context::instance_by_id($contextid);
+
+        // Find course context — block_ai_control operates at course level.
+        $coursecontext = $context;
+        while ($coursecontext->contextlevel > CONTEXT_COURSE) {
+            $coursecontext = $coursecontext->get_parent_context();
+        }
+        if ($coursecontext->contextlevel !== CONTEXT_COURSE) {
+            return null;
+        }
+
+        // Teachers with control capability bypass the check.
+        if (has_capability('block/ai_control:control', $coursecontext)) {
+            return null;
+        }
+
+        try {
+            $aiconfig = new \block_ai_control\local\aiconfig($coursecontext->id);
+            if (!$aiconfig->record_exists() || !$aiconfig->is_enabled()) {
+                return get_string('noaiincourse', 'block_ai_control');
+            }
+        } catch (\Exception $e) {
+            // If the config check fails, deny access as a safety measure.
+            return get_string('ainavailable', 'assignfeedback_aif');
+        }
+
+        return null;
     }
 }

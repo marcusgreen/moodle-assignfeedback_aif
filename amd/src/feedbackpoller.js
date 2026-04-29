@@ -20,6 +20,10 @@
  * Polls the check_feedback_status web service every few seconds and
  * triggers a page reload once feedback is available.
  *
+ * Note: We use custom polling instead of core/stored_progress because we need
+ * custom completion behaviour (page reload, retry buttons) that the core
+ * stored_progress JS module does not support.
+ *
  * @module     assignfeedback_aif/feedbackpoller
  * @copyright  2026 ISB Bayern
  * @author     Dr. Peter Mayer
@@ -40,21 +44,34 @@ const MAX_POLLS = 120;
 /**
  * Initialize the feedback poller.
  *
+ * Starts with simple existence polling. When the background task creates a
+ * stored_progress record, automatically switches to initWithProgress so the
+ * student sees a real progress bar instead of a static spinner.
+ *
  * @param {number} assignmentId The assignment instance id.
  * @param {number} userId The user id to poll feedback for.
  */
 export const init = (assignmentId, userId) => {
     let pollCount = 0;
     let timerId = null;
+    let switchedToProgress = false;
+    let polling = false;
 
     /**
      * Poll for feedback existence.
      */
     const poll = async() => {
+        // Guard against overlapping polls if a previous request is still in flight.
+        if (polling) {
+            return;
+        }
+        polling = true;
+
         pollCount++;
         if (pollCount > MAX_POLLS) {
             Log.debug('assignfeedback_aif/feedbackpoller: max polls reached, stopping.');
             stopPolling();
+            polling = false;
             return;
         }
 
@@ -69,13 +86,26 @@ export const init = (assignmentId, userId) => {
 
             if (result.feedbackexists) {
                 stopPolling();
+                polling = false;
                 window.location.reload();
+                return;
+            }
+
+            // When a stored_progress record becomes available, switch to
+            // real progress polling so the user sees a live progress bar.
+            if (result.progressrecordid && !switchedToProgress) {
+                switchedToProgress = true;
+                stopPolling();
+                polling = false;
+                initWithProgress(assignmentId, userId, result.progressrecordid);
+                return;
             }
         } catch (error) {
             Log.debug('assignfeedback_aif/feedbackpoller: poll error, stopping.');
             Log.debug(error);
             stopPolling();
         }
+        polling = false;
     };
 
     /**
@@ -225,7 +255,7 @@ export const initRetryAll = () => {
         } catch (error) {
             Log.debug('assignfeedback_aif/feedbackpoller: retry failed.');
             Log.debug(error);
-            addToast(error.message || String(error), {type: 'danger'});
+            await addToast(error.message || String(error), {type: 'danger'});
             button.disabled = false;
         }
     });
