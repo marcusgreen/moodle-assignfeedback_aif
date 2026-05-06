@@ -95,7 +95,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
             // Embed the prompt template as data-attribute so JS can read it directly
             // without an extra AJAX call.
             $prompttemplate = get_config('assignfeedback_aif', 'prompttemplate') ?: '';
-            global $PAGE;
             $PAGE->requires->js_call_amd('assignfeedback_aif/expertmode', 'init', [$prompttemplate]);
         }
 
@@ -164,9 +163,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
         // Disable prompt if AI assisted feedback plugin is disabled.
         $mform->hideIf('assignfeedback_aif_prompt', 'assignfeedback_aif_enabled', 'notchecked');
 
-        // Read settings from the plugin's own table rather than assign_plugin_config
-        // because the AIF config record stores additional fields (autogenerate, prompt)
-        // that go beyond what the base class get_config()/set_config() supports.
+        // Read settings: prefer the plugin's own table, fall back to
+        // assign_plugin_config (populated during backup/restore).
 
         $instance = $this->assignment->get_default_instance();
         if ($instance && !empty($instance->id)) {
@@ -174,6 +172,16 @@ class assign_feedback_aif extends assign_feedback_plugin {
             if ($record) {
                 $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
                 $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
+            } else {
+                // Fallback: read from assign_plugin_config (populated by restore).
+                $configprompt = $this->get_config('prompt');
+                $configautogenerate = $this->get_config('autogenerate');
+                if ($configprompt !== false) {
+                    $mform->setDefault('assignfeedback_aif_prompt', $configprompt);
+                }
+                if ($configautogenerate !== false) {
+                    $mform->setDefault('assignfeedback_aif_autogenerate', (int) $configautogenerate);
+                }
             }
         }
     }
@@ -343,11 +351,21 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function save_settings(stdClass $data): bool {
         $prompt = $data->assignfeedback_aif_prompt;
         $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
-        return \assignfeedback_aif\local\feedback_utils::save_settings(
+
+        // Persist into the plugin's custom table (used at runtime).
+        \assignfeedback_aif\local\feedback_utils::save_settings(
             $this->assignment->get_instance()->id,
             $prompt,
             $autogenerate
         );
+
+        // Also persist into assign_plugin_config so that mod_assign's core
+        // backup/restore automatically carries these values when duplicating
+        // an activity (no grades → grade-level subplugin hook never fires).
+        $this->set_config('prompt', $prompt);
+        $this->set_config('autogenerate', $autogenerate);
+
+        return true;
     }
 
     /**
@@ -616,6 +634,42 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_file_areas(): array {
         return [self::FILEAREA => $this->get_name()];
+    }
+
+    /**
+     * Called when the plugin is enabled for an assignment.
+     *
+     * After a backup/restore (e.g. activity duplication), mod_assign restores
+     * assign_plugin_config entries automatically but the custom
+     * assignfeedback_aif table is not populated. This hook synchronises the
+     * config from assign_plugin_config into the custom table so that the
+     * runtime code finds the prompt and autogenerate settings.
+     *
+     * @return bool
+     */
+    public function enable(): bool {
+        global $DB;
+
+        $assignmentid = $this->assignment->get_instance()->id;
+
+        // Only sync when the custom table does not already have a record.
+        if (!$DB->record_exists('assignfeedback_aif', ['assignment' => $assignmentid])) {
+            $prompt = $this->get_config('prompt');
+            $autogenerate = $this->get_config('autogenerate');
+
+            // Only create when there is config data to sync (restore, not fresh enable).
+            if ($prompt !== false || $autogenerate !== false) {
+                $clock = \core\di::get(\core\clock::class);
+                $record = new \stdClass();
+                $record->assignment = $assignmentid;
+                $record->prompt = ($prompt !== false) ? $prompt : '';
+                $record->autogenerate = ($autogenerate !== false) ? (int) $autogenerate : 0;
+                $record->timecreated = $clock->now()->getTimestamp();
+                $DB->insert_record('assignfeedback_aif', $record);
+            }
+        }
+
+        return parent::enable();
     }
 
     /**
