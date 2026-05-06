@@ -95,7 +95,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
             // Embed the prompt template as data-attribute so JS can read it directly
             // without an extra AJAX call.
             $prompttemplate = get_config('assignfeedback_aif', 'prompttemplate') ?: '';
-            global $PAGE;
             $PAGE->requires->js_call_amd('assignfeedback_aif/expertmode', 'init', [$prompttemplate]);
         }
 
@@ -164,12 +163,11 @@ class assign_feedback_aif extends assign_feedback_plugin {
         // Disable prompt if AI assisted feedback plugin is disabled.
         $mform->hideIf('assignfeedback_aif_prompt', 'assignfeedback_aif_enabled', 'notchecked');
 
-        // Read settings from the plugin's own table rather than assign_plugin_config
-        // because the AIF config record stores additional fields (autogenerate, prompt)
-        // that go beyond what the base class get_config()/set_config() supports.
-
+        // Read settings from the plugin's custom table. After a duplication,
+        // ensure_config_exists() lazily creates the row from assign_plugin_config.
         $instance = $this->assignment->get_default_instance();
         if ($instance && !empty($instance->id)) {
+            \assignfeedback_aif\local\feedback_utils::ensure_config_exists($instance->id);
             $record = $DB->get_record('assignfeedback_aif', ['assignment' => $instance->id]);
             if ($record) {
                 $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
@@ -332,22 +330,6 @@ class assign_feedback_aif extends assign_feedback_plugin {
         );
 
         return true;
-    }
-
-    /**
-     * Save the settings for AI feedback plugin.
-     *
-     * @param stdClass $data The form data.
-     * @return bool
-     */
-    public function save_settings(stdClass $data): bool {
-        $prompt = $data->assignfeedback_aif_prompt;
-        $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
-        return \assignfeedback_aif\local\feedback_utils::save_settings(
-            $this->assignment->get_instance()->id,
-            $prompt,
-            $autogenerate
-        );
     }
 
     /**
@@ -616,6 +598,36 @@ class assign_feedback_aif extends assign_feedback_plugin {
      */
     public function get_file_areas(): array {
         return [self::FILEAREA => $this->get_name()];
+    }
+
+    /**
+     * Save the settings for AI feedback plugin.
+     *
+     * @param stdClass $data The form data.
+     * @return bool
+     */
+    public function save_settings(stdClass $data): bool {
+        if (!isset($data->assignfeedback_aif_prompt)) {
+            return true;
+        }
+
+        $prompt = $data->assignfeedback_aif_prompt;
+        $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
+
+        // Persist into the plugin's custom table (used at runtime).
+        \assignfeedback_aif\local\feedback_utils::save_settings(
+            $this->assignment->get_instance()->id,
+            $prompt,
+            $autogenerate
+        );
+
+        // Also persist into assign_plugin_config so that mod_assign's core
+        // backup/restore automatically carries these values when duplicating
+        // an activity (no grades → grade-level subplugin hook never fires).
+        $this->set_config('prompt', $prompt);
+        $this->set_config('autogenerate', $autogenerate);
+
+        return true;
     }
 
     /**

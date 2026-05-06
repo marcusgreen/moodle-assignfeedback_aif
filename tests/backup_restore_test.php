@@ -190,4 +190,70 @@ final class backup_restore_test extends \advanced_testcase {
         $this->assertSame('ai-attachment.txt', $restoredfile->get_filename());
         $this->assertSame('File attached to AI feedback', $restoredfile->get_content());
     }
+
+    /**
+     * Test that duplicating an activity preserves AIF settings without user data.
+     */
+    public function test_duplicate_activity_preserves_settings(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $CFG->backup_file_logger_level = \backup::LOG_NONE;
+
+        // Create an assignment with AIF settings via the real plugin API.
+        $env = $this->create_test_environment();
+
+        $context = \core\context\module::instance($env->cm->id);
+        $course = $DB->get_record('course', ['id' => $env->course->id], '*', MUST_EXIST);
+        $assign = new \assign($context, $env->cm, $course);
+        $plugin = $assign->get_feedback_plugin_by_type('aif');
+
+        $formdata = new \stdClass();
+        $formdata->assignfeedback_aif_prompt = 'My custom prompt for duplicate test';
+        $formdata->assignfeedback_aif_autogenerate = 1;
+        $plugin->save_settings($formdata);
+
+        // Verify both stores are populated before duplication.
+        $this->assertTrue(
+            $DB->record_exists('assignfeedback_aif', ['assignment' => $env->assign->id]),
+            'Custom table must be populated before duplication.'
+        );
+        $this->assertSame(
+            'My custom prompt for duplicate test',
+            $plugin->get_config('prompt'),
+            'assign_plugin_config must be populated before duplication.'
+        );
+
+        // Duplicate the activity (backup/restore without user data).
+        $newcm = duplicate_module($env->course, $env->cm);
+        $this->assertNotEmpty($newcm);
+
+        $newassign = $DB->get_record('assign', ['id' => $newcm->instance]);
+        $this->assertNotFalse($newassign);
+        $this->assertNotEquals($env->assign->id, $newassign->id);
+
+        // The assign_plugin_config must be restored by mod_assign core.
+        $this->assertNotFalse(
+            $DB->get_record('assign_plugin_config', [
+                'assignment' => $newassign->id,
+                'plugin' => 'aif',
+                'subtype' => 'assignfeedback',
+                'name' => 'prompt',
+            ]),
+            'assign_plugin_config must be restored by mod_assign core.'
+        );
+
+        // Trigger lazy sync by calling ensure_config_exists (happens
+        // automatically on any runtime access to the plugin config).
+        \assignfeedback_aif\local\feedback_utils::ensure_config_exists($newassign->id);
+
+        // The custom table must now be populated.
+        $newconfigs = $DB->get_records('assignfeedback_aif', ['assignment' => $newassign->id]);
+        $this->assertCount(1, $newconfigs, 'Custom table config must be created from assign_plugin_config.');
+        $newconfig = reset($newconfigs);
+        $this->assertSame('My custom prompt for duplicate test', $newconfig->prompt);
+        $this->assertEquals(1, (int) $newconfig->autogenerate);
+    }
 }
