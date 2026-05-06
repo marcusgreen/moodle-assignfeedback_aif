@@ -33,6 +33,57 @@ use assignfeedback_aif\task\process_feedback_adhoc;
  */
 class feedback_utils {
     /**
+     * Ensure the assignfeedback_aif config row exists for the given assignment.
+     *
+     * After activity duplication, mod_assign restores assign_plugin_config but
+     * never calls a hook that lets us populate our custom table. This method
+     * lazily creates the missing row from assign_plugin_config data.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     */
+    public static function ensure_config_exists(int $assignmentid): void {
+        global $DB;
+
+        // Per-request guard: avoid repeating the existence check for the same
+        // assignment, which would otherwise run once per student on the grading table.
+        static $ensured = [];
+        if (isset($ensured[$assignmentid])) {
+            return;
+        }
+
+        if ($DB->record_exists('assignfeedback_aif', ['assignment' => $assignmentid])) {
+            $ensured[$assignmentid] = true;
+            return;
+        }
+
+        // Read from assign_plugin_config (restored by mod_assign core).
+        $prompt = $DB->get_field('assign_plugin_config', 'value', [
+            'assignment' => $assignmentid,
+            'plugin' => 'aif',
+            'subtype' => 'assignfeedback',
+            'name' => 'prompt',
+        ]);
+        $autogenerate = $DB->get_field('assign_plugin_config', 'value', [
+            'assignment' => $assignmentid,
+            'plugin' => 'aif',
+            'subtype' => 'assignfeedback',
+            'name' => 'autogenerate',
+        ]);
+
+        if ($prompt !== false || $autogenerate !== false) {
+            $clock = \core\di::get(\core\clock::class);
+            $record = new \stdClass();
+            $record->assignment = $assignmentid;
+            $record->prompt = ($prompt !== false) ? $prompt : '';
+            $record->autogenerate = ($autogenerate !== false) ? (int) $autogenerate : 0;
+            $record->timecreated = $clock->now()->getTimestamp();
+            $DB->insert_record('assignfeedback_aif', $record);
+        }
+
+        $ensured[$assignmentid] = true;
+    }
+
+    /**
      * Get AI feedback record for a submission.
      *
      * @param int $assignmentid The assignment ID.
@@ -41,6 +92,7 @@ class feedback_utils {
      */
     public static function get_feedbackaif(int $assignmentid, int $userid): \stdClass|false {
         global $DB;
+        self::ensure_config_exists($assignmentid);
         $sql = "SELECT aiff.*
                   FROM {assign} a
                   JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
@@ -63,6 +115,7 @@ class feedback_utils {
      */
     public static function is_feedback_pending(int $assignmentid, int $userid): bool {
         global $DB;
+        self::ensure_config_exists($assignmentid);
 
         // Check autogenerate is enabled.
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
