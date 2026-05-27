@@ -255,8 +255,21 @@ class aif {
         }
 
         // Get submission text from online text.
-        $onlinetext = $DB->get_field('assignsubmission_onlinetext', 'onlinetext', ['submission' => $assignment->subid]);
-        if ($onlinetext) {
+        $onlinetextrecord = $DB->get_record(
+            'assignsubmission_onlinetext',
+            ['submission' => $assignment->subid],
+            'onlinetext, onlineformat'
+        );
+        $onlinetext = '';
+        if ($onlinetextrecord && !empty($onlinetextrecord->onlinetext)) {
+            // Width 0 disables wordwrap and preserves indentation in code submissions.
+            $onlinetext = html_to_text(format_text(
+                $onlinetextrecord->onlinetext,
+                $onlinetextrecord->onlineformat,
+                ['filter' => false]
+            ), 0);
+            // Html_to_text converts spaces in <pre> blocks to non-breaking spaces.
+            $onlinetext = str_replace("\xc2\xa0", ' ', $onlinetext);
             mtrace("Content from text submission added to the prompt.");
         }
 
