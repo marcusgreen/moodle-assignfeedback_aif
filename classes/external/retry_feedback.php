@@ -110,51 +110,32 @@ class retry_feedback extends external_api {
             }
         }
 
+        // If a task is already queued for this user, return its progress record
+        // instead of deleting feedback and re-queuing.
+        $existingprogressid = \assignfeedback_aif\local\task_manager::get_progress_id_for_user(
+            $params['assignmentid'],
+            $params['userid']
+        );
+        if ($existingprogressid > 0) {
+            return [
+                'success' => true,
+                'progressrecordid' => $existingprogressid,
+            ];
+        }
+
         // Delete existing error feedback so the UI reflects the retry.
         $DB->delete_records('assignfeedback_aif_feedback', [
             'aif' => $aifconfig->id,
             'submission' => $submission->id,
         ]);
 
-        // Queue the ad-hoc task with a unique marker for retrieval.
-        $triggeredby = $isteacher ? 'manual' : 'auto';
-        $task = new process_feedback_adhoc();
-        $uniqadhoctaskid = uniqid();
-        $task->set_custom_data([
-            'assignment' => intval($params['assignmentid']),
-            'users' => [$params['userid']],
-            'action' => 'generate',
-            'triggeredby' => $triggeredby,
-            'uniqadhoctaskid' => $uniqadhoctaskid,
-        ]);
-        $task->set_userid($isteacher ? $USER->id : $params['userid']);
-        manager::queue_adhoc_task($task, true);
-
-        // Find the queued task to get its ID for stored progress.
-        $currenttasks = manager::get_adhoc_tasks(process_feedback_adhoc::class);
-        $adhoctask = null;
-        foreach ($currenttasks as $t) {
-            $data = $t->get_custom_data();
-            if (isset($data->uniqadhoctaskid) && $data->uniqadhoctaskid === $uniqadhoctaskid) {
-                $adhoctask = $t;
-                break;
-            }
-        }
-
-        $progressrecordid = 0;
-        if ($adhoctask) {
-            $adhoctask->initialise_stored_progress();
-
-            $idnumber = stored_progress_bar::convert_to_idnumber(
-                process_feedback_adhoc::class . '_' . $adhoctask->get_id()
-            );
-            $record = $DB->get_record('stored_progress', ['idnumber' => $idnumber]);
-            if ($record) {
-                $progressrecordid = (int) $record->id;
-                $record->message = get_string('waitingforadhoctaskstart', 'assignfeedback_aif');
-                $DB->update_record('stored_progress', $record);
-            }
-        }
+        // Queue the ad-hoc task with progress tracking.
+        $taskuserid = $isteacher ? $USER->id : $params['userid'];
+        $progressrecordid = \assignfeedback_aif\local\task_manager::queue_generation_with_progress(
+            intval($params['assignmentid']),
+            intval($params['userid']),
+            $taskuserid
+        );
 
         return [
             'success' => true,
@@ -163,12 +144,18 @@ class retry_feedback extends external_api {
     }
 
     /**
-     * Check whether a feedback record contains an error marker in skippedfiles.
+     * Check whether a feedback record is in error state.
      *
      * @param \stdClass $record The feedback record.
-     * @return bool True if the record has an error marker.
+     * @return bool True if the record has an error status.
      */
     private static function has_error_marker(\stdClass $record): bool {
+        // New status-based detection.
+        if (!empty($record->status) && $record->status === 'error') {
+            return true;
+        }
+
+        // Legacy fallback: check skippedfiles JSON for _error marker.
         if (empty($record->skippedfiles)) {
             return false;
         }

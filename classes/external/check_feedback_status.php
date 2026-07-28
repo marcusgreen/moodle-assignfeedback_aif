@@ -87,7 +87,7 @@ class check_feedback_status extends external_api {
                 throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
             }
 
-            $sql = "SELECT aiff.id, aiff.feedback, aiff.feedbackformat
+            $sql = "SELECT aiff.id, aiff.feedback, aiff.feedbackformat, aiff.status
                       FROM {assignfeedback_aif_feedback} aiff
                       JOIN {assignfeedback_aif} aif ON aiff.aif = aif.id
                       JOIN {assign_submission} sub ON aiff.submission = sub.id
@@ -98,7 +98,7 @@ class check_feedback_status extends external_api {
                 'assignmentid' => $params['assignmentid'],
                 'userid' => $params['userid'],
             ]);
-            $exists = !empty($record);
+            $exists = !empty($record) && ($record->status === 'completed');
 
             // Return the feedback HTML when it exists, so the grading page can
             // inject it into the editor without a full page reload.
@@ -112,7 +112,7 @@ class check_feedback_status extends external_api {
             // switch from simple existence polling to real progress polling.
             $progressrecordid = 0;
             if (!$exists) {
-                $progressrecordid = self::find_progress_record(
+                $progressrecordid = \assignfeedback_aif\local\task_manager::get_progress_id_for_user(
                     $params['assignmentid'],
                     $params['userid']
                 );
@@ -128,16 +128,9 @@ class check_feedback_status extends external_api {
         // Assignment-wide mode: check if any adhoc tasks are still pending.
         require_capability('mod/assign:grade', $context);
 
-        $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
-        $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
-        $pendingorrunning = false;
-        foreach ($tasks as $task) {
-            $data = $task->get_custom_data();
-            if (isset($data->assignment) && (int) $data->assignment === (int) $params['assignmentid']) {
-                $pendingorrunning = true;
-                break;
-            }
-        }
+        $pendingorrunning = \assignfeedback_aif\local\task_manager::has_pending_tasks(
+            (int) $params['assignmentid']
+        );
 
         // The feedbackexists=true item means "done" (no more pending tasks).
         return [
@@ -147,36 +140,6 @@ class check_feedback_status extends external_api {
         ];
     }
 
-    /**
-     * Find the stored_progress record for a running adhoc task matching the given assignment and user.
-     *
-     * @param int $assignmentid The assignment instance ID.
-     * @param int $userid The user ID.
-     * @return int The stored_progress record ID, or 0 if none found.
-     */
-    private static function find_progress_record(int $assignmentid, int $userid): int {
-        global $DB;
-
-        $taskclass = process_feedback_adhoc::class;
-        $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
-        foreach ($tasks as $task) {
-            $data = $task->get_custom_data();
-            if (
-                isset($data->assignment) && (int) $data->assignment === $assignmentid
-                && isset($data->users) && in_array($userid, (array) $data->users)
-            ) {
-                $idnumber = stored_progress_bar::convert_to_idnumber(
-                    $taskclass . '_' . $task->get_id()
-                );
-                $record = $DB->get_record('stored_progress', ['idnumber' => $idnumber]);
-                if ($record && (float) ($record->percentcompleted ?? 0) < 100) {
-                    return (int) $record->id;
-                }
-            }
-        }
-
-        return 0;
-    }
 
     /**
      * Describes the return value for check_feedback_status.

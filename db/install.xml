@@ -10,6 +10,7 @@
         <FIELD NAME="assignment" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="prompt" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Text send to remote large language model"/>
         <FIELD NAME="autogenerate" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="If enabled, AI feedback is generated automatically on submission"/>
+        <FIELD NAME="useintroattachments" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="If enabled, assignment intro attachments are included in the AI prompt"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
@@ -23,6 +24,8 @@
         <FIELD NAME="aif" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="feedback" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Text of feedback returned from external LLM"/>
         <FIELD NAME="feedbackformat" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Format of the feedback text (FORMAT_HTML=1)"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="10" NOTNULL="true" DEFAULT="pending" SEQUENCE="false" COMMENT="Lifecycle status: pending, completed, error"/>
+        <FIELD NAME="errormessage" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Human-readable error message from AI backend on failure"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="submission" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
@@ -33,21 +36,8 @@
         <KEY NAME="feedback_aif" TYPE="foreign" FIELDS="aif" REFTABLE="assignfeedback_aif" REFFIELDS="id"/>
         <KEY NAME="submission_aif" TYPE="foreign" FIELDS="submission" REFTABLE="assign_submission" REFFIELDS="id"/>
       </KEYS>
-    </TABLE>
-    <TABLE NAME="assignfeedback_aif_rescache" COMMENT="Cache for extracted text from files to avoid repeated expensive AI calls">
-      <FIELDS>
-        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="contenthash" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false" COMMENT="SHA1 content hash of the original file"/>
-        <FIELD NAME="extractedcontent" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Text extracted from the file by AI"/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timelastaccessed" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-      </KEYS>
       <INDEXES>
-        <INDEX NAME="contenthash" UNIQUE="true" FIELDS="contenthash"/>
+        <INDEX NAME="idx_aif_submission" UNIQUE="true" FIELDS="aif, submission"/>
       </INDEXES>
     </TABLE>
   </TABLES>

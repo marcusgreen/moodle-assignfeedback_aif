@@ -101,8 +101,7 @@ class get_submission_analysis extends external_api {
             false
         );
 
-        $imagemimetypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-        $converter = new \core_files\converter();
+        $extractor = \core\di::get(\local_ai_content\document_extractor::class);
 
         foreach ($files as $file) {
             if (!$file instanceof \stored_file) {
@@ -112,22 +111,7 @@ class get_submission_analysis extends external_api {
             $filename = $file->get_filename();
             $mimetype = $file->get_mimetype();
 
-            if ($mimetype === 'text/plain') {
-                $processable[] = ['filename' => $filename, 'mimetype' => $mimetype];
-                continue;
-            }
-
-            if (in_array($mimetype, $imagemimetypes)) {
-                $processable[] = ['filename' => $filename, 'mimetype' => $mimetype];
-                continue;
-            }
-
-            if ($mimetype === 'application/pdf') {
-                $processable[] = ['filename' => $filename, 'mimetype' => $mimetype];
-                continue;
-            }
-
-            if ($converter->can_convert_storedfile_to($file, 'txt')) {
+            if ($extractor->is_file_supported($file)) {
                 $processable[] = ['filename' => $filename, 'mimetype' => $mimetype];
             } else {
                 $skipped[] = [
@@ -136,7 +120,7 @@ class get_submission_analysis extends external_api {
                     'reason' => get_string(
                         'skipreason_conversionnotsupported',
                         'assignfeedback_aif',
-                        \assignfeedback_aif\aif::get_supported_file_extensions()
+                        $extractor->get_supported_extensions()
                     ),
                 ];
             }

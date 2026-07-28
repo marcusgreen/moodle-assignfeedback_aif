@@ -142,5 +142,115 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026040102, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026071600) {
+        $table = new xmldb_table('assignfeedback_aif_feedback');
+
+        // Step 1: Remove duplicates — keep only the newest record per (aif, submission).
+        $sql = "SELECT aif, submission, MAX(id) AS keepid
+                  FROM {assignfeedback_aif_feedback}
+                 WHERE aif IS NOT NULL AND submission IS NOT NULL
+              GROUP BY aif, submission
+                HAVING COUNT(*) > 1";
+        $duplicates = $DB->get_records_sql($sql);
+        foreach ($duplicates as $dup) {
+            $DB->delete_records_select(
+                'assignfeedback_aif_feedback',
+                'aif = :aif AND submission = :submission AND id <> :keepid',
+                ['aif' => $dup->aif, 'submission' => $dup->submission, 'keepid' => $dup->keepid]
+            );
+        }
+
+        // Step 2: Add status field.
+        $field = new xmldb_field('status', XMLDB_TYPE_CHAR, '10', null, XMLDB_NOTNULL, null, 'pending', 'feedbackformat');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Step 3: Add errormessage field.
+        $field = new xmldb_field('errormessage', XMLDB_TYPE_TEXT, null, null, null, null, null, 'status');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Step 4: Migrate existing records — completed records (non-empty feedback).
+        $DB->execute(
+            "UPDATE {assignfeedback_aif_feedback}
+                SET status = 'completed'
+              WHERE feedback IS NOT NULL AND feedback <> ''"
+        );
+
+        // Step 5: Migrate error records — those with literal '_error' in skippedfiles.
+        $likesql = $DB->sql_like('skippedfiles', ':pattern');
+        $errorrecords = $DB->get_records_select(
+            'assignfeedback_aif_feedback',
+            $likesql . " AND (feedback IS NULL OR feedback = '')",
+            ['pattern' => '%' . $DB->sql_like_escape('_error') . '%']
+        );
+        foreach ($errorrecords as $rec) {
+            $skipped = json_decode($rec->skippedfiles, true);
+            $errormsg = '';
+            if (is_array($skipped)) {
+                foreach ($skipped as $entry) {
+                    if (is_array($entry) && isset($entry['_error'])) {
+                        $errormsg = $entry['_error'];
+                        break;
+                    }
+                }
+            }
+            $DB->update_record('assignfeedback_aif_feedback', (object) [
+                'id' => $rec->id,
+                'status' => 'error',
+                'errormessage' => $errormsg,
+            ]);
+        }
+
+        // Step 6: Add UNIQUE INDEX on (aif, submission).
+        $index = new xmldb_index('idx_aif_submission', XMLDB_INDEX_UNIQUE, ['aif', 'submission']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        upgrade_plugin_savepoint(true, 2026071600, 'assignfeedback', 'aif');
+    }
+
+    if ($oldversion < 2026071701) {
+        // Add useintroattachments field to config table (default 1 for backwards compatibility).
+        $table = new xmldb_table('assignfeedback_aif');
+        $field = new xmldb_field('useintroattachments', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '1', 'autogenerate');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026071701, 'assignfeedback', 'aif');
+    }
+
+    if ($oldversion < 2026071702) {
+        // Drop the rescache table — caching is now handled by local_ai_content.
+        $table = new xmldb_table('assignfeedback_aif_rescache');
+        if ($dbman->table_exists($table)) {
+            $dbman->drop_table($table);
+        }
+        unset_config('cachecleanupdelay', 'assignfeedback_aif');
+
+        upgrade_plugin_savepoint(true, 2026071702, 'assignfeedback', 'aif');
+    }
+
+    if ($oldversion < 2026072700) {
+        // Purge all queued process_feedback_adhoc tasks.
+        //
+        // Earlier versions could create duplicate tasks for the same
+        // assignment/user combination because Moodle's built-in deduplication
+        // also compares the task runner (userid). Those leftover tasks block
+        // crash recovery and keep feedback records stuck in 'pending'.
+        // Removing them is safe: teachers and students can retry generation,
+        // and records left in 'pending' are picked up by crash recovery.
+        $classname = \core\task\manager::get_canonical_class_name(
+            \assignfeedback_aif\task\process_feedback_adhoc::class
+        );
+        $DB->delete_records('task_adhoc', ['classname' => $classname]);
+
+        upgrade_plugin_savepoint(true, 2026072700, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

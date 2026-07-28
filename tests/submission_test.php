@@ -122,6 +122,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Now call save() to update the feedback via the plugin.
@@ -199,6 +200,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Should now return the feedback record.
@@ -244,6 +246,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Should now return formatted feedback.
@@ -287,6 +290,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         $this->assertEquals('Gradebook feedback text', $plugin->text_for_gradebook($grade));
@@ -321,6 +325,7 @@ final class submission_test extends \advanced_testcase {
             'feedback' => 'Feedback to delete',
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Verify records exist.
@@ -369,6 +374,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Should not be empty now.
@@ -406,6 +412,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Get_editor_text should return the current feedback.
@@ -467,6 +474,7 @@ final class submission_test extends \advanced_testcase {
                 'feedbackformat' => FORMAT_HTML,
                 'submission' => $submission->id,
                 'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
             ]);
         }
 
@@ -512,6 +520,7 @@ final class submission_test extends \advanced_testcase {
             'submission' => $submission->id,
             'skippedfiles' => json_encode([['_error' => 'AI quota exceeded']]),
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         $showviewlink = false;
@@ -557,6 +566,7 @@ final class submission_test extends \advanced_testcase {
             'submission' => $submission->id,
             'skippedfiles' => json_encode([['_error' => 'Connection timeout']]),
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         $result = $plugin->view($grade);
@@ -612,6 +622,7 @@ final class submission_test extends \advanced_testcase {
                 ['filename' => 'image.png', 'reason' => 'skipreason_conversionnotsupported', 'reasondata' => 'pdf, docx'],
             ]),
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         $result = $plugin->view($grade);

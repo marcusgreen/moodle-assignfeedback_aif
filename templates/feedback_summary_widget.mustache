@@ -1,0 +1,129 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template assignfeedback_aif/feedback_summary_widget
+
+    Progress widget showing AI feedback generation status for the assignment.
+    Displayed on the teacher's assignment view page when feedback is being generated.
+
+    Context variables required for this template:
+    * assignmentid - The assignment instance ID for polling
+    * widgetid - DOM id of the widget root element
+    * widgetselector - CSS selector for controller initialisation
+    * showwidget - Whether the widget should be visible
+    * hassummary - Whether summary data is available
+    * countstext - Pre-formatted counts string (e.g. "12 / 25")
+    * barcompleted - Completed bar width percentage
+    * barpending - Pending bar width percentage
+    * barerrors - Errors bar width percentage
+    * hasdetails - Whether detail items are available
+    * hasactivepending - Whether pending tasks are currently active
+    * activependingcount - Number of pending/in-progress submissions
+    * pendinglabel - Label for pending/in-progress submissions
+    * haserrors - Whether error items are available
+    * errorscount - Number of failed submissions
+    * errorslabel - Label for failed submissions
+    * hascompleted - Whether completed items are available
+    * completedcount - Number of completed submissions
+    * completedlabel - Label for completed submissions
+    * systemicerrors - Array of systemic error rows
+    * hassystemicerrors - Whether systemic errors are available
+
+    Example context (json):
+    {
+        "assignmentid": 42,
+        "widgetid": "assignfeedback-aif-summary-widget-42",
+        "widgetselector": "#assignfeedback-aif-summary-widget-42",
+        "showwidget": true,
+        "hassummary": true,
+        "countstext": "12 / 25",
+        "barcompleted": 48.0,
+        "barpending": 40.0,
+        "barerrors": 12.0,
+        "hasdetails": true,
+        "hasactivepending": true,
+        "activependingcount": 10,
+        "pendinglabel": "pending",
+        "haserrors": true,
+        "errorscount": 3,
+        "errorslabel": "errors",
+        "hascompleted": true,
+        "completedcount": 12,
+        "completedlabel": "completed",
+        "systemicerrors": [{"message": "Timeout", "counttext": "5 submissions"}],
+        "hassystemicerrors": true
+    }
+}}
+<div id="{{widgetid}}" class="assignfeedback_aif-summary-widget card mb-3{{^showwidget}} d-none{{/showwidget}}"
+     data-aif="summary-widget"
+     data-assignmentid="{{assignmentid}}">
+    {{#showwidget}}
+        <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-center mb-1">
+                <span class="font-weight-bold mr-2" data-aif="summary-title">
+                    {{#str}}widgettitle, assignfeedback_aif{{/str}}
+                </span>
+                <span class="badge badge-pill badge-info" data-aif="summary-counts">
+                    {{#hassummary}}{{countstext}}{{/hassummary}}
+                </span>
+            </div>
+            <div class="progress mb-1" style="height: 6px;">
+                <div class="progress-bar bg-success" data-aif="bar-completed" role="progressbar"
+                     style="width: {{#hassummary}}{{barcompleted}}{{/hassummary}}{{^hassummary}}0{{/hassummary}}%"></div>
+                <div class="progress-bar bg-warning{{#hasactivepending}} progress-bar-striped progress-bar-animated{{/hasactivepending}}"
+                     data-aif="bar-pending" role="progressbar"
+                     style="width: {{#hassummary}}{{barpending}}{{/hassummary}}{{^hassummary}}0{{/hassummary}}%"></div>
+                <div class="progress-bar bg-danger" data-aif="bar-errors" role="progressbar"
+                     style="width: {{#hassummary}}{{barerrors}}{{/hassummary}}{{^hassummary}}0{{/hassummary}}%"></div>
+            </div>
+            <div class="d-flex flex-wrap small text-muted" data-aif="summary-details">
+                {{#hasdetails}}
+                    {{#hasactivepending}}
+                        <span class="mr-3">
+                            {{#pix}}i/loading, core{{/pix}} {{activependingcount}} {{pendinglabel}}
+                        </span>
+                    {{/hasactivepending}}
+                    {{#haserrors}}
+                        <span class="mr-3">
+                            {{#pix}}i/warning, core{{/pix}} {{errorscount}} {{errorslabel}}
+                        </span>
+                    {{/haserrors}}
+                    {{#hascompleted}}
+                        <span class="mr-3">
+                            {{#pix}}i/checkedcircle, core{{/pix}} {{completedcount}} {{completedlabel}}
+                        </span>
+                    {{/hascompleted}}
+                {{/hasdetails}}
+            </div>
+            <div data-aif="summary-systemic-errors">
+                {{#hassystemicerrors}}
+                    {{#systemicerrors}}
+                        <div class="alert alert-warning py-1 px-2 mt-1 mb-0 small">
+                            {{#pix}}i/warning, core{{/pix}} {{message}} <span class="text-muted">({{counttext}})</span>
+                        </div>
+                    {{/systemicerrors}}
+                {{/hassystemicerrors}}
+            </div>
+        </div>
+    {{/showwidget}}
+</div>
+
+{{#js}}
+    require(['assignfeedback_aif/feedbacksummary'], function(controller) {
+        controller.init('{{widgetselector}}');
+    });
+{{/js}}

@@ -30,7 +30,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
     use \core\task\stored_progress_task_trait;
 
     /**
-     * Execute the ad-hoc task.
+     * Execute the ad-hoc task for a single user.
      */
     public function execute(): void {
         global $DB, $CFG;
@@ -41,45 +41,34 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
         $customdata = $this->get_custom_data();
         $assignmentid = $customdata->assignment;
-        $users = $customdata->users;
-        $action = $customdata->action;
-        $triggeredby = $customdata->triggeredby ?? 'manual';
+        $userid = $customdata->userid;
+        $action = $customdata->action ?? 'generate';
 
-        // Create the assign instance once for all users in this batch.
+        // Create the assign instance.
         [$course, $cm] = get_course_and_cm_from_instance($assignmentid, 'assign');
         $context = \core\context\module::instance($cm->id);
         $assign = new \assign($context, $cm, $course);
 
-        $totalusers = count($users);
-
-        $errors = [];
-
-        foreach ($users as $index => $userid) {
-            // Each user gets an equal slice of 0-100%.
-            $slicestart = ($index / $totalusers) * 100;
-            $slicesize = 100 / $totalusers;
-
+        if ($action === 'delete') {
             $record = $this->get_submission_record($assignmentid, $userid);
-
-            if ($action === 'generate') {
-                $error = $this->generate_feedback($record, $triggeredby, $assign, $slicestart, $slicesize);
-                if ($error !== null) {
-                    $errors[] = $error;
-                }
-            } else if ($action === 'delete') {
-                $this->delete_feedback($record, $assignmentid);
-                $this->report_substep($slicestart, $slicesize, 100, 'feedbackgenerationcomplete');
-            }
+            $this->delete_feedback($record, $assignmentid);
+            $this->progress->update_full(100, get_string('feedbackgenerationcomplete', 'assignfeedback_aif'));
+            return;
         }
 
-        if (!empty($errors)) {
-            $errormsg = implode("\n", $errors);
-            // The stored_progress table message column is limited to 255 characters.
-            // Truncate to prevent a database error that would silently crash the task.
-            if (\core_text::strlen($errormsg) > 255) {
-                $errormsg = \core_text::substr($errormsg, 0, 252) . '...';
+        // Generate feedback for the single user.
+        $record = $this->get_submission_record($assignmentid, $userid);
+
+        // Determine triggeredby: if the task user matches the submission user, it's auto.
+        $triggeredby = ((int) $this->get_userid() === $userid) ? 'auto' : 'manual';
+
+        $error = $this->generate_feedback($record, $triggeredby, $assign);
+        if ($error !== null) {
+            // Truncate to prevent a database error (stored_progress message limited to 255 chars).
+            if (\core_text::strlen($error) > 255) {
+                $error = \core_text::substr($error, 0, 252) . '...';
             }
-            $this->progress->error($errormsg);
+            $this->progress->error($error);
         } else {
             $this->progress->update_full(100, get_string('feedbackgenerationcomplete', 'assignfeedback_aif'));
         }
@@ -133,21 +122,17 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
     /**
      * Generate AI feedback for a submission.
      *
-     * Reports granular progress within the user's allocated slice of the progress bar.
+     * Reports granular progress steps: 10%, 30%, 50%, 90%.
      *
      * @param object|false $record The submission record.
      * @param string $triggeredby How the task was triggered: 'auto' (observer) or 'manual' (teacher).
      * @param \assign|null $assign The assign instance.
-     * @param float $slicestart The starting percentage of this user's progress slice.
-     * @param float $slicesize The size of this user's progress slice (percentage points).
      * @return string|null Error message if generation failed, null on success.
      */
     private function generate_feedback(
         $record,
         string $triggeredby = 'manual',
-        ?\assign $assign = null,
-        float $slicestart = 0,
-        float $slicesize = 100
+        ?\assign $assign = null
     ): ?string {
         global $DB, $CFG;
 
@@ -157,26 +142,58 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         }
 
         // Step 1: Preparing submission data (10%).
-        $this->report_substep($slicestart, $slicesize, 10, 'progresssteppreparing');
+        $this->progress->update_full(10, get_string('progresssteppreparing', 'assignfeedback_aif'));
 
-        // Delete existing feedback for this submission to allow regeneration.
-        $DB->delete_records('assignfeedback_aif_feedback', [
+        // Replace any existing feedback with a 'pending' lock record.
+        // This ensures that even if the task crashes fatally, the record will not
+        // be stuck in limbo (no record + autogenerate = infinite pending).
+        $clock = \core\di::get(\core\clock::class);
+        $now = $clock->now()->getTimestamp();
+        $existing = $DB->get_record('assignfeedback_aif_feedback', [
             'aif' => $record->aifid,
             'submission' => $record->subid,
         ]);
+        if ($existing) {
+            $existing->status = 'pending';
+            $existing->errormessage = null;
+            $existing->feedback = '';
+            $existing->timemodified = $now;
+            $DB->update_record('assignfeedback_aif_feedback', $existing);
+        } else {
+            $lockrecord = (object) [
+                'aif' => $record->aifid,
+                'submission' => $record->subid,
+                'feedback' => '',
+                'feedbackformat' => FORMAT_HTML,
+                'status' => 'pending',
+                'errormessage' => null,
+                'timecreated' => $now,
+                'timemodified' => $now,
+                'skippedfiles' => null,
+            ];
+            $DB->insert_record('assignfeedback_aif_feedback', $lockrecord);
+        }
 
         // Use the context from the submission for proper permission checks.
-        $aif = new \assignfeedback_aif\aif($record->contextid);
+        // Resolve through DI so the handler can be replaced in tests.
+        $aif = \core\di::get(\assignfeedback_aif\aif::class);
+        $aif->set_contextid($record->contextid);
 
         // Step 2: Extracting submission content (30%).
-        $this->report_substep($slicestart, $slicesize, 30, 'progressstepextracting');
+        $this->progress->update_full(30, get_string('progressstepextracting', 'assignfeedback_aif'));
 
         // Determine the actual grading method for this assignment.
         $context = \core\context::instance_by_id($record->contextid);
         $gradingmanager = get_grading_manager($context, 'mod_assign', 'submissions');
         $gradingmethod = $gradingmanager->get_active_method() ?: 'simple';
 
-        $promptdata = $aif->get_prompt($record, $gradingmethod);
+        try {
+            $promptdata = $aif->get_prompt($record, $gradingmethod);
+        } catch (\Exception $e) {
+            $this->save_error_feedback($record, $e->getMessage());
+            mtrace("Failed to build prompt for submission {$record->subid}: " . $e->getMessage());
+            return $e->getMessage();
+        }
         if (empty($promptdata['prompt'])) {
             // Build an informative error message including skipped file details.
             $errormsg = get_string('erroremptysubmission', 'assignfeedback_aif');
@@ -199,7 +216,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         }
 
         // Step 3: Requesting AI feedback (50%).
-        $this->report_substep($slicestart, $slicesize, 50, 'progresssteprequesting');
+        $this->progress->update_full(50, get_string('progresssteprequesting', 'assignfeedback_aif'));
 
         // All content (including images and PDFs) is now converted to text during
         // prompt building, so we always use the default feedback purpose.
@@ -244,7 +261,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         }
 
         // Step 4: Saving feedback (90%).
-        $this->report_substep($slicestart, $slicesize, 90, 'progressstepsaving');
+        $this->progress->update_full(90, get_string('progressstepsaving', 'assignfeedback_aif'));
 
         // Practice mode: only when auto-triggered (not teacher) and no marking workflow.
         $ispractice = ($triggeredby === 'auto') && $this->is_practice_mode($record->aid);
@@ -261,15 +278,38 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         }
 
         $clock = \core\di::get(\core\clock::class);
-        $data = (object) [
+        $now = $clock->now()->getTimestamp();
+
+        // Update the pending lock record with the actual feedback.
+        $feedbackrecord = $DB->get_record('assignfeedback_aif_feedback', [
             'aif' => $record->aifid,
-            'feedback' => $aifeedbackhtml,
-            'feedbackformat' => FORMAT_HTML,
-            'timecreated' => $clock->now()->getTimestamp(),
             'submission' => $record->subid,
-            'skippedfiles' => !empty($promptdata['skippedfiles']) ? json_encode($promptdata['skippedfiles']) : null,
-        ];
-        $DB->insert_record('assignfeedback_aif_feedback', $data);
+        ]);
+        if ($feedbackrecord) {
+            $feedbackrecord->feedback = $aifeedbackhtml;
+            $feedbackrecord->feedbackformat = FORMAT_HTML;
+            $feedbackrecord->status = 'completed';
+            $feedbackrecord->errormessage = null;
+            $feedbackrecord->timemodified = $now;
+            $feedbackrecord->skippedfiles = !empty($promptdata['skippedfiles'])
+                ? json_encode($promptdata['skippedfiles']) : null;
+            $DB->update_record('assignfeedback_aif_feedback', $feedbackrecord);
+        } else {
+            // Fallback: record was unexpectedly removed, re-create it.
+            $data = (object) [
+                'aif' => $record->aifid,
+                'feedback' => $aifeedbackhtml,
+                'feedbackformat' => FORMAT_HTML,
+                'status' => 'completed',
+                'errormessage' => null,
+                'timecreated' => $now,
+                'timemodified' => $now,
+                'submission' => $record->subid,
+                'skippedfiles' => !empty($promptdata['skippedfiles'])
+                    ? json_encode($promptdata['skippedfiles']) : null,
+            ];
+            $DB->insert_record('assignfeedback_aif_feedback', $data);
+        }
 
         // Ensure a grade record exists so students can see feedback in the submission view.
         $this->ensure_grade_record($record, $assign);
@@ -279,22 +319,6 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         return null;
     }
 
-    /**
-     * Report a sub-step within a user's progress slice.
-     *
-     * Calculates the absolute progress percentage based on the user's slice
-     * of the total progress bar and the relative position within that slice.
-     *
-     * @param float $slicestart The starting percentage of this user's slice.
-     * @param float $slicesize The size of this user's slice (percentage points).
-     * @param float $relativepercent The relative progress within the slice (0-100).
-     * @param string $langkey The lang string key for the progress message.
-     */
-    private function report_substep(float $slicestart, float $slicesize, float $relativepercent, string $langkey): void {
-        $absolutepercent = $slicestart + ($slicesize * $relativepercent / 100);
-        $absolutepercent = min($absolutepercent, 99); // Reserve 100% for the final completion message.
-        $this->progress->update_full($absolutepercent, get_string($langkey, 'assignfeedback_aif'));
-    }
 
     /**
      * Check whether this assignment operates in practice mode.
@@ -343,33 +367,50 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
     /**
      * Save an error feedback record so the teacher can see what went wrong.
      *
-     * Stores a feedback record with empty feedback text and the error message
-     * encoded as a special '_error' entry in the skippedfiles JSON field.
-     * This ensures the error is visible in the grading UI even after the task
-     * record has been cleaned up.
+     * Creates or updates a feedback record with status='error' and stores
+     * the error message in the dedicated errormessage field.
      *
      * @param object $record The submission record.
      * @param string $errormsg The error message to store.
-     * @param string $debuginfo Optional debug info to store alongside the error.
+     * @param string $debuginfo Optional debug info (stored in errormessage if non-empty).
      */
     private function save_error_feedback(object $record, string $errormsg, string $debuginfo = ''): void {
         global $DB;
 
-        $errorentry = ['_error' => $errormsg];
+        $clock = \core\di::get(\core\clock::class);
+        $now = $clock->now()->getTimestamp();
+
+        $fullmsg = $errormsg;
         if ($debuginfo !== '') {
-            $errorentry['_debuginfo'] = $debuginfo;
+            $fullmsg .= ' | ' . $debuginfo;
         }
 
-        $clock = \core\di::get(\core\clock::class);
-        $data = (object) [
+        // Check if a record already exists (e.g. a pending lock record).
+        $existing = $DB->get_record('assignfeedback_aif_feedback', [
             'aif' => $record->aifid,
-            'feedback' => '',
-            'feedbackformat' => FORMAT_HTML,
-            'timecreated' => $clock->now()->getTimestamp(),
             'submission' => $record->subid,
-            'skippedfiles' => json_encode([$errorentry]),
-        ];
-        $DB->insert_record('assignfeedback_aif_feedback', $data);
+        ]);
+
+        if ($existing) {
+            $existing->status = 'error';
+            $existing->errormessage = $fullmsg;
+            $existing->feedback = '';
+            $existing->timemodified = $now;
+            $DB->update_record('assignfeedback_aif_feedback', $existing);
+        } else {
+            $data = (object) [
+                'aif' => $record->aifid,
+                'feedback' => '',
+                'feedbackformat' => FORMAT_HTML,
+                'status' => 'error',
+                'errormessage' => $fullmsg,
+                'timecreated' => $now,
+                'timemodified' => $now,
+                'submission' => $record->subid,
+                'skippedfiles' => null,
+            ];
+            $DB->insert_record('assignfeedback_aif_feedback', $data);
+        }
     }
 
     /**

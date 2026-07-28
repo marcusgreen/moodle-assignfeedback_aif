@@ -20,3 +20,13 @@
     text-overflow: inherit;
     white-space: break-spaces;
 }
+
+/* Feedback summary widget styling. */
+.assignfeedback_aif-summary-widget .progress {
+    border-radius: 3px;
+}
+
+.assignfeedback_aif-summary-widget .alert {
+    font-size: 0.85em;
+}
+

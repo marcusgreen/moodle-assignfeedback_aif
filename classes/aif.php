@@ -17,7 +17,7 @@
 namespace assignfeedback_aif;
 
 use assignfeedback_aif\local\ai_request_provider;
-use assignfeedback_editpdf\pdf;
+use core\exception\moodle_exception;
 use stdClass;
 
 /**
@@ -34,10 +34,54 @@ class aif {
     /**
      * Constructor.
      *
+     * The context ID is optional so the class can be resolved through the
+     * dependency injection container (\core\di::get()), which requires a
+     * parameterless construction. When resolved via DI, set the context ID
+     * afterwards with {@see self::set_contextid()}.
+     *
      * @param int $contextid The context ID.
      */
-    public function __construct(int $contextid) {
+    public function __construct(int $contextid = 0) {
         $this->contextid = $contextid;
+    }
+
+    /**
+     * Set the context ID used for AI requests.
+     *
+     * Needed when the instance is resolved through the DI container, which
+     * cannot autowire the scalar context ID constructor argument.
+     *
+     * @param int $contextid The context ID.
+     */
+    public function set_contextid(int $contextid): void {
+        $this->contextid = $contextid;
+    }
+
+    /**
+     * Set the user ID for AI requests, switching the global $USER context if necessary.
+     *
+     * @param int|null $requestuserid The user ID to use for AI requests, null means use current $USER.
+     */
+    protected function setup_user(?int $requestuserid): void {
+        global $USER;
+
+        if (empty($requestuserid)) {
+            \core\cron::setup_user();
+            return;
+        }
+
+        // Only switch, when necessary.
+        if (intval($USER->id) === $requestuserid) {
+            return;
+        }
+
+        // Check if user exists.
+        if (!$user = \core\user::get_user($requestuserid)) {
+            return;
+        }
+
+        // If user is different and exists, switch to it.
+        \core\cron::setup_user($user);
     }
 
     /**
@@ -295,10 +339,15 @@ class aif {
 
         // Extract content from assignment additional files (introattachments).
         // Teachers often use these to provide detailed instructions or rubric sheets.
-        $introattachmenttext = $this->extract_introattachment_content($assignment);
-        if (!empty($introattachmenttext)) {
-            $description .= "\n\n" . get_string('introattachmentsheading', 'assignfeedback_aif') . "\n" . $introattachmenttext;
-            mtrace("Content from assignment additional files included in prompt.");
+        // Only included when the useintroattachments setting is enabled.
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $assignment->aid]);
+        if (!empty($aifconfig->useintroattachments)) {
+            $introattachmenttext = $this->extract_introattachment_content($assignment);
+            if (!empty($introattachmenttext)) {
+                $description .= "\n\n" . get_string('introattachmentsheading', 'assignfeedback_aif')
+                    . "\n" . $introattachmenttext;
+                mtrace("Content from assignment additional files included in prompt.");
+            }
         }
 
         // Use the template system to build the full prompt.
@@ -401,102 +450,23 @@ class aif {
     }
 
     /**
-     * Image MIME types that can be sent to AI for text extraction.
-     */
-    private const IMAGE_MIMETYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-
-    /**
-     * Common document extensions to check for converter support.
-     */
-    private const DOCUMENT_EXTENSIONS = ['doc', 'docx', 'rtf', 'odt', 'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp', 'html', 'csv'];
-
-    /**
      * Get a formatted list of all file extensions supported by the plugin.
      *
-     * Collects supported formats from three sources:
-     * - Natively handled: txt, pdf, and image formats (PNG, JPEG, WebP, GIF).
-     * - AI Manager ITT backend: additional MIME types declared by the connector.
-     * - Document converter: common document formats that can be converted to txt.
+     * Delegates to local_ai_content's extractor which knows about all supported
+     * backends and converters.
      *
      * @return string Comma-separated list of uppercase file extensions (e.g. "DOC, DOCX, GIF, JPEG, PDF, PNG, TXT, WEBP").
      */
     public static function get_supported_file_extensions(): string {
-        // Start with natively handled MIME types.
-        $mimetypes = array_merge(
-            ['text/plain', 'application/pdf'],
-            self::IMAGE_MIMETYPES
-        );
-
-        // Add MIME types from AI Manager ITT backend.
-        $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
-        if ($backend === 'local_ai_manager' && class_exists(\local_ai_manager\ai_manager_utils::class)) {
-            $purposeoptions = \local_ai_manager\ai_manager_utils::get_available_purpose_options('itt');
-            if (!empty($purposeoptions['allowedmimetypes']) && is_array($purposeoptions['allowedmimetypes'])) {
-                $mimetypes = array_merge($mimetypes, $purposeoptions['allowedmimetypes']);
-            }
-        }
-
-        // Convert MIME types to file extensions.
-        $mimetypes = array_unique($mimetypes);
-        $typesarray = get_mimetypes_array();
-        $extensions = [];
-        foreach ($mimetypes as $mimetype) {
-            foreach ($typesarray as $ext => $info) {
-                if ($info['type'] === $mimetype) {
-                    $extensions[] = strtoupper($ext);
-                    break;
-                }
-            }
-        }
-
-        // Add document formats supported by enabled converter plugins.
-        $converter = new \core_files\converter();
-        foreach (self::DOCUMENT_EXTENSIONS as $ext) {
-            if ($converter->can_convert_format_to($ext, 'txt')) {
-                $extensions[] = strtoupper($ext);
-            }
-        }
-
-        $extensions = array_unique($extensions);
-        sort($extensions);
-        return implode(', ', $extensions);
-    }
-
-    /**
-     * Check if the configured AI backend supports a given MIME type natively.
-     *
-     * When using local_ai_manager, the ITT purpose connector declares which
-     * MIME types it can handle directly (e.g., Gemini supports application/pdf).
-     * This allows sending files directly instead of converting them first.
-     *
-     * @param string $mimetype The MIME type to check.
-     * @return bool True if the backend can handle this MIME type natively.
-     */
-    protected function is_mimetype_supported_by_ai_backend(string $mimetype): bool {
-        $backend = get_config('assignfeedback_aif', 'backend') ?: 'core_ai_subsystem';
-        if ($backend !== 'local_ai_manager' || !class_exists(\local_ai_manager\ai_manager_utils::class)) {
-            return false;
-        }
-
-        $purposeoptions = \local_ai_manager\ai_manager_utils::get_available_purpose_options('itt');
-        if (!empty($purposeoptions['allowedmimetypes']) && is_array($purposeoptions['allowedmimetypes'])) {
-            return in_array($mimetype, $purposeoptions['allowedmimetypes']);
-        }
-
-        return false;
+        $extractor = \core\di::get(\local_ai_content\document_extractor::class);
+        return $extractor->get_supported_extensions();
     }
 
     /**
      * Extract text content from all submitted files.
      *
-     * All file types are converted to text:
-     * - Text files: read directly.
-     * - Documents (PDF, DOCX...): converted via core_files converter or PDF-to-images + ITT.
-     * - Images (PNG, JPEG, WebP, GIF): converted to text via AI ITT (image-to-text) requests.
-     * - PDFs: each page rendered as image, then converted to text via ITT.
-     *
-     * Files that cannot be converted are tracked and reported.
-     * Results are cached by content hash to avoid repeated expensive AI calls.
+     * Delegates per-file extraction to local_ai_content's extractor service
+     * which handles caching, AI backend calls, and document conversion.
      *
      * @param stdClass $assignment The assignment data object.
      * @return array Associative array with 'text' (combined text), 'processedfiles' (list of names),
@@ -514,6 +484,7 @@ class aif {
             return ['text' => '', 'processedfiles' => [], 'skippedfiles' => []];
         }
 
+        $extractor = \core\di::get(\local_ai_content\document_extractor::class);
         $alltext = '';
         $processedfiles = [];
         $skippedfiles = [];
@@ -523,86 +494,39 @@ class aif {
                 continue;
             }
 
-            $mimetype = $file->get_mimetype();
             $filename = $file->get_filename();
 
-            // Plain text files: read directly.
-            if ($mimetype === 'text/plain') {
-                $tempfile = $file->copy_content_to_temp();
-                $alltext .= file_get_contents($tempfile) . "\n";
-                unlink($tempfile);
-                $processedfiles[] = $filename;
-                mtrace("Text content from '{$filename}' added to the prompt.");
-                continue;
-            }
-
-            // Images: convert to text via ITT.
-            if (in_array($mimetype, self::IMAGE_MIMETYPES)) {
-                $extractionerror = null;
-                try {
-                    $extractedtext = $this->extract_content_from_image($file);
-                } catch (\Exception $e) {
-                    mtrace("Failed to extract text from image '{$filename}': " . $e->getMessage());
-                    $extractedtext = '';
-                    $extractionerror = $e->getMessage();
-                }
-                if (!empty($extractedtext)) {
-                    $alltext .= $extractedtext . "\n";
-                    $processedfiles[] = $filename;
-                    mtrace("Text extracted from image '{$filename}' via ITT.");
-                } else {
-                    $skippedfile = ['filename' => $filename, 'reason' => 'skipreason_imageextractionfailed'];
-                    if ($extractionerror !== null) {
-                        $skippedfile['errormessage'] = $extractionerror;
-                    }
-                    $skippedfiles[] = $skippedfile;
-                }
-                continue;
-            }
-
-            // PDFs: render pages as images, then extract text via ITT.
-            if ($mimetype === 'application/pdf') {
-                $extractionerror = null;
-                try {
-                    $extractedtext = $this->extract_content_from_pdf($file);
-                } catch (\Exception $e) {
-                    mtrace("Failed to extract text from PDF '{$filename}': " . $e->getMessage());
-                    $extractedtext = '';
-                    $extractionerror = $e->getMessage();
-                }
-                if (!empty($extractedtext)) {
-                    $alltext .= $extractedtext . "\n";
-                    $processedfiles[] = $filename;
-                    mtrace("Text extracted from PDF '{$filename}' via page-by-page ITT.");
-                } else {
-                    $skippedfile = ['filename' => $filename, 'reason' => 'skipreason_pdfextractionfailed'];
-                    if ($extractionerror !== null) {
-                        $skippedfile['errormessage'] = $extractionerror;
-                    }
-                    $skippedfiles[] = $skippedfile;
-                }
-                continue;
-            }
-
-            // Other document types: check convertibility first, then try core_files converter.
-            $converter = new \core_files\converter();
-            if (!$converter->can_convert_storedfile_to($file, 'txt')) {
-                mtrace("File '{$filename}' ({$mimetype}) cannot be converted - skipping.");
+            if (!$extractor->is_file_supported($file)) {
                 $skippedfiles[] = [
                     'filename' => $filename,
                     'reason' => 'skipreason_conversionnotsupported',
                     'reasondata' => self::get_supported_file_extensions(),
                 ];
+                mtrace("File '{$filename}' is not supported - skipping.");
                 continue;
             }
 
-            $extractedtext = $this->extract_content_via_converter($file);
-            if (!empty($extractedtext)) {
-                $alltext .= $extractedtext . "\n";
-                $processedfiles[] = $filename;
-                mtrace("Content from file '{$filename}' converted and added to the prompt.");
-            } else {
-                $skippedfiles[] = ['filename' => $filename, 'reason' => 'skipreason_conversionfailed'];
+            try {
+                $text = $extractor->extract_text_from_file(
+                    $file,
+                    $contextid,
+                    $assignment->userid ?? null,
+                    'assignfeedback_aif'
+                );
+                if (!empty($text)) {
+                    $alltext .= $text . "\n";
+                    $processedfiles[] = $filename;
+                    mtrace("Text extracted from '{$filename}'.");
+                } else {
+                    $skippedfiles[] = ['filename' => $filename, 'reason' => 'skipreason_nocontent'];
+                }
+            } catch (\Exception $e) {
+                mtrace("Failed to extract text from '{$filename}': " . $e->getMessage());
+                $skippedfiles[] = [
+                    'filename' => $filename,
+                    'reason' => 'skipreason_extractionfailed',
+                    'errormessage' => $e->getMessage(),
+                ];
             }
         }
 
@@ -618,9 +542,11 @@ class aif {
      *
      * These are the "Additional files" uploaded by the teacher in the assignment settings.
      * Teachers often use these to provide detailed task descriptions or grading criteria.
+     * Delegates per-file extraction to local_ai_content's extractor service.
      *
      * @param stdClass $assignment The assignment data object.
      * @return string The combined extracted text from introattachment files.
+     * @throws \moodle_exception If extraction fails for any file.
      */
     protected function extract_introattachment_content(stdClass $assignment): string {
         $fs = get_file_storage();
@@ -637,269 +563,52 @@ class aif {
             return '';
         }
 
+        $extractor = \core\di::get(\local_ai_content\document_extractor::class);
         $alltext = '';
+        $firsterror = null;
+
         foreach ($files as $file) {
             if (!$file instanceof \stored_file) {
                 continue;
             }
 
-            $mimetype = $file->get_mimetype();
             $filename = $file->get_filename();
 
-            if ($mimetype === 'text/plain') {
-                $tempfile = $file->copy_content_to_temp();
-                $alltext .= "[{$filename}]\n" . file_get_contents($tempfile) . "\n";
-                unlink($tempfile);
+            if (!$extractor->is_file_supported($file)) {
                 continue;
             }
 
-            if ($mimetype === 'application/pdf') {
-                $extractedtext = $this->extract_content_from_pdf($file);
-                if (!empty($extractedtext)) {
-                    $alltext .= "[{$filename}]\n" . $extractedtext . "\n";
-                }
-                continue;
-            }
-
-            $extractedtext = $this->extract_content_via_converter($file);
-            if (!empty($extractedtext)) {
-                $alltext .= "[{$filename}]\n" . $extractedtext . "\n";
-            }
-        }
-
-        return trim($alltext);
-    }
-
-    /**
-     * Extract text from an image file using AI image-to-text (ITT).
-     *
-     * Results are cached by content hash to avoid repeated AI calls.
-     * Exceptions from AI requests are NOT caught here — they propagate to the
-     * caller so the actual error message (e.g. "access blocked") can be shown.
-     *
-     * @param \stored_file $file The image file.
-     * @return string The extracted text.
-     * @throws \moodle_exception If the AI request fails.
-     */
-    protected function extract_content_from_image(\stored_file $file): string {
-        // Check cache first.
-        $cached = $this->get_from_cache($file->get_contenthash());
-        if ($cached !== null) {
-            mtrace("Using cached content for '{$file->get_filename()}'.");
-            return $cached;
-        }
-
-        $encodedimage = 'data:' . $file->get_mimetype() . ';base64,' . base64_encode($file->get_content());
-
-        $content = $this->retrieve_text_from_ai($encodedimage);
-        $this->store_to_cache($file->get_contenthash(), $content);
-        return $content;
-    }
-
-    /**
-     * Extract text from a PDF file.
-     *
-     * First checks if the AI backend supports PDF natively (e.g., Gemini).
-     * If so, sends the entire PDF as a base64 data URL in a single request.
-     * Otherwise, falls back to rendering each page as an image via ghostscript
-     * and sending images individually via ITT.
-     *
-     * Results are cached by content hash to avoid repeated AI calls.
-     *
-     * @param \stored_file $file The PDF file.
-     * @return string The combined extracted text from all pages.
-     */
-    protected function extract_content_from_pdf(\stored_file $file): string {
-        // Check cache first.
-        $cached = $this->get_from_cache($file->get_contenthash());
-        if ($cached !== null) {
-            mtrace("Using cached content for PDF '{$file->get_filename()}'.");
-            return $cached;
-        }
-
-        // Try native PDF support if the AI backend handles it directly.
-        if ($this->is_mimetype_supported_by_ai_backend('application/pdf')) {
             try {
-                $encodedpdf = 'data:application/pdf;base64,' . base64_encode($file->get_content());
-                $content = $this->retrieve_text_from_ai($encodedpdf);
-                if (!empty($content)) {
-                    $this->store_to_cache($file->get_contenthash(), $content);
-                    mtrace("Text extracted from PDF '{$file->get_filename()}' via native PDF support.");
-                    return $content;
+                // Use the file owner (teacher) for ITT requests so that
+                // ToS checks and quota are attributed correctly.
+                $text = $extractor->extract_text_from_file(
+                    $file,
+                    $assignment->contextid,
+                    $file->get_userid(),
+                    'assignfeedback_aif'
+                );
+                if (!empty($text)) {
+                    $alltext .= "[{$filename}]\n" . $text . "\n";
                 }
             } catch (\Exception $e) {
-                mtrace("Native PDF extraction failed for '{$file->get_filename()}': "
-                    . $e->getMessage() . " — falling back to page-by-page rendering.");
-            }
-        }
-
-        // Fall back to page-by-page image rendering.
-        try {
-            $encodedimages = $this->convert_pdf_to_images($file);
-        } catch (\Exception $e) {
-            mtrace("Failed to convert PDF '{$file->get_filename()}' to images: " . $e->getMessage());
-            // Fallback: try core_files converter.
-            return $this->extract_content_via_converter($file);
-        }
-
-        $content = '';
-        $pagenum = 0;
-        $firsterror = null;
-        foreach ($encodedimages as $encodedimage) {
-            $pagenum++;
-            try {
-                $pagetext = $this->retrieve_text_from_ai($encodedimage);
-                $content .= $pagetext . "\n";
-                mtrace("Extracted text from PDF page " . $pagenum . "/" . count($encodedimages) . ".");
-            } catch (\Exception $e) {
-                mtrace("Failed to extract text from PDF page {$pagenum}: " . $e->getMessage());
+                mtrace("Failed to extract text from introattachment file '{$filename}': " . $e->getMessage());
                 if ($firsterror === null) {
                     $firsterror = $e;
                 }
             }
         }
 
-        $content = trim($content);
-        if (!empty($content)) {
-            $this->store_to_cache($file->get_contenthash(), $content);
+        // If any AI requests failed, throw the first error so the caller
+        // can report the actual AI backend error message to the user.
+        if ($firsterror !== null) {
+            throw new moodle_exception(
+                'failedtoextractintroattachmentfiles',
+                'assignfeedback_aif',
+                '',
+                $firsterror->getMessage()
+            );
         }
 
-        // If no content was extracted and AI requests failed, throw the first error
-        // so the caller can report the actual AI backend error message to the user.
-        if (empty($content) && $firsterror !== null) {
-            throw $firsterror;
-        }
-
-        return $content;
-    }
-
-    /**
-     * Convert a PDF file into an array of base64-encoded page images.
-     *
-     * Uses assignfeedback_editpdf's PDF class (ghostscript/pdftoppm) to render pages.
-     *
-     * @param \stored_file $file The PDF file.
-     * @return string[] Array of base64-encoded data URLs, one per page.
-     * @throws \moodle_exception If the PDF cannot be processed.
-     */
-    protected function convert_pdf_to_images(\stored_file $file): array {
-        $tmpdir = \make_request_directory();
-        $tmpfilename = 'assignfeedback_aif_tmp_' . uniqid() . '.pdf';
-        file_put_contents($tmpdir . '/' . $tmpfilename, $file->get_content());
-
-        $pdf = new pdf();
-        $pdf->set_image_folder($tmpdir);
-        $pdf->set_pdf($tmpdir . '/' . $tmpfilename);
-        $images = $pdf->get_images();
-
-        $imagearray = [];
-        foreach ($images as $image) {
-            $imagepath = $tmpdir . '/' . $image;
-            $imagecontent = file_get_contents($imagepath);
-            $imagemime = mime_content_type($imagepath);
-            $imagearray[] = 'data:' . $imagemime . ';base64,' . base64_encode($imagecontent);
-        }
-
-        return $imagearray;
-    }
-
-    /**
-     * Send an encoded image to the AI backend for text extraction (ITT purpose).
-     *
-     * @param string $encodedimage Base64-encoded data URL of the image.
-     * @return string The extracted text from the AI response.
-     * @throws \moodle_exception If the AI request fails.
-     */
-    protected function retrieve_text_from_ai(string $encodedimage): string {
-        $imageprompt = 'Return the text that is written on the image/document. '
-            . 'Do not wrap any explanatory text around. Return only the bare content.';
-
-        return $this->perform_request($imageprompt, 'itt', ['image' => $encodedimage]);
-    }
-
-    /**
-     * Extract text from a file using the core_files converter (e.g., DOCX to TXT).
-     *
-     * @param \stored_file $file The file to convert.
-     * @return string The extracted text, or empty string if conversion fails.
-     */
-    protected function extract_content_via_converter(\stored_file $file): string {
-        $converter = new \core_files\converter();
-        $format = 'txt';
-
-        if (!$converter->can_convert_storedfile_to($file, $format)) {
-            mtrace("Site document converter does not support conversion for: {$file->get_mimetype()}");
-            return '';
-        }
-
-        $conversion = $converter->start_conversion($file, $format);
-        mtrace("Start process to convert file to TXT");
-
-        if ($conversion->get('status') !== \core_files\conversion::STATUS_COMPLETE) {
-            return '';
-        }
-
-        $convertedfile = $conversion->get_destfile();
-        if (!$convertedfile) {
-            return '';
-        }
-
-        $tempfile = $convertedfile->copy_content_to_temp();
-        $text = file_get_contents($tempfile);
-        unlink($tempfile);
-
-        return $text;
-    }
-
-    /**
-     * Get cached extracted content for a file by its content hash.
-     *
-     * @param string $contenthash The SHA1 content hash of the file.
-     * @return string|null The cached content, or null if not found.
-     */
-    protected function get_from_cache(string $contenthash): ?string {
-        global $DB;
-
-        $record = $DB->get_record('assignfeedback_aif_rescache', ['contenthash' => $contenthash]);
-        if (!$record) {
-            return null;
-        }
-
-        // Update last accessed time.
-        $clock = \core\di::get(\core\clock::class);
-        $record->timelastaccessed = $clock->now()->getTimestamp();
-        $DB->update_record('assignfeedback_aif_rescache', $record);
-
-        return $record->extractedcontent;
-    }
-
-    /**
-     * Store extracted content in the cache indexed by content hash.
-     *
-     * @param string $contenthash The SHA1 content hash of the file.
-     * @param string $extractedcontent The extracted text content.
-     */
-    protected function store_to_cache(string $contenthash, string $extractedcontent): void {
-        global $DB;
-
-        $clock = \core\di::get(\core\clock::class);
-        $now = $clock->now()->getTimestamp();
-
-        $existing = $DB->get_record('assignfeedback_aif_rescache', ['contenthash' => $contenthash]);
-        if ($existing) {
-            $existing->extractedcontent = $extractedcontent;
-            $existing->timemodified = $now;
-            $existing->timelastaccessed = $now;
-            $DB->update_record('assignfeedback_aif_rescache', $existing);
-            return;
-        }
-
-        $record = new stdClass();
-        $record->contenthash = $contenthash;
-        $record->extractedcontent = $extractedcontent;
-        $record->timecreated = $now;
-        $record->timemodified = $now;
-        $record->timelastaccessed = $now;
-        $DB->insert_record('assignfeedback_aif_rescache', $record);
+        return trim($alltext);
     }
 }

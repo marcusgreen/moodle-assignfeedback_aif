@@ -143,6 +143,19 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->addHelpButton('assignfeedback_aif_autogenerate', 'autogenerate', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_autogenerate', 'assignfeedback_aif_enabled', 'notchecked');
 
+        // Include intro attachments in AI prompt checkbox.
+        $mform->addElement(
+            'advcheckbox',
+            'assignfeedback_aif_useintroattachments',
+            get_string('useintroattachments', 'assignfeedback_aif'),
+            '',
+            ['id' => 'id_assignfeedback_aif_useintroattachments'],
+            [0, 1]
+        );
+        $mform->setDefault('assignfeedback_aif_useintroattachments', 1);
+        $mform->addHelpButton('assignfeedback_aif_useintroattachments', 'useintroattachments', 'assignfeedback_aif');
+        $mform->hideIf('assignfeedback_aif_useintroattachments', 'assignfeedback_aif_enabled', 'notchecked');
+
         // Show info box about AI control center when block_ai_control is installed and active.
         $enabledblocks = \core_plugin_manager::instance()->get_enabled_plugins('block');
         if (isset($enabledblocks['ai_control'])) {
@@ -172,6 +185,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             if ($record) {
                 $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
                 $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
+                $mform->setDefault('assignfeedback_aif_useintroattachments', $record->useintroattachments ?? 1);
             }
         }
     }
@@ -399,13 +413,14 @@ class assign_feedback_aif extends assign_feedback_plugin {
         require_sesskey();
 
         $cmid = $this->assignment->get_course_module()->id;
+        $overviewurl = new \moodle_url('/mod/assign/view.php', ['id' => $cmid]);
         $gradingurl = new \moodle_url('/mod/assign/view.php', ['id' => $cmid, 'action' => 'grading']);
 
         if ($action == 'generatefeedbackai') {
             $this->process_feedbackaif($users, 'generate');
             redirect(
                 $gradingurl,
-                get_string('regenerate_queued', 'assignfeedback_aif'),
+                get_string('regenerate_queued', 'assignfeedback_aif', $overviewurl->out(false)),
                 null,
                 \core\output\notification::NOTIFY_SUCCESS
             );
@@ -428,22 +443,20 @@ class assign_feedback_aif extends assign_feedback_plugin {
     /**
      * Generate or delete AI feedback for the given users.
      *
+     * Queues one adhoc task per user for proper deduplication and progress tracking.
+     *
      * @param array $users The user IDs to process.
      * @param string $action The action to perform ('generate' or 'delete').
      * @return void
      */
     public function process_feedbackaif(array $users, string $action): void {
-        // Run an ad-hoc task to generate AI feedback for submission.
-        $task = new \assignfeedback_aif\task\process_feedback_adhoc();
-        $task->set_custom_data([
-            'assignment' => $this->assignment->get_instance()->id,
-            'users' => $users,
-            'action' => $action,
-            'triggeredby' => 'manual',
-        ]);
         global $USER;
-        $task->set_userid($USER->id);
-        \core\task\manager::queue_adhoc_task($task, true);
+
+        $assignmentid = $this->assignment->get_instance()->id;
+
+        foreach ($users as $userid) {
+            \assignfeedback_aif\local\task_manager::queue_generation($assignmentid, (int) $userid, $USER->id);
+        }
     }
 
     /**
@@ -460,15 +473,35 @@ class assign_feedback_aif extends assign_feedback_plugin {
     public function view_summary(stdClass $submissionorgrade, &$showviewlink): string {
         $record = $this->get_feedbackaif($submissionorgrade->assignment, $submissionorgrade->userid);
         if ($record) {
-            // Check for error marker in skippedfiles.
+            // Check for error status.
             $errormsg = $this->get_error_from_feedback($record);
             if ($errormsg !== null) {
                 return \assignfeedback_aif\local\output_helper::render_error_with_retry(
                     $errormsg,
                     $submissionorgrade->assignment,
+                    $submissionorgrade->userid,
+                    $this->can_retry_feedback()
+                );
+            }
+            // Pending status — show spinner.
+            if (!empty($record->status) && $record->status === 'pending') {
+                $progressid = $this->get_running_progress_id(
+                    $submissionorgrade->assignment,
+                    $submissionorgrade->userid
+                );
+                if ($progressid > 0) {
+                    return \assignfeedback_aif\local\output_helper::render_generating_progress(
+                        $submissionorgrade->assignment,
+                        $submissionorgrade->userid,
+                        $progressid
+                    );
+                }
+                return \assignfeedback_aif\local\output_helper::render_generating_spinner(
+                    $submissionorgrade->assignment,
                     $submissionorgrade->userid
                 );
             }
+            // Completed — show feedback.
             $format = $record->feedbackformat ?? FORMAT_HTML;
             $text = format_text($record->feedback, $format, [
                 'context' => $this->assignment->get_context(),
@@ -479,7 +512,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             return \assignfeedback_aif\local\output_helper::render_warningbox() . $shorttext;
         }
 
-        // No feedback yet — check for running task with stored progress or pending autogenerate.
+        // No record yet — check for running task with stored progress or pending autogenerate.
         $progressid = $this->get_running_progress_id($submissionorgrade->assignment, $submissionorgrade->userid);
         if ($progressid > 0) {
             return \assignfeedback_aif\local\output_helper::render_generating_progress(
@@ -510,6 +543,25 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
+     * Check whether the current user is allowed to retry a failed feedback generation.
+     *
+     * Teachers (with mod/assign:grade) can always retry. Students can only retry
+     * if autogenerate is enabled for this assignment, meaning the original generation
+     * was triggered on their behalf automatically.
+     *
+     * @return bool True if the current user may trigger a retry.
+     */
+    private function can_retry_feedback(): bool {
+        $context = $this->assignment->get_context();
+        // Teachers can always retry.
+        if (has_capability('mod/assign:grade', $context)) {
+            return true;
+        }
+        // Students may retry only if autogenerate is enabled.
+        return (bool) $this->get_config('autogenerate');
+    }
+
+    /**
      * Check if there is a running adhoc task with stored progress for this assignment and user.
      *
      * @param int $assignmentid The assignment instance ID.
@@ -532,11 +584,20 @@ class assign_feedback_aif extends assign_feedback_plugin {
             return '';
         }
 
-        // Check for error marker in skippedfiles.
+        // Check for error status.
         $errormsg = $this->get_error_from_feedback($record);
         if ($errormsg !== null) {
             return \assignfeedback_aif\local\output_helper::render_error_with_retry(
                 $errormsg,
+                $submissionorgrade->assignment,
+                $submissionorgrade->userid,
+                $this->can_retry_feedback()
+            );
+        }
+
+        // Pending status — show spinner in full view too.
+        if (!empty($record->status) && $record->status === 'pending') {
+            return \assignfeedback_aif\local\output_helper::render_generating_spinner(
                 $submissionorgrade->assignment,
                 $submissionorgrade->userid
             );
@@ -615,12 +676,14 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
         $prompt = $data->assignfeedback_aif_prompt;
         $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
+        $useintroattachments = !empty($data->assignfeedback_aif_useintroattachments) ? 1 : 0;
 
         // Persist into the plugin's custom table (used at runtime).
         \assignfeedback_aif\local\feedback_utils::save_settings(
             $this->assignment->get_instance()->id,
             $prompt,
-            $autogenerate
+            $autogenerate,
+            $useintroattachments
         );
 
         // Also persist into assign_plugin_config so that mod_assign's core
@@ -628,15 +691,16 @@ class assign_feedback_aif extends assign_feedback_plugin {
         // an activity (no grades → grade-level subplugin hook never fires).
         $this->set_config('prompt', $prompt);
         $this->set_config('autogenerate', $autogenerate);
+        $this->set_config('useintroattachments', $useintroattachments);
 
         return true;
     }
 
     /**
-     * Returns true if there are no AI feedback entries for the given grade.
+     * Return true if there is no AI feedback to display.
      *
-     * Also returns false when feedback generation is pending so that the
-     * feedback section is rendered and the spinner can be displayed.
+     * Returns false when a record exists (any status) or when feedback
+     * generation is pending, so the feedback section is rendered.
      *
      * @param stdClass $submissionorgrade The grade object.
      * @return bool True if no feedback exists and none is pending.

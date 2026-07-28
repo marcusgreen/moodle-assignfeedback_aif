@@ -66,10 +66,25 @@ class regenerate_feedback extends external_api {
         $assignment = $DB->get_record('assign', ['id' => $params['assignmentid']], '*', MUST_EXIST);
         $cm = get_coursemodule_from_instance('assign', $assignment->id, $assignment->course, false, MUST_EXIST);
         $context = context_module::instance($cm->id);
+        $overviewurl = (new \moodle_url('/mod/assign/view.php', ['id' => $cm->id]))->out(false);
 
         // Validate context and capability.
         self::validate_context($context);
         require_capability('mod/assign:grade', $context);
+
+        // If a task is already queued for this user, return its progress record
+        // instead of deleting feedback and re-queuing.
+        $existingprogressid = \assignfeedback_aif\local\feedback_utils::get_running_progress_id(
+            $params['assignmentid'],
+            $params['userid']
+        );
+        if ($existingprogressid > 0) {
+            return [
+                'success' => true,
+                'message' => get_string('regenerate_queued', 'assignfeedback_aif', $overviewurl),
+                'progressrecordid' => $existingprogressid,
+            ];
+        }
 
         // Delete existing feedback immediately so the UI reflects the regeneration.
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $params['assignmentid']]);
@@ -87,49 +102,16 @@ class regenerate_feedback extends external_api {
             }
         }
 
-        // Queue the ad-hoc task with a unique marker for retrieval.
-        $task = new process_feedback_adhoc();
-        $uniqadhoctaskid = uniqid();
-        $task->set_custom_data([
-            'assignment' => intval($params['assignmentid']),
-            'users' => [$params['userid']],
-            'action' => 'generate',
-            'triggeredby' => 'manual',
-            'uniqadhoctaskid' => $uniqadhoctaskid,
-        ]);
-        $task->set_userid($USER->id);
-        manager::queue_adhoc_task($task, true);
-
-        // Find the queued task to get its ID for stored progress.
-        $currenttasks = manager::get_adhoc_tasks(process_feedback_adhoc::class);
-        $adhoctask = null;
-        foreach ($currenttasks as $t) {
-            $data = $t->get_custom_data();
-            if (isset($data->uniqadhoctaskid) && $data->uniqadhoctaskid === $uniqadhoctaskid) {
-                $adhoctask = $t;
-                break;
-            }
-        }
-
-        $progressrecordid = 0;
-        if ($adhoctask) {
-            $adhoctask->initialise_stored_progress();
-
-            $idnumber = stored_progress_bar::convert_to_idnumber(
-                process_feedback_adhoc::class . '_' . $adhoctask->get_id()
-            );
-            $record = $DB->get_record('stored_progress', ['idnumber' => $idnumber]);
-            if ($record) {
-                $progressrecordid = (int) $record->id;
-                // Set initial message directly in DB to avoid HTML output in AJAX context.
-                $record->message = get_string('waitingforadhoctaskstart', 'assignfeedback_aif');
-                $DB->update_record('stored_progress', $record);
-            }
-        }
+        // Queue the ad-hoc task with progress tracking.
+        $progressrecordid = \assignfeedback_aif\local\task_manager::queue_generation_with_progress(
+            intval($params['assignmentid']),
+            intval($params['userid']),
+            $USER->id
+        );
 
         return [
             'success' => true,
-            'message' => get_string('regenerate_queued', 'assignfeedback_aif'),
+            'message' => get_string('regenerate_queued', 'assignfeedback_aif', $overviewurl),
             'progressrecordid' => $progressrecordid,
         ];
     }
