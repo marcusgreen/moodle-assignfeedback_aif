@@ -101,7 +101,8 @@ $string['prompttemplate_text'] = 'The structured template for building the AI pr
 $string['purposeplacedescription_feedback'] = 'Generating AI feedback on student submissions';
 $string['purposeplacedescription_itt'] = 'Converting submitted documents and images to text for AI feedback';
 $string['regenerate'] = 'Regenerate AI feedback';
-$string['regenerate_queued'] = 'AI feedback (re)generation has been queued. You can check the status on the <a href="{$a}">assignment page</a>.';
+$string['regenerate_queued'] = 'AI feedback (re)generation has been queued.';
+$string['regenerate_queued_bulk'] = 'AI feedback (re)generation has been queued. You can check the status on the <a href="{$a}">assignment page</a>.';
 $string['regenerating'] = 'Regenerating...';
 $string['retrygeneration'] = 'Retry';
 $string['skipreason_conversionfailed'] = 'File conversion failed';

@@ -420,7 +420,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $this->process_feedbackaif($users, 'generate');
             redirect(
                 $gradingurl,
-                get_string('regenerate_queued', 'assignfeedback_aif', $overviewurl->out(false)),
+                get_string('regenerate_queued_bulk', 'assignfeedback_aif', $overviewurl->out(false)),
                 null,
                 \core\output\notification::NOTIFY_SUCCESS
             );

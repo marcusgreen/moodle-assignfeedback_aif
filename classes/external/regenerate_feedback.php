@@ -20,10 +20,7 @@ use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
-use assignfeedback_aif\task\process_feedback_adhoc;
 use core\context\module as context_module;
-use core\output\stored_progress_bar;
-use core\task\manager;
 
 /**
  * External function to regenerate AI feedback for a submission.
@@ -54,7 +51,7 @@ class regenerate_feedback extends external_api {
      * @return array Result with success status, message, and progress tracking data.
      */
     public static function execute(int $assignmentid, int $userid): array {
-        global $DB, $CFG, $USER;
+        global $DB, $USER;
 
         // Validate parameters.
         $params = self::validate_parameters(self::execute_parameters(), [
@@ -66,7 +63,6 @@ class regenerate_feedback extends external_api {
         $assignment = $DB->get_record('assign', ['id' => $params['assignmentid']], '*', MUST_EXIST);
         $cm = get_coursemodule_from_instance('assign', $assignment->id, $assignment->course, false, MUST_EXIST);
         $context = context_module::instance($cm->id);
-        $overviewurl = (new \moodle_url('/mod/assign/view.php', ['id' => $cm->id]))->out(false);
 
         // Validate context and capability.
         self::validate_context($context);
@@ -81,7 +77,7 @@ class regenerate_feedback extends external_api {
         if ($existingprogressid > 0) {
             return [
                 'success' => true,
-                'message' => get_string('regenerate_queued', 'assignfeedback_aif', $overviewurl),
+                'message' => get_string('regenerate_queued', 'assignfeedback_aif'),
                 'progressrecordid' => $existingprogressid,
             ];
         }
@@ -111,7 +107,7 @@ class regenerate_feedback extends external_api {
 
         return [
             'success' => true,
-            'message' => get_string('regenerate_queued', 'assignfeedback_aif', $overviewurl),
+            'message' => get_string('regenerate_queued', 'assignfeedback_aif'),
             'progressrecordid' => $progressrecordid,
         ];
     }
