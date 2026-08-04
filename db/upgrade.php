@@ -151,7 +151,7 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
                  WHERE aif IS NOT NULL AND submission IS NOT NULL
               GROUP BY aif, submission
                 HAVING COUNT(*) > 1";
-        $duplicates = $DB->get_records_sql($sql);
+        $duplicates = $DB->get_recordset_sql($sql);
         foreach ($duplicates as $dup) {
             $DB->delete_records_select(
                 'assignfeedback_aif_feedback',
@@ -159,6 +159,7 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
                 ['aif' => $dup->aif, 'submission' => $dup->submission, 'keepid' => $dup->keepid]
             );
         }
+        $duplicates->close();
 
         // Step 2: Add status field.
         $field = new xmldb_field('status', XMLDB_TYPE_CHAR, '10', null, XMLDB_NOTNULL, null, 'pending', 'feedbackformat');
