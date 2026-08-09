@@ -659,4 +659,90 @@ final class aif_test extends \advanced_testcase {
         // The options should never contain 'image' anymore — all files become text.
         $this->assertArrayNotHasKey('image', $result['options']);
     }
+
+    /**
+     * Test get_prompt only uses content from submission plugin types currently enabled in mod_assign.
+     *
+     * @covers ::get_prompt
+     */
+    public function test_get_prompt_ignores_content_from_disabled_submission_plugins(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $extractor = $this->createMock(\local_ai_content\document_extractor::class);
+        $extractor->method('is_file_supported')->willReturn(true);
+        $extractor->method('extract_text_from_file')->willReturn('Extracted file submission content.');
+        \core\di::set(\local_ai_content\document_extractor::class, $extractor);
+
+        $env = $this->create_test_environment([
+            'assignsubmission_onlinetext_enabled' => 1,
+            'assignsubmission_file_enabled' => 1,
+            'assignsubmission_file_maxfiles' => 1,
+            'assignsubmission_file_maxsizebytes' => 1024 * 1024,
+        ]);
+        $aifid = $this->create_aif_config($env, 'Analyse this submission');
+
+        $clock = \core\di::get(\core\clock::class);
+        $subid = $DB->insert_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'status' => 'submitted',
+            'latest' => 1,
+            'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
+            'attemptnumber' => 0,
+        ]);
+
+        $onlinetext = 'Online submission content.';
+        $DB->insert_record('assignsubmission_onlinetext', [
+            'assignment' => $env->assign->id,
+            'submission' => $subid,
+            'onlinetext' => '<p>' . $onlinetext . '</p>',
+            'onlineformat' => FORMAT_HTML,
+        ]);
+        $this->add_file_submission($env, 'submission.txt', $subid);
+
+        $record = (object) [
+            'aid' => $env->assign->id,
+            'subid' => $subid,
+            'userid' => $env->student->id,
+            'aifid' => $aifid,
+            'prompt' => 'Analyse this submission',
+            'contextid' => $env->context->id,
+            'assignmentname' => $env->assign->name,
+        ];
+
+        $aif = new aif($env->context->id);
+
+        // Both plugin types enabled: prompt should include online text and extracted file content.
+        ob_start();
+        $result = $aif->get_prompt($record, 'simple');
+        ob_end_clean();
+
+        $this->assertStringContainsString('[Online text submission]', $result['prompt']);
+        $this->assertStringContainsString('[Submitted files]', $result['prompt']);
+        $this->assertStringContainsString($onlinetext, $result['prompt']);
+        $this->assertStringContainsString('Extracted file submission content.', $result['prompt']);
+
+        // Disable file plugin: file data remains in DB/filearea but must not be included.
+        $this->set_submission_plugin_enabled($env, 'file', false);
+        ob_start();
+        $result = $aif->get_prompt($record, 'simple');
+        ob_end_clean();
+
+        $this->assertStringContainsString($onlinetext, $result['prompt']);
+        $this->assertStringNotContainsString('Extracted file submission content.', $result['prompt']);
+        $this->assertStringNotContainsString('[Submitted files]', $result['prompt']);
+
+        // Re-enable file and disable online text: orphaned online text row must be ignored.
+        $this->set_submission_plugin_enabled($env, 'file', true);
+        $this->set_submission_plugin_enabled($env, 'onlinetext', false);
+        ob_start();
+        $result = $aif->get_prompt($record, 'simple');
+        ob_end_clean();
+
+        $this->assertStringContainsString('Extracted file submission content.', $result['prompt']);
+        $this->assertStringNotContainsString($onlinetext, $result['prompt']);
+        $this->assertStringNotContainsString('[Online text submission]', $result['prompt']);
+    }
 }

@@ -83,6 +83,48 @@ trait aif_test_helper {
     }
 
     /**
+     * Add a file to the student's submission file area.
+     *
+     * @param \stdClass $env The test environment.
+     * @param string $filename The name of the file to store in the submission.
+     * @param int|null $submissionid Optional submission id. If omitted, current submission is resolved.
+     */
+    private function add_file_submission(\stdClass $env, string $filename, ?int $submissionid = null): void {
+        $this->setUser($env->student);
+        if ($submissionid === null) {
+            $submission = $env->assignobj->get_user_submission($env->student->id, true);
+            $submissionid = $submission->id;
+        }
+
+        get_file_storage()->create_file_from_string([
+            'contextid' => $env->context->id,
+            'component' => 'assignsubmission_file',
+            'filearea' => 'submission_files',
+            'itemid' => $submissionid,
+            'filepath' => '/',
+            'filename' => $filename,
+        ], 'File submission content');
+    }
+
+    /**
+     * Enable or disable a submission plugin on the assignment.
+     *
+     * @param \stdClass $env The test environment.
+     * @param string $type The submission plugin type (e.g. 'onlinetext', 'file').
+     * @param bool $enabled Whether the plugin should be enabled.
+     */
+    private function set_submission_plugin_enabled(\stdClass $env, string $type, bool $enabled): void {
+        global $DB;
+
+        $DB->set_field('assign_plugin_config', 'value', $enabled ? 1 : 0, [
+            'assignment' => $env->assign->id,
+            'subtype' => 'assignsubmission',
+            'plugin' => $type,
+            'name' => 'enabled',
+        ]);
+    }
+
+    /**
      * Create an AIF configuration record for the assignment.
      *
      * Updates the existing config if one was already created by save_settings,
