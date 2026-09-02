@@ -59,6 +59,7 @@ $string['enablepromptfile_text'] = 'Wenn aktiviert, können Lehrkräfte in den A
 $string['err_retrievingfeedback'] = 'Fehler beim Abrufen des Feedbacks vom KI-Werkzeug: {$a}';
 $string['err_retrievingfeedback_checkconfig'] = 'Feedback konnte nicht abgerufen werden. Die Konfiguration des KI-Systems ist möglicherweise fehlerhaft. Bitte wenden Sie sich an Ihre Administration.';
 $string['erroremptysubmission'] = 'Keine analysierbaren Abgabeinhalte gefunden. Die Abgabe war entweder leer oder alle eingereichten Dateien konnten nicht konvertiert werden.';
+$string['errornoactinguser'] = 'Der Benutzer, für den die KI-Anfrage ausgeführt werden soll, konnte nicht ermittelt werden.';
 $string['errornosubmission'] = 'Keine abgegebene Aufgabe für diese/n Lernende/n gefunden.';
 $string['errorskippedfilesdetail'] = 'Übersprungene Dateien: {$a}';
 $string['errortaskcrashed'] = 'Die Feedbackgenerierung wurde unerwartet abgebrochen. Bitte versuchen Sie es erneut.';

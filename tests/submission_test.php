@@ -490,6 +490,30 @@ final class submission_test extends \advanced_testcase {
     }
 
     /**
+     * Test bulk AI generation queues per-student tasks under the teacher user.
+     *
+     * @covers ::process_feedbackaif
+     */
+    public function test_process_feedbackaif_bulk_generation_uses_teacher_as_task_user(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $student2 = $this->getDataGenerator()->create_and_enrol($env->course, 'student');
+        $plugin = $this->get_aif_plugin($env->assignobj);
+
+        $this->setUser($env->teacher);
+        $plugin->process_feedbackaif([$env->student->id, $student2->id], 'generate');
+
+        $task1 = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $task2 = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $student2->id);
+
+        $this->assertNotNull($task1);
+        $this->assertNotNull($task2);
+        $this->assertEquals($env->teacher->id, $task1->get_userid());
+        $this->assertEquals($env->teacher->id, $task2->get_userid());
+    }
+
+    /**
      * Test view_summary shows error with retry button for failed feedback.
      *
      * @covers ::view_summary

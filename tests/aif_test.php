@@ -326,7 +326,8 @@ final class aif_test extends \advanced_testcase {
         $context = \core\context\system::instance();
         $aif = new aif($context->id);
 
-        $result = $aif->perform_request('Test prompt');
+        $user = $this->getDataGenerator()->create_user();
+        $result = $aif->perform_request('Test prompt', $user->id);
 
         $this->assertEquals($expectedresponse, $result);
     }
@@ -374,7 +375,7 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertNotEmpty($result['prompt']);
@@ -489,7 +490,7 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertNotEmpty($result['prompt']);
@@ -554,7 +555,7 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertNotEmpty($result['prompt']);
@@ -597,7 +598,7 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertEmpty($result['prompt']);
@@ -652,7 +653,7 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertNotEmpty($result['prompt']);
@@ -716,7 +717,7 @@ final class aif_test extends \advanced_testcase {
 
         // Both plugin types enabled: prompt should include online text and extracted file content.
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertStringContainsString('[Online text submission]', $result['prompt']);
@@ -727,7 +728,7 @@ final class aif_test extends \advanced_testcase {
         // Disable file plugin: file data remains in DB/filearea but must not be included.
         $this->set_submission_plugin_enabled($env, 'file', false);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertStringContainsString($onlinetext, $result['prompt']);
@@ -738,11 +739,105 @@ final class aif_test extends \advanced_testcase {
         $this->set_submission_plugin_enabled($env, 'file', true);
         $this->set_submission_plugin_enabled($env, 'onlinetext', false);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertStringContainsString('Extracted file submission content.', $result['prompt']);
         $this->assertStringNotContainsString($onlinetext, $result['prompt']);
         $this->assertStringNotContainsString('[Online text submission]', $result['prompt']);
+    }
+
+    /**
+     * Data provider for the acting user passed down to the file extraction.
+     *
+     * @return array array of cases that specify which role is acting as the user for the extraction.
+     */
+    public static function get_prompt_passes_acting_user_provider(): array {
+        return [
+            'student_on_direct_submission' => ['actingrole' => 'student'],
+            'teacher_on_manual_or_bulk' => ['actingrole' => 'teacher'],
+        ];
+    }
+
+    /**
+     * Test get_prompt forwards the acting user to the document extraction.
+     *
+     * The acting user is mandatory: on a direct submission it is the student, on a
+     * manual or bulk generation it is the teacher who triggered it.
+     *
+     * @param string $actingrole Which environment user acts as the acting user.
+     * @covers ::get_prompt
+     * @covers ::extract_content_from_files
+     * @dataProvider get_prompt_passes_acting_user_provider
+     */
+    public function test_get_prompt_passes_acting_user_to_extraction(string $actingrole): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment([
+            'assignsubmission_onlinetext_enabled' => 1,
+            'assignsubmission_file_enabled' => 1,
+            'assignsubmission_file_maxfiles' => 1,
+            'assignsubmission_file_maxsizebytes' => 1024 * 1024,
+        ]);
+        $aifid = $this->create_aif_config($env, 'Analyse this submission');
+
+        $clock = \core\di::get(\core\clock::class);
+        $subid = $DB->insert_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'status' => 'submitted',
+            'latest' => 1,
+            'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
+            'attemptnumber' => 0,
+        ]);
+        $this->add_file_submission($env, 'submission.txt', $subid);
+
+        $calleduserids = [];
+        $extractor = $this->createMock(\local_ai_content\document_extractor::class);
+        $extractor->method('is_file_supported')->willReturn(true);
+        $extractor->method('get_supported_extensions')->willReturn('PDF, TXT');
+        $extractor->method('extract_text_from_file')->willReturnCallback(
+            function (\stored_file $file, int $contextid, ?int $userid = null) use (&$calleduserids): string {
+                $calleduserids[] = $userid;
+                return 'Extracted file submission content.';
+            }
+        );
+        \core\di::set(\local_ai_content\document_extractor::class, $extractor);
+
+        $record = (object) [
+            'aid' => $env->assign->id,
+            'subid' => $subid,
+            'userid' => $env->student->id,
+            'aifid' => $aifid,
+            'prompt' => 'Analyse this submission',
+            'contextid' => $env->context->id,
+            'assignmentname' => $env->assign->name,
+        ];
+
+        $actinguserid = ($actingrole === 'teacher') ? $env->teacher->id : $env->student->id;
+
+        $aif = new aif($env->context->id);
+        ob_start();
+        $aif->get_prompt($record, 'simple', $actinguserid);
+        ob_end_clean();
+
+        $this->assertNotEmpty($calleduserids);
+        $this->assertEquals($actinguserid, $calleduserids[0]);
+    }
+
+    /**
+     * Test perform_request rejects a request that has no user behind it.
+     *
+     * @covers ::perform_request
+     */
+    public function test_perform_request_requires_a_user(): void {
+        $this->resetAfterTest();
+
+        $aif = new aif(\core\context\system::instance()->id);
+
+        $this->expectException(\moodle_exception::class);
+        $aif->perform_request('Test prompt', 0);
     }
 }

@@ -61,6 +61,7 @@ $string['enablepromptfile_text'] = 'When enabled, teachers can upload a text fil
 $string['err_retrievingfeedback'] = 'Error retrieving feedback from AI tool: {$a}';
 $string['err_retrievingfeedback_checkconfig'] = 'Unable to retrieve feedback. AI system configuration might be wrong, please contact your administrator.';
 $string['erroremptysubmission'] = 'No analysable submission content found. The submission was either empty or all submitted files could not be converted.';
+$string['errornoactinguser'] = 'The user the AI request should be performed for could not be determined.';
 $string['errornosubmission'] = 'No submitted assignment found for this student.';
 $string['errorskippedfilesdetail'] = 'Skipped files: {$a}';
 $string['errortaskcrashed'] = 'The feedback generation task terminated unexpectedly. Please retry generating feedback.';

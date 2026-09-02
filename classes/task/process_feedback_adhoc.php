@@ -120,6 +120,36 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
     }
 
     /**
+     * Determine the user under whose identity all AI operations must be executed.
+     *
+     * The same identity is used for content extraction (image/PDF to text) and for
+     * the AI feedback request, so availability checks, terms of use confirmation and
+     * quota are always attributed to one and the same user:
+     * - 'auto': the student, because the generation was triggered by their own submission.
+     * - 'manual': the user who triggered the generation (teacher in the grading view
+     *   or via the bulk grading action), which is the task runner.
+     *
+     * @param \stdClass $record The submission record.
+     * @param string $triggeredby How the task was triggered: 'auto' or 'manual'.
+     * @return \stdClass The acting user record.
+     * @throws \moodle_exception If no valid acting user can be resolved.
+     */
+    private function get_acting_user(\stdClass $record, string $triggeredby): \stdClass {
+        $actinguserid = ($triggeredby === 'manual') ? (int) $this->get_userid() : (int) $record->userid;
+
+        if ($actinguserid <= 0) {
+            throw new \moodle_exception('errornoactinguser', 'assignfeedback_aif');
+        }
+
+        $actinguser = \core_user::get_user($actinguserid);
+        if (!$actinguser) {
+            throw new \moodle_exception('errornoactinguser', 'assignfeedback_aif');
+        }
+
+        return $actinguser;
+    }
+
+    /**
      * Generate AI feedback for a submission.
      *
      * Reports granular progress steps: 10%, 30%, 50%, 90%.
@@ -182,13 +212,23 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         // Step 2: Extracting submission content (30%).
         $this->progress->update_full(30, get_string('progressstepextracting', 'assignfeedback_aif'));
 
+        // Single source of truth for the identity under which all AI operations run
+        // (content extraction as well as the feedback request itself).
+        try {
+            $actinguser = $this->get_acting_user($record, $triggeredby);
+        } catch (\moodle_exception $e) {
+            $this->save_error_feedback($record, $e->getMessage());
+            mtrace("Cannot determine the acting user for submission {$record->subid}: " . $e->getMessage());
+            return $e->getMessage();
+        }
+
         // Determine the actual grading method for this assignment.
         $context = \core\context::instance_by_id($record->contextid);
         $gradingmanager = get_grading_manager($context, 'mod_assign', 'submissions');
         $gradingmethod = $gradingmanager->get_active_method() ?: 'simple';
 
         try {
-            $promptdata = $aif->get_prompt($record, $gradingmethod);
+            $promptdata = $aif->get_prompt($record, $gradingmethod, (int) $actinguser->id);
         } catch (\Exception $e) {
             $this->save_error_feedback($record, $e->getMessage());
             mtrace("Failed to build prompt for submission {$record->subid}: " . $e->getMessage());
@@ -223,19 +263,11 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         $provider = \core\di::get(\assignfeedback_aif\local\ai_request_provider::class);
         $purpose = 'feedback';
 
-        // Determine the user context for the AI request:
-        // - Manual triggers (teacher clicks regenerate): use the teacher's identity so
-        // quota and responsibility are attributed to the teacher.
-        // - Automatic triggers (student submission): use the student's identity.
-        if ($triggeredby === 'manual') {
-            $taskuserid = $this->get_userid();
-            $requestuser = $taskuserid ? (\core_user::get_user($taskuserid) ?: null) : null;
-        } else {
-            $requestuser = \core_user::get_user($record->userid) ?: null;
-        }
-
+        // The AI request runs under the very same identity that was already used for
+        // content extraction, so availability checks, terms of use and quota are all
+        // attributed consistently to one user.
         try {
-            \core\cron::setup_user($requestuser);
+            \core\cron::setup_user($actinguser);
 
             $unavailablereason = $provider->get_unavailability_reason($purpose, $record->contextid);
             if ($unavailablereason !== null) {
@@ -247,9 +279,9 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
             $aifeedback = $aif->perform_request(
                 $promptdata['prompt'],
+                (int) $actinguser->id,
                 'feedback',
-                $promptdata['options'],
-                $requestuser ? $requestuser->id : 0
+                $promptdata['options']
             );
         } catch (\Exception $e) {
             $debuginfo = ($e instanceof \moodle_exception && !empty($e->debuginfo)) ? $e->debuginfo : '';
