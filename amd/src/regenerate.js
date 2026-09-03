@@ -114,7 +114,7 @@ const showConfirmationWithAnalysis = async(button, assignmentId, userId) => {
             args: {assignmentid: assignmentId, userid: userId},
         }])[0];
 
-        confirmMessage = buildAnalysisMessage(analysis);
+        confirmMessage = await buildAnalysisMessage(analysis);
     } catch (e) {
         // Fall back to generic message if analysis fails. At least log error before in debug mode.
         Log.error(e.errorcode);
@@ -138,7 +138,7 @@ const showConfirmationWithAnalysis = async(button, assignmentId, userId) => {
  * Build a human-readable confirmation message from the submission analysis.
  *
  * @param {object} analysis The analysis result from the webservice.
- * @returns {string} HTML message for the confirmation dialog.
+ * @returns {Promise<string>} HTML message for the confirmation dialog.
  */
 const buildAnalysisMessage = async(analysis) => {
     const [confirmtext, onlinetextlabel, processablefileslabel, skippedfileslabel, nosubmissionlabel] =
