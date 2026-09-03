@@ -273,7 +273,9 @@ class aif {
      * @return array Array with 'prompt' string, 'options' array, and 'skippedfiles' array.
      */
     public function get_prompt(stdClass $assignment, string $gradingmethod, int $actinguserid): array {
-        global $DB;
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
         mtrace("Assignment {$assignment->aid} submission {$assignment->subid} user {$assignment->userid}");
 
