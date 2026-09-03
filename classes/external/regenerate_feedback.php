@@ -68,20 +68,6 @@ class regenerate_feedback extends external_api {
         self::validate_context($context);
         require_capability('mod/assign:grade', $context);
 
-        // If a task is already queued for this user, return its progress record
-        // instead of deleting feedback and re-queuing.
-        $existingprogressid = \assignfeedback_aif\local\feedback_utils::get_running_progress_id(
-            $params['assignmentid'],
-            $params['userid']
-        );
-        if ($existingprogressid > 0) {
-            return [
-                'success' => true,
-                'message' => get_string('regenerate_queued', 'assignfeedback_aif'),
-                'progressrecordid' => $existingprogressid,
-            ];
-        }
-
         // Delete existing feedback immediately so the UI reflects the regeneration.
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $params['assignmentid']]);
         if ($aifconfig) {

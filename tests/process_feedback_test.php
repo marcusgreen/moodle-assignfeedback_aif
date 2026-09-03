@@ -162,6 +162,51 @@ final class process_feedback_test extends \advanced_testcase {
     }
 
     /**
+     * Test a manual trigger re-points an already queued automatic task to the triggering user.
+     *
+     * The task runner defines the user all AI requests are performed for, so a teacher
+     * requesting feedback while the automatically queued task of the student is still
+     * waiting must not be silently downgraded to a run as the student.
+     *
+     * @covers \assignfeedback_aif\local\task_manager::queue_generation
+     */
+    public function test_queue_generation_repoints_queued_task_to_new_task_user(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_aif_config($env, 'Provide feedback');
+
+        // Automatic trigger on submission: the task runs as the student.
+        \assignfeedback_aif\local\task_manager::queue_generation(
+            $env->assign->id,
+            $env->student->id,
+            $env->student->id
+        );
+        $task = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertEquals($env->student->id, $task->get_userid());
+
+        // Manual trigger by the teacher while the automatic task is still queued.
+        \assignfeedback_aif\local\task_manager::queue_generation(
+            $env->assign->id,
+            $env->student->id,
+            $env->teacher->id
+        );
+
+        $this->assertCount(1, \core\task\manager::get_adhoc_tasks(process_feedback_adhoc::class));
+        $task = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertEquals($env->teacher->id, $task->get_userid());
+
+        // A repeated trigger by the same user must not queue an additional task.
+        \assignfeedback_aif\local\task_manager::queue_generation(
+            $env->assign->id,
+            $env->student->id,
+            $env->teacher->id
+        );
+
+        $this->assertCount(1, \core\task\manager::get_adhoc_tasks(process_feedback_adhoc::class));
+    }
+
+    /**
      * Register an aif mock in the DI container that records the acting user IDs.
      *
      * @return \stdClass Object whose 'extractionuserid' and 'requestuserid' are filled during execution.
@@ -583,6 +628,44 @@ final class process_feedback_test extends \advanced_testcase {
 
         $taskdata = $queuedtask->get_custom_data();
         $this->assertEquals($env->student->id, (int) $taskdata->userid);
+    }
+
+    /**
+     * Test that manual regenerate via external API re-points a queued student task to teacher context.
+     *
+     * With local_ai_manager backend the acting user matters for availability/quota checks,
+     * so the manual trigger must always run through task_manager deduplication logic.
+     *
+     * @covers \assignfeedback_aif\external\regenerate_feedback::execute
+     */
+    public function test_regenerate_external_api_repoints_queued_task_to_teacher(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_and_submit($env, 'Student work');
+        $this->create_aif_config($env, 'Test');
+
+        // Precondition: automatic path queued the task as the student.
+        \assignfeedback_aif\local\task_manager::queue_generation(
+            $env->assign->id,
+            $env->student->id,
+            $env->student->id
+        );
+        $queuedtask = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertNotNull($queuedtask);
+        $this->assertEquals($env->student->id, $queuedtask->get_userid());
+
+        // Manual external trigger by teacher must re-point to teacher context.
+        $this->setUser($env->teacher);
+        $result = regenerate_feedback::execute($env->assign->id, $env->student->id);
+
+        $this->assertTrue($result['success']);
+        $this->assertNotEmpty($result['progressrecordid']);
+        $this->assertCount(1, \core\task\manager::get_adhoc_tasks(process_feedback_adhoc::class));
+
+        $queuedtask = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertNotNull($queuedtask);
+        $this->assertEquals($env->teacher->id, $queuedtask->get_userid());
     }
 
     /**

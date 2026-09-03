@@ -53,8 +53,21 @@ class task_manager {
         // triggering regeneration would bypass deduplication when a student
         // task for the same assignment+user is already queued. We therefore
         // check for an existing task ourselves, based only on assignment+userid.
-        if (self::find_task_for_user($assignmentid, $userid) !== null) {
-            return;
+        $existingtask = self::find_task_for_user($assignmentid, $userid);
+        if ($existingtask !== null) {
+            // A task that is already being processed cannot be re-pointed anymore.
+            if (!empty($existingtask->get_timestarted())) {
+                return;
+            }
+            // The task runner defines the user all AI requests of the task are performed
+            // for. When the new trigger comes from another user than the queued task would
+            // run as - for example a teacher requesting feedback while the automatically
+            // queued task of the student is still waiting - the queued task is replaced,
+            // so the AI requests are attributed to the user who actually triggered them.
+            if ((int) $existingtask->get_userid() === $taskuserid) {
+                return;
+            }
+            manager::delete_adhoc_task($existingtask->get_id());
         }
 
         $task = new process_feedback_adhoc();
