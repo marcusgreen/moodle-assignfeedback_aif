@@ -396,6 +396,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string The response html (never reached due to redirect).
      */
     public function grading_batch_operation($action, $users): string {
+        require_sesskey();
+
         $cmid = $this->assignment->get_course_module()->id;
         $gradingurl = new \moodle_url('/mod/assign/view.php', ['id' => $cmid, 'action' => 'grading']);
 
