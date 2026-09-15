@@ -157,6 +157,23 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->hideIf('assignfeedback_aif_applyrubricgrades', 'assignfeedback_aif_enabled', 'notchecked');
         $mform->hideIf('assignfeedback_aif_applyrubricgrades', 'markingworkflow', 'eq', 0);
 
+        // Warn when the option is on but the assignment has no usable rubric yet.
+        $context = $this->assignment->get_context();
+        if ($context && !$this->has_rubric_criteria($context->id)) {
+            $mform->addElement(
+                'static',
+                'assignfeedback_aif_norubricnotice',
+                '',
+                \html_writer::div(
+                    get_string('applyrubricgrades_norubricnotice', 'assignfeedback_aif'),
+                    'alert alert-warning'
+                )
+            );
+            $mform->hideIf('assignfeedback_aif_norubricnotice', 'assignfeedback_aif_enabled', 'notchecked');
+            $mform->hideIf('assignfeedback_aif_norubricnotice', 'markingworkflow', 'eq', 0);
+            $mform->hideIf('assignfeedback_aif_norubricnotice', 'assignfeedback_aif_applyrubricgrades', 'notchecked');
+        }
+
         // Show info box about AI control center when block_ai_control is installed and active.
         $enabledblocks = \core_plugin_manager::instance()->get_enabled_plugins('block');
         if (isset($enabledblocks['ai_control'])) {
@@ -189,6 +206,16 @@ class assign_feedback_aif extends assign_feedback_plugin {
                 $mform->setDefault('assignfeedback_aif_applyrubricgrades', $record->applyrubricgrades ?? 0);
             }
         }
+    }
+
+    /**
+     * Whether the assignment currently uses a rubric with at least one criterion.
+     *
+     * @param int $contextid The module context id.
+     * @return bool
+     */
+    private function has_rubric_criteria(int $contextid): bool {
+        return !empty(\assignfeedback_aif\local\rubric_grade_applier::load_criteria($contextid));
     }
 
     /**

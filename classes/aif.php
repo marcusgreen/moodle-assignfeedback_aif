@@ -28,6 +28,9 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class aif {
+    /** @var string Name of the core advanced grading method this plugin reads rubrics from. */
+    public const GRADING_METHOD_RUBRIC = 'rubric';
+
     /** @var int The context ID for AI requests. */
     protected int $contextid;
 
@@ -250,7 +253,7 @@ class aif {
         }
         $options = [];
 
-        if ($gradingmethod === 'rubric') {
+        if ($gradingmethod === self::GRADING_METHOD_RUBRIC) {
             $rubrictext = $this->get_rubric_text($assignment);
         }
 
@@ -299,8 +302,11 @@ class aif {
         );
 
         // Opt-in: ask for a structured rubric assessment that the adhoc task applies to the grading form.
-        if ($gradingmethod === 'rubric' && !empty($assignment->applyrubricgrades)) {
+        if ($gradingmethod === self::GRADING_METHOD_RUBRIC && !empty($assignment->applyrubricgrades)) {
             $criteria = \assignfeedback_aif\local\rubric_grade_applier::load_criteria($assignment->contextid);
+            if (empty($criteria)) {
+                mtrace(get_string('rubricapplyskipped_norubric', 'assignfeedback_aif'));
+            }
             $prompt .= \assignfeedback_aif\local\rubric_grade_applier::build_prompt_instructions($criteria);
         }
 
@@ -371,7 +377,7 @@ class aif {
 
         $params = [
             'contextid' => $assignment->contextid,
-            'gradingmethod' => 'rubric',
+            'gradingmethod' => self::GRADING_METHOD_RUBRIC,
             'areaname' => 'submissions',
         ];
 

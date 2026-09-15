@@ -81,9 +81,9 @@ Feature: AI Feedback plugin configuration
     When I am on the "Workflow Assignment" "assign activity" page logged in as teacher1
     And I navigate to "Settings" in current page administration
     And I expand all fieldsets
-    Then "Apply AI rubric assessment to the grading form" "checkbox" should not be visible
+    Then "Apply the AI's rubric assessment to the grading form" "checkbox" should not be visible
     And I set the field "markingworkflow" to "Yes"
-    And "Apply AI rubric assessment to the grading form" "checkbox" should be visible
+    And "Apply the AI's rubric assessment to the grading form" "checkbox" should be visible
 
   @javascript
   Scenario: Teacher modifies prompt on existing assignment
