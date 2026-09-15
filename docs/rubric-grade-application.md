@@ -1,8 +1,8 @@
 # Rubric Grade Application
 
 When an assignment is graded with a **rubric**, the AI already reasons about every criterion.
-The opt-in setting **Apply the AI's rubric assessment to the grading form** removes the duplicate
-work of retyping the suggested levels into the rubric by hand.
+The opt-in setting **Apply the AI's rubric assessment to the grading form** writes the AI's
+level and remark for each criterion directly into the assignment's rubric grading form.
 
 ## Preconditions
 
@@ -46,7 +46,8 @@ generation on submission the site administrator is recorded as a neutral placeho
 
 - Never runs without marking workflow.
 - Never overwrites a grade whose workflow state is already "Ready for review", "Ready for
-  release" or "Released".
+  release" or "Released". Grades in the states "Not marked", "In marking" and "In review" are
+  overwritten and moved to "In review".
 - Skips users whose grade is locked or overridden in the gradebook.
 - Exceptions from the grading API are caught and logged; the feedback text is always kept.
 
