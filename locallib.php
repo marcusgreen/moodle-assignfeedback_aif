@@ -155,6 +155,19 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->setDefault('assignfeedback_aif_useintroattachments', 1);
         $mform->addHelpButton('assignfeedback_aif_useintroattachments', 'useintroattachments', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_useintroattachments', 'assignfeedback_aif_enabled', 'notchecked');
+        // Apply AI rubric assessment to the advanced grading form (opt-in).
+        $mform->addElement(
+            'advcheckbox',
+            'assignfeedback_aif_applyrubricgrades',
+            get_string('applyrubricgrades', 'assignfeedback_aif'),
+            '',
+            ['id' => 'id_assignfeedback_aif_applyrubricgrades'],
+            [0, 1]
+        );
+        $mform->setDefault('assignfeedback_aif_applyrubricgrades', 0);
+        $mform->addHelpButton('assignfeedback_aif_applyrubricgrades', 'applyrubricgrades', 'assignfeedback_aif');
+        $mform->hideIf('assignfeedback_aif_applyrubricgrades', 'assignfeedback_aif_enabled', 'notchecked');
+        $mform->hideIf('assignfeedback_aif_applyrubricgrades', 'markingworkflow', 'eq', 0);
 
         // Show info box about AI control center when block_ai_control is installed and active.
         $enabledblocks = \core_plugin_manager::instance()->get_enabled_plugins('block');
@@ -186,6 +199,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
                 $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
                 $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
                 $mform->setDefault('assignfeedback_aif_useintroattachments', $record->useintroattachments ?? 1);
+                $mform->setDefault('assignfeedback_aif_applyrubricgrades', $record->applyrubricgrades ?? 0);
             }
         }
     }
@@ -677,13 +691,15 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $prompt = $data->assignfeedback_aif_prompt;
         $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
         $useintroattachments = !empty($data->assignfeedback_aif_useintroattachments) ? 1 : 0;
+        $applyrubricgrades = !empty($data->assignfeedback_aif_applyrubricgrades) ? 1 : 0;
 
         // Persist into the plugin's custom table (used at runtime).
         \assignfeedback_aif\local\feedback_utils::save_settings(
             $this->assignment->get_instance()->id,
             $prompt,
             $autogenerate,
-            $useintroattachments
+            $useintroattachments,
+            $applyrubricgrades
         );
 
         // Also persist into assign_plugin_config so that mod_assign's core
@@ -692,6 +708,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $this->set_config('prompt', $prompt);
         $this->set_config('autogenerate', $autogenerate);
         $this->set_config('useintroattachments', $useintroattachments);
+        $this->set_config('applyrubricgrades', $applyrubricgrades);
 
         return true;
     }

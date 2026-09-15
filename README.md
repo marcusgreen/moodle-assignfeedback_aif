@@ -18,6 +18,9 @@ generation on submission.
   included in the AI prompt for context-aware feedback.
 - **Multiple Submission Types** — Supports online text submissions, file submissions (with text
   extraction), and image analysis (PNG, JPEG, WebP, GIF).
+- **Apply Rubric Assessment (opt-in)** — For rubric-graded assignments with marking workflow,
+  the AI's per-criterion levels and remarks are written into the rubric grading form. The grade
+  stays "In review" until a teacher confirms it. See `docs/rubric-grade-application.md`.
 - **Auto-Generate on Submission** — Optionally generate AI feedback automatically when a student
   submits their assignment (configurable per assignment).
 - **Batch Operations** — Generate or delete AI feedback for multiple students at once from the
