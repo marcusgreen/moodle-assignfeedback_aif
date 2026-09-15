@@ -89,6 +89,19 @@ final class rubric_grade_applier_test extends \advanced_testcase {
     }
 
     /**
+     * A bare JSON object without code fences is still recognised and removed.
+     */
+    public function test_extract_unfenced_json(): void {
+        $response = "Solid effort.\n\n"
+            . '{"rubric": [{"criterion": "Pictures", "level": "One picture", "score": 1, "remark": ""}]}' . "\n";
+        $result = rubric_grade_applier::extract($response);
+
+        $this->assertCount(1, $result['assessment']);
+        $this->assertSame('Pictures', $result['assessment'][0]['criterion']);
+        $this->assertSame("Solid effort.\n", $result['feedback']);
+    }
+
+    /**
      * Prompt instructions list every criterion with its levels and scores.
      */
     public function test_build_prompt_instructions(): void {
@@ -248,6 +261,76 @@ final class rubric_grade_applier_test extends \advanced_testcase {
     }
 
     /**
+     * The settings form warns while the assignment has no rubric with criteria.
+     */
+    public function test_settings_form_warns_without_rubric(): void {
+        global $CFG;
+        $this->resetAfterTest();
+        require_once($CFG->libdir . '/formslib.php');
+
+        $env = $this->create_test_environment(['markingworkflow' => 1]);
+        $this->setUser($env->teacher);
+        $plugin = $env->assignobj->get_feedback_plugin_by_type('aif');
+
+        $mform = new \MoodleQuickForm('aiftest', 'post', '');
+        $plugin->get_settings($mform);
+        $this->assertTrue($mform->elementExists('assignfeedback_aif_norubricnotice'));
+
+        $this->create_rubric($env);
+        $mform = new \MoodleQuickForm('aiftest2', 'post', '');
+        $plugin->get_settings($mform);
+        $this->assertFalse($mform->elementExists('assignfeedback_aif_norubricnotice'));
+    }
+
+    /**
+     * Rubric method active but no criteria defined: the task logs the skip and stays feedback-only.
+     */
+    public function test_adhoc_task_logs_when_rubric_has_no_criteria(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment(['markingworkflow' => 1]);
+        get_grading_manager($env->context, 'mod_assign', 'submissions')->set_active_method('rubric');
+        $this->create_and_submit($env);
+        $aifid = $this->create_aif_config($env, 'Evaluate', 0);
+        $DB->set_field('assignfeedback_aif', 'applyrubricgrades', 1, ['id' => $aifid]);
+
+        $this->setup_ai_mock("Plain feedback only.\n");
+        $output = $this->run_adhoc_task($env);
+
+        $this->assertStringContainsString(get_string('rubricapplyskipped_norubric', 'assignfeedback_aif'), $output);
+        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
+        $this->assertEquals(0, $DB->count_records('grading_instances'));
+    }
+
+    /**
+     * An automatic run has no triggering teacher, so the site admin is recorded as rater.
+     */
+    public function test_auto_run_records_admin_as_grader(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment(['markingworkflow' => 1, 'grade' => 100]);
+        $controller = $this->create_rubric($env);
+        $this->create_and_submit($env);
+        $aifid = $this->create_aif_config($env, 'Evaluate', 1);
+        $DB->set_field('assignfeedback_aif', 'applyrubricgrades', 1, ['id' => $aifid]);
+
+        $this->setup_ai_mock(self::RESPONSE);
+        $this->run_adhoc_task($env, 'auto');
+
+        $admin = get_admin();
+        $grade = $env->assignobj->get_user_grade($env->student->id, false);
+        $this->assertEquals($admin->id, $grade->grader);
+        // Core resolves the current instance per item regardless of rater, so check the rater on the record.
+        $instance = $controller->get_current_instance($admin->id, $grade->id);
+        $this->assertNotNull($instance);
+        $this->assertEquals($admin->id, $instance->get_data('raterid'));
+        $flags = $env->assignobj->get_user_flags($env->student->id, false);
+        $this->assertSame(ASSIGN_MARKING_WORKFLOW_STATE_INREVIEW, $flags->workflowstate);
+    }
+
+    /**
      * Create the standard test rubric (two criteria, scores 0-2) as the teacher.
      *
      * @param \stdClass $env The test environment.
@@ -274,22 +357,30 @@ final class rubric_grade_applier_test extends \advanced_testcase {
     }
 
     /**
-     * Run the adhoc task for the student as if the teacher triggered it manually.
+     * Run the adhoc task for the student.
+     *
+     * 'manual' runs as if the teacher triggered it, 'auto' as the submission observer would queue it.
      *
      * @param \stdClass $env The test environment.
+     * @param string $triggeredby 'manual' or 'auto'.
+     * @return string The task output (mtrace lines).
      */
-    private function run_adhoc_task(\stdClass $env): void {
-        $this->setUser($env->teacher);
+    private function run_adhoc_task(\stdClass $env, string $triggeredby = 'manual'): string {
         $task = new process_feedback_adhoc();
         $task->set_custom_data([
             'assignment' => $env->assign->id,
             'users' => [$env->student->id],
             'action' => 'generate',
-            'triggeredby' => 'manual',
+            'triggeredby' => $triggeredby,
         ]);
-        $task->set_userid($env->teacher->id);
+        if ($triggeredby === 'manual') {
+            $this->setUser($env->teacher);
+            $task->set_userid($env->teacher->id);
+        } else {
+            $this->setAdminUser();
+        }
         ob_start();
         $task->execute();
-        ob_end_clean();
+        return ob_get_clean();
     }
 }

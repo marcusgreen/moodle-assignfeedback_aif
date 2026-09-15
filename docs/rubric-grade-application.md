@@ -1,7 +1,7 @@
 # Rubric Grade Application
 
 When an assignment is graded with a **rubric**, the AI already reasons about every criterion.
-The opt-in setting **Apply AI rubric assessment to the grading form** removes the duplicate
+The opt-in setting **Apply the AI's rubric assessment to the grading form** removes the duplicate
 work of retyping the suggested levels into the rubric by hand.
 
 ## Preconditions

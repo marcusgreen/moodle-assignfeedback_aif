@@ -16,6 +16,8 @@
 
 namespace assignfeedback_aif\local;
 
+use assignfeedback_aif\aif;
+
 /**
  * Applies AI-suggested rubric levels to the advanced grading form.
  *
@@ -59,7 +61,7 @@ class rubric_grade_applier {
                    AND ga.activemethod = :method
                    AND ga.areaname = :areaname
               ORDER BY rc.sortorder ASC";
-        $params = ['contextid' => $contextid, 'method' => 'rubric', 'areaname' => 'submissions'];
+        $params = ['contextid' => $contextid, 'method' => aif::GRADING_METHOD_RUBRIC, 'areaname' => 'submissions'];
 
         $criteria = [];
         foreach ($DB->get_records_sql($sql, $params) as $criterion) {
@@ -207,10 +209,10 @@ class rubric_grade_applier {
         }
 
         $gradingmanager = get_grading_manager($assign->get_context(), 'mod_assign', 'submissions');
-        if ($gradingmanager->get_active_method() !== 'rubric') {
+        if ($gradingmanager->get_active_method() !== aif::GRADING_METHOD_RUBRIC) {
             return 'rubricapplyskipped_norubric';
         }
-        $controller = $gradingmanager->get_controller('rubric');
+        $controller = $gradingmanager->get_controller(aif::GRADING_METHOD_RUBRIC);
         if (!$controller->is_form_available()) {
             return 'rubricapplyskipped_norubric';
         }
@@ -232,7 +234,6 @@ class rubric_grade_applier {
         $instance = $controller->get_or_create_instance(0, $graderid, $grade->id);
         $grade->grade = $instance->submit_and_get_grade($formdata, $grade->id);
         $grade->grader = $graderid;
-        $grade->workflowstate = ASSIGN_MARKING_WORKFLOW_STATE_INREVIEW;
         $assign->update_grade($grade);
 
         // The workflow state lives in the user flags; keep the grade "In review".
