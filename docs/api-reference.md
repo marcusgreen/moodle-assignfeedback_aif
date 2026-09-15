@@ -183,7 +183,8 @@ The plugin declares it stores the following data in `assignfeedback_aif_feedback
 
 It also declares a subsystem link to `core_grading` (`privacy:metadata:core_grading`): when the
 apply-rubric-grades option is enabled, the AI's rubric assessment is stored in the assignment's
-advanced grading forms, which are exported and deleted by core.
+rubric grading form. That data is exported and deleted through `mod_assign` and `core_grading`,
+like any rubric filled in by a teacher.
 
 ### Data Export
 

@@ -272,9 +272,9 @@ This means the AI can say things like: "Your content quality is at a 'Good' leve
 
 ### Applying the AI's Rubric Assessment
 
-Optionally, the AI's suggested level per criterion can be written into the rubric grading form,
-so you do not have to retype it. Tick **Apply the AI's rubric assessment to the grading form** in
-the assignment settings. Requirements:
+Optionally, the AI's level and remark for each criterion can be written directly into the
+rubric grading form. Tick **Apply the AI's rubric assessment to the grading form** in the
+assignment settings. Requirements:
 
 - The grading method is **Rubric** and the rubric has criteria defined.
 - **Marking workflow** is enabled. While it is disabled the checkbox is greyed out.
@@ -285,7 +285,7 @@ is released to students until you confirm the grade. If the AI's answer cannot b
 rubric unambiguously, only the text feedback is stored and the rubric stays untouched; the task log
 shows the reason.
 
-> **Tip:** Open or reload the grading page **after** the AI task has finished. A grading form that
+> **Important:** Open or reload the grading page **after** the AI task has finished. A grading form that
 > was already open before the task ran holds an old draft and would overwrite the AI's rubric
 > assessment when you click Save.
 
