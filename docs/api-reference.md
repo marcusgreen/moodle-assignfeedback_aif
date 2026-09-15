@@ -181,6 +181,10 @@ The plugin declares it stores the following data in `assignfeedback_aif_feedback
 | `assignment` | `privacy:metadata:assignmentid` | The assignment ID |
 | `aitext` | `privacy:metadata:aitext` | The AI-generated feedback text |
 
+It also declares a subsystem link to `core_grading` (`privacy:metadata:core_grading`): when the
+apply-rubric-grades option is enabled, the AI's rubric assessment is stored in the assignment's
+advanced grading forms, which are exported and deleted by core.
+
 ### Data Export
 
 The `export_feedback_user_data()` method is currently a no-op because the assignment module's

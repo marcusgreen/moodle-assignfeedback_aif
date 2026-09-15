@@ -10,9 +10,9 @@ work of retyping the suggested levels into the rubric by hand.
 |-------------|-----|
 | Grading method "Rubric" with a ready definition | Only rubric criteria and levels can be resolved |
 | Marking workflow enabled | The applied grade is kept in state **In review**; a teacher must confirm it before release |
-| Setting enabled per assignment | The feature is strictly opt-in and off by default |
+| Setting enabled per assignment | The feature is opt-in and off by default |
 
-The checkbox is hidden in the assignment form while marking workflow is disabled.
+While marking workflow is disabled, the checkbox is shown greyed out. A tick that was already set is kept and becomes active again once marking workflow is enabled.
 
 ## How it works
 

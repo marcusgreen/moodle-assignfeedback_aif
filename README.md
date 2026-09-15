@@ -170,6 +170,8 @@ Comprehensive documentation is available in the [docs/](docs/) directory:
 - [Teacher Guide](docs/teacher-guide.md) — How to use the plugin as a teacher
 - [Prompt Template System](docs/prompt-template-system.md) — Template customization, placeholders,
   examples
+- [Rubric Grade Application](docs/rubric-grade-application.md) — Writing the AI's rubric assessment
+  into the grading form (opt-in)
 - [AI Backends](docs/ai-backends.md) — Backend comparison and setup
 - [Task System](docs/task-system.md) — Background processing, scheduled and ad-hoc tasks
 - [API Reference](docs/api-reference.md) — External API, events, caching, privacy
