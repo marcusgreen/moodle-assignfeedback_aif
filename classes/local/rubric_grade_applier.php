@@ -128,20 +128,24 @@ class rubric_grade_applier {
      */
     public static function extract(string $feedback): array {
         $assessment = null;
-        // Prefer a fenced block, fall back to a bare JSON object containing the rubric key.
+        // Prefer a fenced block (captured whole, not per-brace, so multi-criterion
+        // JSON isn't truncated at the first "}" inside the array), fall back to a
+        // bare JSON object containing the rubric key.
         $patterns = [
-            '/' . self::FENCE . '(?:json)?\s*(\{.*?"' . self::JSON_KEY . '".*?\})\s*' . self::FENCE . '/is',
-            '/(\{\s*"' . self::JSON_KEY . '"\s*:\s*\[.*?\]\s*\})/is',
+            '/' . self::FENCE . '(?:json)?\s*(.*?)\s*' . self::FENCE . '/is',
+            '/(\{.*"' . self::JSON_KEY . '"\s*:\s*\[.*\]\s*\})/is',
         ];
         foreach ($patterns as $pattern) {
             if (!preg_match($pattern, $feedback, $matches)) {
                 continue;
             }
-            $decoded = json_decode($matches[1], true);
-            if (is_array($decoded) && isset($decoded[self::JSON_KEY]) && is_array($decoded[self::JSON_KEY])) {
-                $assessment = $decoded[self::JSON_KEY];
+            $decoded = json_decode(trim($matches[1]), true);
+            if (!is_array($decoded) || !isset($decoded[self::JSON_KEY]) || !is_array($decoded[self::JSON_KEY])) {
+                // Not the block we're looking for (or malformed); try the next pattern.
+                continue;
             }
-            // Strip the block (and a directly preceding heading) regardless of validity.
+            $assessment = $decoded[self::JSON_KEY];
+            // Strip the block (and a directly preceding heading) now that it decoded successfully.
             $feedback = str_replace($matches[0], '', $feedback);
             $feedback = preg_replace('/\n#{1,6}[^\n]*(rubric|assessment)[^\n]*\n\s*$/i', "\n", $feedback);
             break;
