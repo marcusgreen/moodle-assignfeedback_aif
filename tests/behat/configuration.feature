@@ -69,7 +69,7 @@ Feature: AI Feedback plugin configuration
     Then the field "assignfeedback_aif_applyrubricgrades" matches value "1"
 
   @javascript
-  Scenario: Apply rubric assessment option is hidden while marking workflow is disabled
+  Scenario: Apply rubric assessment option is disabled while marking workflow is disabled
     Given the following "activity" exists:
       | activity                            | assign                  |
       | course                              | C1                      |
@@ -81,9 +81,9 @@ Feature: AI Feedback plugin configuration
     When I am on the "Workflow Assignment" "assign activity" page logged in as teacher1
     And I navigate to "Settings" in current page administration
     And I expand all fieldsets
-    Then "Apply the AI's rubric assessment to the grading form" "checkbox" should not be visible
+    Then the "assignfeedback_aif_applyrubricgrades" "field" should be disabled
     And I set the field "markingworkflow" to "Yes"
-    And "Apply the AI's rubric assessment to the grading form" "checkbox" should be visible
+    And the "assignfeedback_aif_applyrubricgrades" "field" should be enabled
 
   @javascript
   Scenario: Teacher modifies prompt on existing assignment

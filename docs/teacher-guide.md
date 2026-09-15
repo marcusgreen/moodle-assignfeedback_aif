@@ -9,12 +9,13 @@ This guide explains how teachers use the AI Assisted Feedback plugin within assi
 3. Scroll to the **Feedback types** section.
 4. Check **AI Assisted Feedback**.
 
-When enabled, three additional settings appear:
+When enabled, these additional settings appear:
 
 | Setting | Description |
 |---------|-------------|
 | **Prompt** | Your instructions to the AI for this specific assignment |
 | **Generate feedback automatically on submission** | Auto-generate when students submit |
+| **Apply the AI's rubric assessment to the grading form** | Opt-in; needs a rubric and marking workflow. Greyed out while marking workflow is off. See [Rubric Integration](#rubric-integration) |
 | **Prompt file** | (Future feature) Upload prompt as a text file |
 
 ![Assignment editing view](images/assign_feedback_aif.png)
@@ -268,6 +269,28 @@ This means the AI can say things like: "Your content quality is at a 'Good' leve
 
 > **Note:** The rubric is only included if the assignment's grading method is set to "Rubric"
 > in the assignment settings under *Grade → Grading method*.
+
+### Applying the AI's Rubric Assessment
+
+Optionally, the AI's suggested level per criterion can be written into the rubric grading form,
+so you do not have to retype it. Tick **Apply the AI's rubric assessment to the grading form** in
+the assignment settings. Requirements:
+
+- The grading method is **Rubric** and the rubric has criteria defined.
+- **Marking workflow** is enabled. While it is disabled the checkbox is greyed out.
+
+When feedback is generated, the AI additionally returns one level and a short remark per criterion.
+These are filled into the rubric and the grade is set to the workflow state **In review**. Nothing
+is released to students until you confirm the grade. If the AI's answer cannot be matched to your
+rubric unambiguously, only the text feedback is stored and the rubric stays untouched; the task log
+shows the reason.
+
+> **Tip:** Open or reload the grading page **after** the AI task has finished. A grading form that
+> was already open before the task ran holds an old draft and would overwrite the AI's rubric
+> assessment when you click Save.
+
+Grades in the states "Ready for release" or "Released" are never changed by the AI. Details for
+administrators are in [Rubric Grade Application](rubric-grade-application.md).
 
 ## File Submissions
 

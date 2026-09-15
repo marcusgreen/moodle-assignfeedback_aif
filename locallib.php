@@ -155,7 +155,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->setDefault('assignfeedback_aif_applyrubricgrades', 0);
         $mform->addHelpButton('assignfeedback_aif_applyrubricgrades', 'applyrubricgrades', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_applyrubricgrades', 'assignfeedback_aif_enabled', 'notchecked');
-        $mform->hideIf('assignfeedback_aif_applyrubricgrades', 'markingworkflow', 'eq', 0);
+        // Keep the option visible but greyed out while marking workflow is off; the help text explains why.
+        $mform->disabledIf('assignfeedback_aif_applyrubricgrades', 'markingworkflow', 'eq', 0);
 
         // Warn when the option is on but the assignment has no usable rubric yet.
         $context = $this->assignment->get_context();
