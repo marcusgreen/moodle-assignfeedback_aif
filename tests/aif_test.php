@@ -383,6 +383,125 @@ final class aif_test extends \advanced_testcase {
     }
 
     /**
+     * Data provider for online text HTML cleaning tests.
+     *
+     * @return array
+     */
+    public static function get_prompt_cleans_onlinetext_provider(): array {
+        // Real-world DOM HTML from MBS-10773 ticket: full page structure with YUI IDs and footer blocks.
+        $domhtml = '<div id="topofscroll" class="main-inner ">'
+            . ' <div id="page-content" class="pb-3 d-print-block">'
+            . ' <div id="region-main-box">'
+            . ' <div id="region-main">'
+            . ' <div role="main" id="yui_3_18_1_1_1777311427730_410">'
+            . ' <div class="box py-3 generalbox center clearfix" id="yui_3_18_1_1_1777311427730_409">'
+            . ' <div class="no-overflow" id="yui_3_18_1_1_1777311427730_408">'
+            . ' <p id="yui_3_18_1_1_1777311427730_407">A few decades ago we were all Nazis.'
+            . ' But that\'s luckily over. Every country has stereotypes, but the \'Brits\' have it worse.</p>'
+            . ' </div> </div> </div> </div> </div> </div> </div>'
+            . ' <div class="row footerblock" id="yui_3_18_1_1_1777311427730_238">'
+            . ' <section class="d-print-none col-12 col-lg-6" data-region="footer-left">'
+            . ' <aside class="block-region yui3-dd-drop" data-blockregion="footer-left">'
+            . ' <h2 class="visually-hidden">Blöcke</h2>'
+            . ' </aside> </section>'
+            . ' <section class="d-print-none col-12 col-lg-6" data-region="footer-right">'
+            . ' <aside class="block-region yui3-dd-drop" data-blockregion="footer-right">'
+            . ' <h2 class="visually-hidden">Blöcke</h2>'
+            . ' </aside> </section> </div>';
+
+        return [
+            'dom_html_from_ticket' => [
+                'onlinetext' => $domhtml,
+                'onlineformat' => 1,
+                'mustcontain' => ['A few decades ago', 'stereotypes'],
+                'mustnotcontain' => ['<div', 'topofscroll', 'yui_3_18', 'page-content', 'footerblock', '<section', '<aside'],
+            ],
+            'code_with_indentation' => [
+                'onlinetext' => '<pre class="language-java"><code>public class Test {' . "\n"
+                    . '    private String text;' . "\n"
+                    . '    public Test(String t) {' . "\n"
+                    . '        text = t;' . "\n"
+                    . '    }' . "\n"
+                    . '}</code></pre>',
+                'onlineformat' => 1,
+                'mustcontain' => ['public class Test', '    private String text'],
+                'mustnotcontain' => ['<pre', '<code', 'language-java'],
+            ],
+            'simple_html_formatting' => [
+                'onlinetext' => '<h1>Title</h1><p>Paragraph with <strong>bold</strong> text.</p>'
+                    . '<ul><li>Item one</li><li>Item two</li></ul>',
+                'onlineformat' => 1,
+                // Html_to_text uppercases h1 and strong tags.
+                'mustcontain' => ['TITLE', 'Paragraph', 'BOLD', 'Item one'],
+                'mustnotcontain' => ['<h1', '<p>', '<strong', '<ul', '<li'],
+            ],
+        ];
+    }
+
+    /**
+     * Test get_prompt strips HTML from online text submissions.
+     *
+     * @param string $onlinetext The HTML content stored in the database.
+     * @param int $onlineformat The Moodle text format constant.
+     * @param array $mustcontain Strings that must appear in the prompt.
+     * @param array $mustnotcontain Strings that must not appear in the prompt.
+     * @covers ::get_prompt
+     * @dataProvider get_prompt_cleans_onlinetext_provider
+     */
+    public function test_get_prompt_cleans_onlinetext(
+        string $onlinetext,
+        int $onlineformat,
+        array $mustcontain,
+        array $mustnotcontain
+    ): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $aifid = $this->create_aif_config($env, 'Analyse the submission');
+
+        $clock = \core\di::get(\core\clock::class);
+        $subid = $DB->insert_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'status' => 'submitted',
+            'latest' => 1,
+            'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
+            'attemptnumber' => 0,
+        ]);
+        $DB->insert_record('assignsubmission_onlinetext', [
+            'assignment' => $env->assign->id,
+            'submission' => $subid,
+            'onlinetext' => $onlinetext,
+            'onlineformat' => $onlineformat,
+        ]);
+
+        $record = (object) [
+            'aid' => $env->assign->id,
+            'subid' => $subid,
+            'userid' => $env->student->id,
+            'aifid' => $aifid,
+            'prompt' => 'Analyse the submission',
+            'contextid' => $env->context->id,
+            'assignmentname' => $env->assign->name,
+        ];
+
+        $aif = new aif($env->context->id);
+        ob_start();
+        $result = $aif->get_prompt($record, 'simple');
+        ob_end_clean();
+
+        $this->assertNotEmpty($result['prompt']);
+        foreach ($mustcontain as $expected) {
+            $this->assertStringContainsString($expected, $result['prompt']);
+        }
+        foreach ($mustnotcontain as $notexpected) {
+            $this->assertStringNotContainsString($notexpected, $result['prompt']);
+        }
+    }
+
+    /**
      * Test get_prompt returns prompt even when feedback already exists.
      *
      * The duplicate prevention is handled by the adhoc task (which deletes
