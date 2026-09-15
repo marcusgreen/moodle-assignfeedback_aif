@@ -152,6 +152,7 @@ Stores the per-assignment configuration for the AI feedback plugin.
 | `assignment` | INT(10) | Foreign key → `course_modules.id` |
 | `prompt` | TEXT | Teacher's custom prompt for this assignment |
 | `autogenerate` | INT(1) | Whether to auto-generate on submission (0/1) |
+| `applyrubricgrades` | INT(1) | Whether to apply the AI rubric assessment to the grading form (0/1) |
 | `timecreated` | INT(10) | Unix timestamp of record creation |
 
 ### Table: `assignfeedback_aif_feedback`

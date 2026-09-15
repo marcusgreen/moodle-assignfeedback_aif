@@ -298,6 +298,12 @@ class aif {
             $activityinstructions
         );
 
+        // Opt-in: ask for a structured rubric assessment that the adhoc task applies to the grading form.
+        if ($gradingmethod === 'rubric' && !empty($assignment->applyrubricgrades)) {
+            $criteria = \assignfeedback_aif\local\rubric_grade_applier::load_criteria($assignment->contextid);
+            $prompt .= \assignfeedback_aif\local\rubric_grade_applier::build_prompt_instructions($criteria);
+        }
+
         return ['prompt' => $prompt, 'options' => $options, 'skippedfiles' => $fileresult['skippedfiles']];
     }
 
