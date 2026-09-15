@@ -143,6 +143,38 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->addHelpButton('assignfeedback_aif_autogenerate', 'autogenerate', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_autogenerate', 'assignfeedback_aif_enabled', 'notchecked');
 
+        // Apply AI rubric assessment to the advanced grading form (opt-in).
+        $mform->addElement(
+            'advcheckbox',
+            'assignfeedback_aif_applyrubricgrades',
+            get_string('applyrubricgrades', 'assignfeedback_aif'),
+            '',
+            ['id' => 'id_assignfeedback_aif_applyrubricgrades'],
+            [0, 1]
+        );
+        $mform->setDefault('assignfeedback_aif_applyrubricgrades', 0);
+        $mform->addHelpButton('assignfeedback_aif_applyrubricgrades', 'applyrubricgrades', 'assignfeedback_aif');
+        $mform->hideIf('assignfeedback_aif_applyrubricgrades', 'assignfeedback_aif_enabled', 'notchecked');
+        // Keep the option visible but greyed out while marking workflow is off; the help text explains why.
+        $mform->disabledIf('assignfeedback_aif_applyrubricgrades', 'markingworkflow', 'eq', 0);
+
+        // Warn when the option is on but the assignment has no usable rubric yet.
+        $context = $this->assignment->get_context();
+        if ($context && !$this->has_rubric_criteria($context->id)) {
+            $mform->addElement(
+                'static',
+                'assignfeedback_aif_norubricnotice',
+                '',
+                \html_writer::div(
+                    get_string('applyrubricgrades_norubricnotice', 'assignfeedback_aif'),
+                    'alert alert-warning'
+                )
+            );
+            $mform->hideIf('assignfeedback_aif_norubricnotice', 'assignfeedback_aif_enabled', 'notchecked');
+            $mform->hideIf('assignfeedback_aif_norubricnotice', 'markingworkflow', 'eq', 0);
+            $mform->hideIf('assignfeedback_aif_norubricnotice', 'assignfeedback_aif_applyrubricgrades', 'notchecked');
+        }
+
         // Show info box about AI control center when block_ai_control is installed and active.
         $enabledblocks = \core_plugin_manager::instance()->get_enabled_plugins('block');
         if (isset($enabledblocks['ai_control'])) {
@@ -172,8 +204,19 @@ class assign_feedback_aif extends assign_feedback_plugin {
             if ($record) {
                 $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
                 $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
+                $mform->setDefault('assignfeedback_aif_applyrubricgrades', $record->applyrubricgrades ?? 0);
             }
         }
+    }
+
+    /**
+     * Whether the assignment currently uses a rubric with at least one criterion.
+     *
+     * @param int $contextid The module context id.
+     * @return bool
+     */
+    private function has_rubric_criteria(int $contextid): bool {
+        return !empty(\assignfeedback_aif\local\rubric_grade_applier::load_criteria($contextid));
     }
 
     /**
@@ -615,12 +658,14 @@ class assign_feedback_aif extends assign_feedback_plugin {
 
         $prompt = $data->assignfeedback_aif_prompt;
         $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
+        $applyrubricgrades = !empty($data->assignfeedback_aif_applyrubricgrades) ? 1 : 0;
 
         // Persist into the plugin's custom table (used at runtime).
         \assignfeedback_aif\local\feedback_utils::save_settings(
             $this->assignment->get_instance()->id,
             $prompt,
-            $autogenerate
+            $autogenerate,
+            $applyrubricgrades
         );
 
         // Also persist into assign_plugin_config so that mod_assign's core
@@ -628,6 +673,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         // an activity (no grades → grade-level subplugin hook never fires).
         $this->set_config('prompt', $prompt);
         $this->set_config('autogenerate', $autogenerate);
+        $this->set_config('applyrubricgrades', $applyrubricgrades);
 
         return true;
     }
