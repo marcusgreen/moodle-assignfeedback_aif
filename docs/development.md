@@ -101,6 +101,7 @@ vendor/bin/phpcs --standard=moodle mod/assign/feedback/aif
 |-----------|---------------|
 | `tests/process_feedback_test.php` | Scheduled task execution, feedback generation |
 | `tests/submission_test.php` | Plugin enabling, basic submission flow |
+| `tests/rubric_grade_applier_test.php` | JSON extraction, criterion/level resolution, applying rubric grades in review |
 
 #### Running PHPUnit
 

@@ -64,7 +64,7 @@ The main plugin class extending `assign_feedback_plugin`. This is the entry poin
 Moodle assignment integration.
 
 **Responsibilities:**
-- Render assignment settings form (prompt, autogenerate checkbox)
+- Render assignment settings form (prompt, autogenerate and apply-rubric-grades checkboxes)
 - Render grading form (feedback editor, regenerate button)
 - Save/load feedback data
 - Provide batch grading operations
@@ -75,9 +75,9 @@ Moodle assignment integration.
 
 | Method | Purpose |
 |--------|---------|
-| `get_settings()` | Adds prompt textarea, autogenerate checkbox, and file manager to the assignment settings form |
+| `get_settings()` | Adds prompt textarea, autogenerate and apply-rubric-grades checkboxes, and file manager to the assignment settings form |
 | `get_form_elements_for_user()` | Renders the feedback editor and regenerate button on the grading page |
-| `save_settings()` | Persists assignment-level prompt and autogenerate config to `assignfeedback_aif` table |
+| `save_settings()` | Persists assignment-level prompt, autogenerate and applyrubricgrades config to `assignfeedback_aif` table |
 | `save()` | Saves teacher-edited feedback to `assignfeedback_aif_feedback` table |
 | `get_grading_batch_operation_details()` | Registers "Generate AI feedback" and "Delete AI feedback" batch operations |
 | `grading_batch_operation()` | Dispatches batch actions to `process_feedbackaif()` |
@@ -152,6 +152,7 @@ Stores the per-assignment configuration for the AI feedback plugin.
 | `assignment` | INT(10) | Foreign key → `course_modules.id` |
 | `prompt` | TEXT | Teacher's custom prompt for this assignment |
 | `autogenerate` | INT(1) | Whether to auto-generate on submission (0/1) |
+| `applyrubricgrades` | INT(1) | Whether to apply the AI rubric assessment to the grading form (0/1) |
 | `timecreated` | INT(10) | Unix timestamp of record creation |
 
 ### Table: `assignfeedback_aif_feedback`
