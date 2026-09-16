@@ -130,10 +130,13 @@ class rubric_grade_applier {
         $assessment = null;
         // Prefer a fenced block (captured whole, not per-brace, so multi-criterion
         // JSON isn't truncated at the first "}" inside the array), fall back to a
-        // bare JSON object containing the rubric key.
+        // bare JSON object whose opening brace directly precedes the rubric key.
+        // The fallback array is matched non-greedily and the leading brace is
+        // anchored to the key so unrelated "[...]}" text later in the feedback
+        // isn't swallowed into the match (which would break json_decode()).
         $patterns = [
             '/' . self::FENCE . '(?:json)?\s*(.*?)\s*' . self::FENCE . '/is',
-            '/(\{.*"' . self::JSON_KEY . '"\s*:\s*\[.*\]\s*\})/is',
+            '/(\{\s*"' . self::JSON_KEY . '"\s*:\s*\[.*?\]\s*\})/is',
         ];
         foreach ($patterns as $pattern) {
             if (!preg_match($pattern, $feedback, $matches)) {

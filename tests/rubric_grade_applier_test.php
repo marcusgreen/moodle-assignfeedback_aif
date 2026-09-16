@@ -102,6 +102,20 @@ final class rubric_grade_applier_test extends \advanced_testcase {
     }
 
     /**
+     * A bare JSON object followed by unrelated text containing its own "[...]}" must
+     * not be overmatched by the greedy fallback pattern.
+     */
+    public function test_extract_unfenced_json_with_trailing_brackets(): void {
+        $response = "Solid effort.\n\n"
+            . '{"rubric": [{"criterion": "Pictures", "level": "One picture", "score": 1, "remark": ""}]}'
+            . "\n\nExample: {\"tags\": [\"x\", \"y\"]}\n";
+        $result = rubric_grade_applier::extract($response);
+
+        $this->assertCount(1, $result['assessment']);
+        $this->assertSame('Pictures', $result['assessment'][0]['criterion']);
+    }
+
+    /**
      * Prompt instructions list every criterion with its levels and scores.
      */
     public function test_build_prompt_instructions(): void {
