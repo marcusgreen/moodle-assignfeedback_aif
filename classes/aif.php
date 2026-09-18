@@ -720,13 +720,20 @@ class aif {
             }
         }
 
+        // Try core_files converter.
+        $convertedcontent = $this->extract_content_via_converter($file);
+
+        if (!empty($convertedcontent)) {
+            $this->store_to_cache($file->get_contenthash(), $convertedcontent);
+            return $convertedcontent;
+        }
+
         // Fall back to page-by-page image rendering.
         try {
             $encodedimages = $this->convert_pdf_to_images($file);
         } catch (\Exception $e) {
             mtrace("Failed to convert PDF '{$file->get_filename()}' to images: " . $e->getMessage());
-            // Fallback: try core_files converter.
-            return $this->extract_content_via_converter($file);
+            return '';
         }
 
         $content = '';
