@@ -79,6 +79,7 @@ class aif {
      * @param string $assignmentname The assignment name.
      * @param string $description The assignment description (intro).
      * @param string $activityinstructions The activity instructions shown on the submission page.
+     * @param string $markingguide The marking guide criteria text.
      * @return string The complete prompt.
      */
     public function build_prompt_from_template(
@@ -87,7 +88,8 @@ class aif {
         string $prompt,
         string $assignmentname,
         string $description = '',
-        string $activityinstructions = ''
+        string $activityinstructions = '',
+        string $markingguide = ''
     ): string {
         $language = $this->get_current_language_name();
 
@@ -104,6 +106,10 @@ class aif {
         if (!empty(trim($rubric))) {
             $rubricsection = "=== GRADING CRITERIA ===\n" . $rubric;
         }
+        $markingguidesection = '';
+        if (!empty(trim($markingguide))) {
+            $markingguidesection = "=== GRADING CRITERIA ===\n" . $markingguide;
+        }
 
         // Expert mode detection: if the teacher's prompt contains {{submission}},
         // it replaces the admin template entirely.
@@ -115,6 +121,8 @@ class aif {
                 '{{submission}}' => $submission,
                 '{{rubric_section}}' => $rubricsection,
                 '{{rubric}}' => $rubric,
+                '{{marking_guide_section}}' => $markingguidesection,
+                '{{marking_guide}}' => $markingguide,
                 '{{assignmentname}}' => $assignmentname,
                 '{{description}}' => $description,
                 '{{description_section}}' => $descriptionsection,
@@ -137,6 +145,8 @@ class aif {
             '{{submission}}' => $submission,
             '{{rubric_section}}' => $rubricsection,
             '{{rubric}}' => $rubric,
+            '{{marking_guide_section}}' => $markingguidesection,
+            '{{marking_guide}}' => $markingguide,
             '{{prompt}}' => $prompt,
             '{{assignmentname}}' => $assignmentname,
             '{{description}}' => $description,
@@ -227,6 +237,7 @@ class aif {
         mtrace("Assignment {$assignment->aid} submission {$assignment->subid} user {$assignment->userid}");
 
         $rubrictext = '';
+        $markingguidetext = '';
         $teacherprompt = $assignment->prompt ?? '';
         $assignrecord = $DB->get_record('assign', ['id' => $assignment->aid], 'name, intro, introformat, activity, activityformat');
         $assignmentname = $assignrecord ? $assignrecord->name : '';
@@ -252,6 +263,8 @@ class aif {
 
         if ($gradingmethod === 'rubric') {
             $rubrictext = $this->get_rubric_text($assignment);
+        } else if ($gradingmethod === 'guide') {
+            $markingguidetext = $this->get_marking_guide_text($assignment);
         }
 
         // Get submission text from online text.
@@ -295,7 +308,8 @@ class aif {
             $teacherprompt,
             $assignmentname,
             $description,
-            $activityinstructions
+            $activityinstructions,
+            $markingguidetext
         );
 
         return ['prompt' => $prompt, 'options' => $options, 'skippedfiles' => $fileresult['skippedfiles']];
@@ -385,6 +399,43 @@ class aif {
         }
 
         return $rubrictext;
+    }
+
+    /**
+     * Extract marking guide criteria as text.
+     *
+     * @param stdClass $assignment The assignment data object.
+     * @return string The marking guide criteria text.
+     * @throws \dml_exception
+     */
+    private function get_marking_guide_text(stdClass $assignment): string {
+        global $DB;
+
+        $sql = "SELECT gc.id, gc.shortname, gc.description, gc.descriptionmarkers, gc.maxscore
+                  FROM {grading_areas} ga
+                  JOIN {grading_definitions} gd ON gd.areaid = ga.id
+                  JOIN {gradingform_guide_criteria} gc ON gc.definitionid = gd.id
+                 WHERE ga.contextid = :contextid
+                   AND ga.activemethod = :gradingmethod
+                   AND ga.areaname = :areaname
+              ORDER BY gc.sortorder ASC";
+
+        $params = [
+            'contextid' => $assignment->contextid,
+            'gradingmethod' => 'guide',
+            'areaname' => 'submissions',
+        ];
+
+        $guidetext = '';
+        foreach ($DB->get_records_sql($sql, $params) as $record) {
+            $line = "- {$record->shortname} (max {$record->maxscore} points): {$record->description}";
+            if (!empty(trim($record->descriptionmarkers))) {
+                $line .= "\n  Marking notes: {$record->descriptionmarkers}";
+            }
+            $guidetext .= $line . "\n";
+        }
+
+        return $guidetext;
     }
 
     /**
