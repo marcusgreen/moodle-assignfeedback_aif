@@ -16,6 +16,9 @@
 
 namespace assignfeedback_aif\task;
 
+use core\output\stored_progress_bar;
+use core\task\adhoc_task;
+
 /**
  * Ad-hoc task for processing AI feedback.
  *
@@ -37,7 +40,16 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
-        $this->start_stored_progress();
+        // Use the existing progress bar, if available.
+        $idnumber = stored_progress_bar::convert_to_idnumber(get_class($this) . '_' . $this->get_id());
+        $existingbar = stored_progress_bar::get_by_idnumber($idnumber);
+
+        if ($existingbar) {
+            $this->progress = $existingbar;
+        } else {
+            $this->initialise_stored_progress();
+        }
+        $this->set_initial_progress();
 
         $customdata = $this->get_custom_data();
         $assignmentid = $customdata->assignment;
@@ -92,6 +104,26 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
      */
     public function set_initial_progress(): void {
         $this->progress->update_full(0, get_string('waitingforadhoctaskstart', 'assignfeedback_aif'));
+    }
+
+    /**
+     * Initializes and starts a stored progress bar for tracking progress.
+     *
+     * @return void
+     */
+    public function initialise_stored_progress(): void {
+        // In Moodle 5.0+, adhoc_task provides this method natively; delegate to it.
+        if (method_exists(adhoc_task::class, 'initialise_stored_progress')) {
+            parent::initialise_stored_progress();
+            return;
+        }
+
+        // Required for 4.5 compatibility.
+        $this->progress = new stored_progress_bar(
+            stored_progress_bar::convert_to_idnumber(get_class($this) . '_' . $this->get_id())
+        );
+        $this->progress->create();
+        $this->progress->start();
     }
 
     #[\Override]
