@@ -516,8 +516,14 @@ class aif {
             // Plain text files: read directly.
             if ($mimetype === 'text/plain') {
                 $tempfile = $file->copy_content_to_temp();
-                $alltext .= file_get_contents($tempfile) . "\n";
+                $content = file_get_contents($tempfile);
                 unlink($tempfile);
+                // Convert to UTF-8 if needed — Postgres rejects non-UTF-8 byte sequences.
+                if (!mb_check_encoding($content, 'UTF-8')) {
+                    $detected = mb_detect_encoding($content, ['UTF-8', 'Windows-1252', 'ISO-8859-1'], true);
+                    $content = $detected ? mb_convert_encoding($content, 'UTF-8', $detected) : mb_scrub($content);
+                }
+                $alltext .= $content . "\n";
                 $processedfiles[] = $filename;
                 mtrace("Text content from '{$filename}' added to the prompt.");
                 continue;
