@@ -84,23 +84,14 @@ class feedback_utils {
     }
 
     /**
-     * Get AI feedback record for a submission.
+     * Get AI feedback record for a specific submission.
      *
-     * @param int $assignmentid The assignment ID.
-     * @param int $userid The user ID.
+     * @param int $submissionid The submission ID (from assign_submission).
      * @return \stdClass|false The feedback record or false if not found.
      */
-    public static function get_feedbackaif(int $assignmentid, int $userid): \stdClass|false {
+    public static function get_feedbackaif(int $submissionid): \stdClass|false {
         global $DB;
-        self::ensure_config_exists($assignmentid);
-        $sql = "SELECT aiff.*
-                  FROM {assign} a
-                  JOIN {assignfeedback_aif} aif ON aif.assignment = a.id
-                  JOIN {assignfeedback_aif_feedback} aiff ON aiff.aif = aif.id
-                  JOIN {assign_submission} sub ON sub.assignment = a.id AND aiff.submission = sub.id
-                 WHERE a.id = :assignment AND sub.userid = :userid AND sub.latest = 1";
-        $params = ['assignment' => $assignmentid, 'userid' => $userid];
-        return $DB->get_record_sql($sql, $params);
+        return $DB->get_record('assignfeedback_aif_feedback', ['submission' => $submissionid]) ?: false;
     }
 
     /**
@@ -228,23 +219,23 @@ class feedback_utils {
     }
 
     /**
-     * Save or update a per-user feedback record.
+     * Save or update a per-submission feedback record.
      *
      * @param int $assignmentid The assignment instance ID.
-     * @param int $userid The user ID whose feedback is being saved.
+     * @param int $submissionid The submission ID (from assign_submission).
      * @param string $feedback The feedback HTML text.
      * @param int $feedbackformat The text format (e.g. FORMAT_HTML).
      * @return bool True on success, false if no config record exists.
      */
     public static function save_feedback(
         int $assignmentid,
-        int $userid,
+        int $submissionid,
         string $feedback,
         int $feedbackformat
     ): bool {
         global $DB;
         $clock = \core\di::get(\core\clock::class);
-        $record = self::get_feedbackaif($assignmentid, $userid);
+        $record = self::get_feedbackaif($submissionid);
 
         if ($record) {
             $record->timemodified = $clock->now()->getTimestamp();
@@ -252,6 +243,7 @@ class feedback_utils {
             $record->feedbackformat = $feedbackformat;
             $DB->update_record('assignfeedback_aif_feedback', $record);
         } else {
+            self::ensure_config_exists($assignmentid);
             $aif = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
             if (!$aif) {
                 debugging(
@@ -260,14 +252,9 @@ class feedback_utils {
                 );
                 return false;
             }
-            $submission = $DB->get_record('assign_submission', [
-                'assignment' => $assignmentid,
-                'userid' => $userid,
-                'latest' => 1,
-            ]);
             $newrecord = new \stdClass();
             $newrecord->aif = $aif->id;
-            $newrecord->submission = $submission ? $submission->id : null;
+            $newrecord->submission = $submissionid;
             $newrecord->feedback = $feedback;
             $newrecord->feedbackformat = $feedbackformat;
             $newrecord->timecreated = $clock->now()->getTimestamp();

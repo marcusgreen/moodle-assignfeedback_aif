@@ -182,16 +182,17 @@ final class submission_test extends \advanced_testcase {
 
         $plugin = $this->get_aif_plugin($env->assignobj);
 
-        // No feedback yet — should return false.
-        $result = $plugin->get_feedbackaif($env->assign->id, $env->student->id);
-        $this->assertFalse($result);
-
-        // Insert feedback.
         $submission = $DB->get_record('assign_submission', [
             'assignment' => $env->assign->id,
             'userid' => $env->student->id,
             'latest' => 1,
         ]);
+
+        // No feedback yet — should return false.
+        $result = $plugin->get_feedbackaif($submission->id);
+        $this->assertFalse($result);
+
+        // Insert feedback.
         $clock = \core\di::get(\core\clock::class);
         $DB->insert_record('assignfeedback_aif_feedback', [
             'aif' => $aifid,
@@ -202,7 +203,7 @@ final class submission_test extends \advanced_testcase {
         ]);
 
         // Should now return the feedback record.
-        $result = $plugin->get_feedbackaif($env->assign->id, $env->student->id);
+        $result = $plugin->get_feedbackaif($submission->id);
         $this->assertNotFalse($result);
         $this->assertEquals('Generated feedback content', $result->feedback);
     }

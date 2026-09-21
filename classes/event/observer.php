@@ -128,10 +128,11 @@ class observer {
     }
 
     /**
-     * Delete existing AI feedback records for a user in a specific assignment.
+     * Delete existing AI feedback for the submission the student just submitted.
      *
-     * Called during resubmission so stale feedback is removed immediately
-     * while the new generation is pending.
+     * Only the feedback linked to the current (latest) submission is removed so
+     * that the student does not see stale feedback while new generation is pending.
+     * Feedback for previous attempts is intentionally preserved.
      *
      * @param int $assignmentid The assignment instance ID.
      * @param int $userid The user ID whose feedback should be deleted.
@@ -139,19 +140,21 @@ class observer {
     private static function delete_existing_feedback(int $assignmentid, int $userid): void {
         global $DB;
 
-        $sql = "SELECT aiff.id
-                  FROM {assignfeedback_aif_feedback} aiff
-                  JOIN {assignfeedback_aif} aif ON aiff.aif = aif.id
-                  JOIN {assign_submission} sub ON aiff.submission = sub.id
-                 WHERE aif.assignment = :assignmentid
-                   AND sub.userid = :userid";
-        $feedbackids = $DB->get_fieldset_sql($sql, [
-            'assignmentid' => $assignmentid,
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $assignmentid,
             'userid' => $userid,
+            'latest' => 1,
         ]);
+        if (!$submission) {
+            return;
+        }
 
-        if (!empty($feedbackids)) {
-            $DB->delete_records_list('assignfeedback_aif_feedback', 'id', $feedbackids);
+        $aifid = $DB->get_field('assignfeedback_aif', 'id', ['assignment' => $assignmentid]);
+        if ($aifid) {
+            $DB->delete_records('assignfeedback_aif_feedback', [
+                'aif' => $aifid,
+                'submission' => $submission->id,
+            ]);
         }
     }
 }
