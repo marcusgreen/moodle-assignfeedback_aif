@@ -142,5 +142,17 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026040102, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026090800) {
+        // Add applyrubricgrades: opt-in application of AI suggested rubric levels.
+        $table = new xmldb_table('assignfeedback_aif');
+        $field = new xmldb_field('applyrubricgrades', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'autogenerate');
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026090800, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

@@ -134,6 +134,9 @@ $task->set_custom_data([
    - Call `get_prompt()` to build the full prompt (with rubric + files + images)
    - Detect image presence → use `itt` purpose for image analysis
    - Call `perform_request()` with appropriate purpose and options
+   - If apply-rubric-grades is enabled: extract the JSON rubric block from the response and
+     write the levels into the rubric grading form, grade **In review**
+     (see [Rubric Grade Application](rubric-grade-application.md))
    - Append disclaimer
    - Insert feedback into database
 

@@ -69,6 +69,12 @@ class feedback_utils {
             'subtype' => 'assignfeedback',
             'name' => 'autogenerate',
         ]);
+        $applyrubricgrades = $DB->get_field('assign_plugin_config', 'value', [
+            'assignment' => $assignmentid,
+            'plugin' => 'aif',
+            'subtype' => 'assignfeedback',
+            'name' => 'applyrubricgrades',
+        ]);
 
         if ($prompt !== false || $autogenerate !== false) {
             $clock = \core\di::get(\core\clock::class);
@@ -76,6 +82,7 @@ class feedback_utils {
             $record->assignment = $assignmentid;
             $record->prompt = ($prompt !== false) ? $prompt : '';
             $record->autogenerate = ($autogenerate !== false) ? (int) $autogenerate : 0;
+            $record->applyrubricgrades = ($applyrubricgrades !== false) ? (int) $applyrubricgrades : 0;
             $record->timecreated = $clock->now()->getTimestamp();
             $DB->insert_record('assignfeedback_aif', $record);
         }
@@ -206,20 +213,28 @@ class feedback_utils {
      * @param int $assignmentid The assignment instance ID.
      * @param string $prompt The AI prompt text.
      * @param int $autogenerate Whether to auto-generate feedback on submission (0 or 1).
+     * @param int $applyrubricgrades Whether to apply the AI rubric assessment to the grading form (0 or 1).
      * @return bool True on success.
      */
-    public static function save_settings(int $assignmentid, string $prompt, int $autogenerate): bool {
+    public static function save_settings(
+        int $assignmentid,
+        string $prompt,
+        int $autogenerate,
+        int $applyrubricgrades = 0
+    ): bool {
         global $DB;
         $feedback = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
         if ($feedback) {
             $feedback->prompt = $prompt;
             $feedback->autogenerate = $autogenerate;
+            $feedback->applyrubricgrades = $applyrubricgrades;
             $DB->update_record('assignfeedback_aif', $feedback);
         } else {
             $clock = \core\di::get(\core\clock::class);
             $feedback = new \stdClass();
             $feedback->prompt = $prompt;
             $feedback->autogenerate = $autogenerate;
+            $feedback->applyrubricgrades = $applyrubricgrades;
             $feedback->assignment = $assignmentid;
             $feedback->timecreated = $clock->now()->getTimestamp();
             $DB->insert_record('assignfeedback_aif', $feedback);

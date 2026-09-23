@@ -49,6 +49,42 @@ Feature: AI Feedback plugin configuration
     And I expand all fieldsets
     Then the field "assignfeedback_aif_autogenerate" matches value "1"
 
+  Scenario: Teacher enables applying the AI rubric assessment to the grading form
+    Given the following "activity" exists:
+      | activity                            | assign                  |
+      | course                              | C1                      |
+      | name                                | Rubric Assignment       |
+      | assignsubmission_onlinetext_enabled | 1                       |
+      | assignfeedback_aif_enabled          | 1                       |
+      | assignfeedback_aif_prompt           | Evaluate the text       |
+      | markingworkflow                     | 1                       |
+      | submissiondrafts                    | 0                       |
+    When I am on the "Rubric Assignment" "assign activity" page logged in as teacher1
+    And I navigate to "Settings" in current page administration
+    And I expand all fieldsets
+    And I set the field "assignfeedback_aif_applyrubricgrades" to "1"
+    And I press "Save and display"
+    And I navigate to "Settings" in current page administration
+    And I expand all fieldsets
+    Then the field "assignfeedback_aif_applyrubricgrades" matches value "1"
+
+  @javascript
+  Scenario: Apply rubric assessment option is disabled while marking workflow is disabled
+    Given the following "activity" exists:
+      | activity                            | assign                  |
+      | course                              | C1                      |
+      | name                                | Workflow Assignment     |
+      | assignsubmission_onlinetext_enabled | 1                       |
+      | assignfeedback_aif_enabled          | 1                       |
+      | assignfeedback_aif_prompt           | Evaluate the text       |
+      | markingworkflow                     | 0                       |
+    When I am on the "Workflow Assignment" "assign activity" page logged in as teacher1
+    And I navigate to "Settings" in current page administration
+    And I expand all fieldsets
+    Then the "assignfeedback_aif_applyrubricgrades" "field" should be disabled
+    And I set the field "markingworkflow" to "Yes"
+    And the "assignfeedback_aif_applyrubricgrades" "field" should be enabled
+
   @javascript
   Scenario: Teacher modifies prompt on existing assignment
     Given the following "activity" exists:

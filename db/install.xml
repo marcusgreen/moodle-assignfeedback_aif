@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/assign/feedback/aif/db" VERSION="20250213" COMMENT="XMLDB file for Moodle mod/assign/feedback/aif"
+<XMLDB PATH="mod/assign/feedback/aif/db" VERSION="20260908" COMMENT="XMLDB file for Moodle mod/assign/feedback/aif"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../../../lib/xmldb/xmldb.xsd"
 >
@@ -10,6 +10,7 @@
         <FIELD NAME="assignment" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="prompt" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Text send to remote large language model"/>
         <FIELD NAME="autogenerate" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="If enabled, AI feedback is generated automatically on submission"/>
+        <FIELD NAME="applyrubricgrades" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="If enabled, AI suggested rubric levels are applied to the grading form (marking workflow, in review)"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
