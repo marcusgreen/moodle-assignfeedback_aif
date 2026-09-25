@@ -391,7 +391,7 @@ class aif {
         foreach ($records as $record) {
             $levels = $DB->get_records('gradingform_rubric_levels', ['criterionid' => $record->id], 'score ASC');
             $definitions = array_map(function ($level) {
-                return $level->definition;
+                return $level->definition . ' (' . get_string('scorepostfix', 'gradingform_rubric', $level->score) . ')';
             }, $levels);
             $definition = implode(' | ', $definitions);
             $rubrictext .= "- " . $record->description . ": " . $definition . "\n";
