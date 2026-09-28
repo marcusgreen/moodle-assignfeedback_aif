@@ -302,7 +302,10 @@ class aif {
         );
 
         // Opt-in: ask for a structured rubric assessment that the adhoc task applies to the grading form.
-        if ($gradingmethod === self::GRADING_METHOD_RUBRIC && !empty($assignment->applyrubricgrades)) {
+        $applyrubric = self::is_rubric_application_enabled()
+            && $gradingmethod === self::GRADING_METHOD_RUBRIC
+            && !empty($assignment->applyrubricgrades);
+        if ($applyrubric) {
             $criteria = \assignfeedback_aif\local\rubric_grade_applier::load_criteria($assignment->contextid);
             if (empty($criteria)) {
                 mtrace(get_string('rubricapplyskipped_norubric', 'assignfeedback_aif'));
@@ -311,6 +314,17 @@ class aif {
         }
 
         return ['prompt' => $prompt, 'options' => $options, 'skippedfiles' => $fileresult['skippedfiles']];
+    }
+
+    /**
+     * Whether applying the AI rubric assessment to the grading form is enabled site-wide.
+     *
+     * The per-assignment option is only offered and honoured while this is on.
+     *
+     * @return bool
+     */
+    public static function is_rubric_application_enabled(): bool {
+        return (bool) get_config('assignfeedback_aif', 'enableapplyrubricgrades');
     }
 
     /**
