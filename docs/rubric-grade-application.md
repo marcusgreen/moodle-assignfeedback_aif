@@ -10,6 +10,7 @@ level and remark for each criterion directly into the assignment's rubric gradin
 |-------------|-----|
 | Grading method "Rubric" with a ready definition | Only rubric criteria and levels can be resolved |
 | Marking workflow enabled | The applied grade is kept in state **In review**; a teacher must confirm it before release |
+| Admin setting **Enable applying rubric assessments** | Site-wide switch, off by default. While off the per-assignment option is hidden and nothing is applied |
 | Setting enabled per assignment | The feature is opt-in and off by default |
 
 While marking workflow is disabled, the checkbox is shown greyed out. A tick that was already set is kept and becomes active again once marking workflow is enabled.

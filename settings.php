@@ -71,6 +71,13 @@ $settings->add(new admin_setting_configcheckbox(
     0
 ));
 
+$settings->add(new admin_setting_configcheckbox(
+    'assignfeedback_aif/enableapplyrubricgrades',
+    get_string('enableapplyrubricgrades', 'assignfeedback_aif'),
+    get_string('enableapplyrubricgrades_text', 'assignfeedback_aif'),
+    0
+));
+
 // Prompt template.
 // The default template is hardcoded here because it contains structural placeholders
 // that are not translatable. Admins customise this in the settings UI.

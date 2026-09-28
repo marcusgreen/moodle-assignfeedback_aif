@@ -80,6 +80,7 @@ Navigate to *Site Administration → Plugins → Activity modules → Assignment
 | Setting | Description | Default |
 |---------|-------------|---------|
 | **Enabled by default** | Enable the plugin by default for new assignments | No |
+| **Enable applying rubric assessments** | Offer the per-assignment "Apply the AI's rubric assessment" option | No |
 | **Prompt** | Default prompt for new assignment instances | "Analyse the grammar in this text" |
 | **AI backend** | Choose between Core AI Subsystem or local_ai_manager | Core AI Subsystem |
 | **AI purpose** | Purpose identifier for local_ai_manager | `feedback` |
