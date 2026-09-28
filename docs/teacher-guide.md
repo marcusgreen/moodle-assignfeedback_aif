@@ -285,9 +285,8 @@ is released to students until you confirm the grade. If the AI's answer cannot b
 rubric unambiguously, only the text feedback is stored and the rubric stays untouched; the task log
 shows the reason.
 
-> **Important:** Open or reload the grading page **after** the AI task has finished. A grading form that
-> was already open before the task ran holds an old draft and would overwrite the AI's rubric
-> assessment when you click Save.
+When you use **Generate AI feedback** on the grading page, the rubric form is updated in place once
+the task has finished, and a message confirms it. You can review, adjust and save as usual.
 
 Grades in the states "Ready for release" or "Released" are never changed by the AI. Details for
 administrators are in [Rubric Grade Application](rubric-grade-application.md).
