@@ -15,7 +15,7 @@ When enabled, these additional settings appear:
 |---------|-------------|
 | **Prompt** | Your instructions to the AI for this specific assignment |
 | **Generate feedback automatically on submission** | Auto-generate when students submit |
-| **Apply the AI's rubric assessment to the grading form** | Opt-in; needs a rubric and marking workflow. Greyed out while marking workflow is off. See [Rubric Integration](#rubric-integration) |
+| **Apply the AI's rubric assessment to the grading form** | Opt-in; only shown when enabled site-wide by an administrator. Needs a rubric and marking workflow. Greyed out while marking workflow is off. See [Rubric Integration](#rubric-integration) |
 | **Prompt file** | (Future feature) Upload prompt as a text file |
 
 ![Assignment editing view](images/assign_feedback_aif.png)

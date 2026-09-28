@@ -35,6 +35,15 @@ require_once(__DIR__ . '/generator_trait.php');
 final class rubric_grade_applier_test extends \advanced_testcase {
     use aif_test_helper;
 
+    /**
+     * Enable the site-wide switch; the feature is off by default.
+     */
+    protected function setUp(): void {
+        parent::setUp();
+        $this->resetAfterTest();
+        set_config('enableapplyrubricgrades', 1, 'assignfeedback_aif');
+    }
+
     /** @var string Markdown code fence delimiter. */
     private const FENCE = '```'; // phpcs:ignore Squiz.Strings.EchoedStrings, moodle.Strings.ForbiddenStrings
 
@@ -294,6 +303,56 @@ final class rubric_grade_applier_test extends \advanced_testcase {
         $mform = new \MoodleQuickForm('aiftest2', 'post', '');
         $plugin->get_settings($mform);
         $this->assertFalse($mform->elementExists('assignfeedback_aif_norubricnotice'));
+    }
+
+    /**
+     * While the site-wide switch is off, the option is hidden and stored per-assignment values are kept.
+     */
+    public function test_site_switch_off_hides_option_and_keeps_stored_value(): void {
+        global $CFG, $DB;
+        $this->resetAfterTest();
+        require_once($CFG->libdir . '/formslib.php');
+        set_config('enableapplyrubricgrades', 0, 'assignfeedback_aif');
+
+        $env = $this->create_test_environment(['markingworkflow' => 1]);
+        $this->setUser($env->teacher);
+        $plugin = $env->assignobj->get_feedback_plugin_by_type('aif');
+        $aifid = $this->create_aif_config($env, 'Evaluate based on rubric', 0);
+        $DB->set_field('assignfeedback_aif', 'applyrubricgrades', 1, ['id' => $aifid]);
+        $plugin->set_config('applyrubricgrades', 1);
+
+        $mform = new \MoodleQuickForm('aiftest', 'post', '');
+        $plugin->get_settings($mform);
+        $this->assertFalse($mform->elementExists('assignfeedback_aif_applyrubricgrades'));
+        $this->assertFalse($mform->elementExists('assignfeedback_aif_norubricnotice'));
+
+        // Saving the form without the field must not reset the stored value.
+        $plugin->save_settings((object) ['assignfeedback_aif_prompt' => 'Evaluate based on rubric']);
+        $this->assertSame('1', $DB->get_field('assignfeedback_aif', 'applyrubricgrades', ['id' => $aifid]));
+        $this->assertSame('1', (string) $plugin->get_config('applyrubricgrades'));
+    }
+
+    /**
+     * While the site-wide switch is off, no rubric grade is applied even when the assignment opted in.
+     */
+    public function test_site_switch_off_skips_application(): void {
+        global $DB;
+        $this->resetAfterTest();
+        set_config('enableapplyrubricgrades', 0, 'assignfeedback_aif');
+
+        $env = $this->create_test_environment(['markingworkflow' => 1, 'grade' => 100]);
+        $controller = $this->create_rubric($env);
+        $this->create_and_submit($env, 'An essay with one picture.');
+        $aifid = $this->create_aif_config($env, 'Evaluate based on rubric', 0);
+        $DB->set_field('assignfeedback_aif', 'applyrubricgrades', 1, ['id' => $aifid]);
+
+        $this->setup_ai_mock(self::RESPONSE);
+        $this->run_adhoc_task($env);
+
+        // Feedback stored untouched (no extraction) and no rubric instance written.
+        $feedback = $DB->get_record('assignfeedback_aif_feedback', ['aif' => $aifid], '*', MUST_EXIST);
+        $this->assertStringContainsString('Good work overall.', $feedback->feedback);
+        $this->assertEmpty($DB->get_records('grading_instances', ['definitionid' => $controller->get_definition()->id]));
     }
 
     /**

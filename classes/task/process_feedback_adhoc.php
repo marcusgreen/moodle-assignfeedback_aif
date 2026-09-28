@@ -249,7 +249,9 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
         // Opt-in rubric application: split the structured assessment off the feedback text.
         $rubricassessment = null;
-        $applyrubric = ($gradingmethod === \assignfeedback_aif\aif::GRADING_METHOD_RUBRIC) && !empty($record->applyrubricgrades);
+        $applyrubric = \assignfeedback_aif\aif::is_rubric_application_enabled()
+            && ($gradingmethod === \assignfeedback_aif\aif::GRADING_METHOD_RUBRIC)
+            && !empty($record->applyrubricgrades);
         if ($applyrubric) {
             $extracted = \assignfeedback_aif\local\rubric_grade_applier::extract($aifeedback);
             $aifeedback = $extracted['feedback'];
