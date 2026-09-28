@@ -113,6 +113,7 @@ $string['rubricapplyskipped_gradingdisabled'] = 'Rubric assessment not applied: 
 $string['rubricapplyskipped_nomatch'] = 'Rubric assessment not applied: the AI response could not be matched to the rubric criteria and levels.';
 $string['rubricapplyskipped_norubric'] = 'Rubric assessment not applied: the rubric grading form is not available.';
 $string['rubricapplyskipped_noworkflow'] = 'Rubric assessment not applied: marking workflow is disabled for this assignment.';
+$string['rubricassessmentapplied'] = 'The AI rubric assessment has been applied to the grading form below.';
 $string['rubricjsoninstructions'] = 'Finally, after the feedback text, output exactly one JSON code block in the format shown below with one entry per criterion. Use the criterion names and level definitions verbatim from this list:';
 $string['skipreason_conversionfailed'] = 'File conversion failed';
 $string['skipreason_conversionnotsupported'] = 'File format not supported for conversion. Supported formats: {$a}';

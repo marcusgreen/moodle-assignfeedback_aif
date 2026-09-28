@@ -43,6 +43,26 @@ While marking workflow is disabled, the checkbox is shown greyed out. A tick tha
 The rater of the rubric instance is the teacher who triggered the generation. For automatic
 generation on submission the site administrator is recorded as a neutral placeholder.
 
+## Grading page refresh
+
+On the grading page the "Generate AI feedback" button injects the new feedback into the editor
+without reloading the page. Because the rubric assessment is written server-side, the rubric
+widget would otherwise keep showing its old state until the next reload, and saving the form
+would overwrite the AI assessment with the stale values.
+
+`check_feedback_status` therefore returns the filling of the current grading instance
+(criterion id, level id, remark) when all of the following hold:
+
+- rubric application is enabled site-wide and for the assignment,
+- the active grading method is a ready rubric,
+- the instance was modified at or after the feedback text, i.e. by the same run.
+
+The `assignfeedback_aif/rubricform` module then selects the matching level radios, mirrors the
+`checked` state the rubric widget maintains, fills the remark fields and shows a toast. The
+instance is the source of truth here, not the raw AI JSON, so the form shows exactly what was
+stored after criterion and level matching. The automatic-generation spinner still reloads the
+page, which picks up the rubric on its own.
+
 ## Safety rules
 
 - Never runs without marking workflow.

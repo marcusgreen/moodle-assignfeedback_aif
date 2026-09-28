@@ -111,6 +111,7 @@ $string['rubricapplyskipped_gradingdisabled'] = 'KI-Bewertung nicht übernommen:
 $string['rubricapplyskipped_nomatch'] = 'KI-Bewertung nicht übernommen: Die KI-Antwort konnte nicht den Kriterien und Stufen des Bewertungsrasters zugeordnet werden.';
 $string['rubricapplyskipped_norubric'] = 'KI-Bewertung nicht übernommen: Das Bewertungsraster ist nicht verfügbar.';
 $string['rubricapplyskipped_noworkflow'] = 'KI-Bewertung nicht übernommen: Der Bewertungsworkflow ist für diese Aufgabe deaktiviert.';
+$string['rubricassessmentapplied'] = 'Die KI-Bewertung der Rubrik wurde in das Bewertungsformular unten übernommen.';
 $string['rubricjsoninstructions'] = 'Gib abschliessend, nach dem Feedback-Text, genau einen JSON-Codeblock im unten gezeigten Format aus, mit einem Eintrag pro Kriterium. Verwende die Kriteriennamen und Stufendefinitionen wörtlich aus dieser Liste:';
 $string['skipreason_conversionfailed'] = 'Dateikonvertierung fehlgeschlagen';
 $string['skipreason_conversionnotsupported'] = 'Dateiformat wird nicht für die Konvertierung unterstützt. Unterstützte Formate: {$a}';

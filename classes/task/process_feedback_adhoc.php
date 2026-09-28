@@ -278,6 +278,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
             'feedback' => $aifeedbackhtml,
             'feedbackformat' => FORMAT_HTML,
             'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
             'submission' => $record->subid,
             'skippedfiles' => !empty($promptdata['skippedfiles']) ? json_encode($promptdata['skippedfiles']) : null,
         ];
@@ -432,6 +433,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
             'feedback' => '',
             'feedbackformat' => FORMAT_HTML,
             'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
             'submission' => $record->subid,
             'skippedfiles' => json_encode([$errorentry]),
         ];

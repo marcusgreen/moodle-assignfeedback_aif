@@ -17,6 +17,7 @@
 namespace assignfeedback_aif;
 
 use assignfeedback_aif\local\rubric_grade_applier;
+use assignfeedback_aif\external\check_feedback_status;
 use assignfeedback_aif\task\process_feedback_adhoc;
 
 defined('MOODLE_INTERNAL') || die();
@@ -401,6 +402,108 @@ final class rubric_grade_applier_test extends \advanced_testcase {
         $this->assertEquals($admin->id, $instance->get_data('raterid'));
         $flags = $env->assignobj->get_user_flags($env->student->id, false);
         $this->assertSame(ASSIGN_MARKING_WORKFLOW_STATE_INREVIEW, $flags->workflowstate);
+    }
+
+    /**
+     * The status web service reports the filling the task applied so the grading page can mirror it.
+     *
+     * @covers \assignfeedback_aif\external\check_feedback_status::execute
+     */
+    public function test_check_feedback_status_reports_applied_rubric(): void {
+        global $DB;
+
+        $env = $this->create_test_environment(['markingworkflow' => 1, 'grade' => 100]);
+        $controller = $this->create_rubric($env);
+        $this->create_and_submit($env, 'An essay with one picture.');
+        $aifid = $this->create_aif_config($env, 'Evaluate based on rubric', 0);
+        $DB->set_field('assignfeedback_aif', 'applyrubricgrades', 1, ['id' => $aifid]);
+
+        $this->setup_ai_mock(self::RESPONSE);
+        $this->run_adhoc_task($env);
+
+        $this->setUser($env->teacher);
+        $result = check_feedback_status::execute($env->assign->id, $env->student->id);
+        $result = \core_external\external_api::clean_returnvalue(check_feedback_status::execute_returns(), $result);
+
+        $this->assertTrue($result['feedbackexists']);
+        $this->assertTrue($result['rubric']['applied']);
+        $this->assertCount(2, $result['rubric']['criteria']);
+
+        $criteria = $controller->get_definition()->rubric_criteria;
+        $expected = ['Spelling is important' => [2.0, 'Flawless.'], 'Pictures' => [1.0, 'Add another one.']];
+        foreach ($result['rubric']['criteria'] as $entry) {
+            $criterion = $criteria[$entry['criterionid']];
+            [$score, $remark] = $expected[$criterion['description']];
+            $this->assertEquals($score, $criterion['levels'][$entry['levelid']]['score']);
+            $this->assertSame($remark, $entry['remark']);
+        }
+
+        // Students only ever get the existence flag.
+        $this->setUser($env->student);
+        $result = check_feedback_status::execute($env->assign->id, $env->student->id);
+        $result = \core_external\external_api::clean_returnvalue(check_feedback_status::execute_returns(), $result);
+        $this->assertTrue($result['feedbackexists']);
+        $this->assertFalse($result['rubric']['applied']);
+        $this->assertSame([], $result['rubric']['criteria']);
+    }
+
+    /**
+     * When nothing was applied (here: no marking workflow) the service reports no filling,
+     * even though feedback exists.
+     *
+     * @covers \assignfeedback_aif\external\check_feedback_status::execute
+     */
+    public function test_check_feedback_status_reports_nothing_when_skipped(): void {
+        global $DB;
+
+        $env = $this->create_test_environment(['markingworkflow' => 0, 'grade' => 100]);
+        $this->create_rubric($env);
+        $this->create_and_submit($env, 'An essay with one picture.');
+        $aifid = $this->create_aif_config($env, 'Evaluate based on rubric', 0);
+        $DB->set_field('assignfeedback_aif', 'applyrubricgrades', 1, ['id' => $aifid]);
+
+        $this->setup_ai_mock(self::RESPONSE);
+        $this->run_adhoc_task($env);
+
+        $this->setUser($env->teacher);
+        $result = check_feedback_status::execute($env->assign->id, $env->student->id);
+        $result = \core_external\external_api::clean_returnvalue(check_feedback_status::execute_returns(), $result);
+
+        $this->assertTrue($result['feedbackexists']);
+        $this->assertFalse($result['rubric']['applied']);
+        $this->assertSame([], $result['rubric']['criteria']);
+    }
+
+    /**
+     * A rubric instance from an earlier run is not reported after a regeneration that applied nothing.
+     *
+     * @covers \assignfeedback_aif\external\check_feedback_status::execute
+     */
+    public function test_check_feedback_status_ignores_stale_instance(): void {
+        global $DB;
+
+        $env = $this->create_test_environment(['markingworkflow' => 1, 'grade' => 100]);
+        $this->create_rubric($env);
+        $this->create_and_submit($env, 'An essay with one picture.');
+        $aifid = $this->create_aif_config($env, 'Evaluate based on rubric', 0);
+        $DB->set_field('assignfeedback_aif', 'applyrubricgrades', 1, ['id' => $aifid]);
+
+        $this->setup_ai_mock(self::RESPONSE);
+        $this->run_adhoc_task($env);
+
+        // Second run one minute later without a rubric block: feedback is rewritten, rubric untouched.
+        $clock = $this->mock_clock_with_frozen(time() + 60);
+        $this->setup_ai_mock('Plain feedback only.');
+        $this->run_adhoc_task($env);
+        $feedback = $DB->get_record('assignfeedback_aif_feedback', ['aif' => $aifid], '*', MUST_EXIST);
+        $this->assertSame($clock->time(), (int) $feedback->timecreated);
+
+        $this->setUser($env->teacher);
+        $result = check_feedback_status::execute($env->assign->id, $env->student->id);
+        $result = \core_external\external_api::clean_returnvalue(check_feedback_status::execute_returns(), $result);
+
+        $this->assertTrue($result['feedbackexists']);
+        $this->assertFalse($result['rubric']['applied']);
     }
 
     /**

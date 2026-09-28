@@ -286,6 +286,7 @@ class feedback_utils {
             $newrecord->feedback = $feedback;
             $newrecord->feedbackformat = $feedbackformat;
             $newrecord->timecreated = $clock->now()->getTimestamp();
+            $newrecord->timemodified = $newrecord->timecreated;
             $DB->insert_record('assignfeedback_aif_feedback', $newrecord);
         }
         return true;

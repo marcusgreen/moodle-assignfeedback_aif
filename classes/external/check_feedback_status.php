@@ -18,10 +18,12 @@ namespace assignfeedback_aif\external;
 
 use core_external\external_api;
 use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
 use core\context\module as context_module;
 use core\output\stored_progress_bar;
+use assignfeedback_aif\aif;
 use assignfeedback_aif\task\process_feedback_adhoc;
 
 /**
@@ -87,7 +89,7 @@ class check_feedback_status extends external_api {
                 throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
             }
 
-            $sql = "SELECT aiff.id, aiff.feedback, aiff.feedbackformat
+            $sql = "SELECT aiff.id, aiff.feedback, aiff.feedbackformat, aiff.timecreated, aiff.timemodified
                       FROM {assignfeedback_aif_feedback} aiff
                       JOIN {assignfeedback_aif} aif ON aiff.aif = aif.id
                       JOIN {assign_submission} sub ON aiff.submission = sub.id
@@ -103,9 +105,17 @@ class check_feedback_status extends external_api {
             // Return the feedback HTML when it exists, so the grading page can
             // inject it into the editor without a full page reload.
             $feedbackhtml = '';
+            $rubric = ['applied' => false, 'criteria' => []];
             if ($exists && has_capability('mod/assign:grade', $context)) {
                 $format = $record->feedbackformat ?? FORMAT_HTML;
                 $feedbackhtml = format_text($record->feedback, $format, ['context' => $context]);
+                $rubric = self::load_rubric_assessment(
+                    $assignment,
+                    $cm,
+                    $context,
+                    $params['userid'],
+                    max((int) $record->timemodified, (int) $record->timecreated)
+                );
             }
 
             // Look up stored_progress for a running adhoc task so the client can
@@ -122,6 +132,7 @@ class check_feedback_status extends external_api {
                 'feedbackexists' => $exists,
                 'feedbackhtml' => $feedbackhtml,
                 'progressrecordid' => $progressrecordid,
+                'rubric' => $rubric,
             ];
         }
 
@@ -144,7 +155,77 @@ class check_feedback_status extends external_api {
             'feedbackexists' => !$pendingorrunning,
             'feedbackhtml' => '',
             'progressrecordid' => 0,
+            'rubric' => ['applied' => false, 'criteria' => []],
         ];
+    }
+
+    /**
+     * Load the rubric filling the adhoc task applied together with the current feedback.
+     *
+     * Reads the grading instance rather than the raw AI output so the client shows
+     * exactly what was stored after criterion and level matching. The filling is only
+     * reported when rubric application is enabled site-wide and for this assignment,
+     * and when the instance was written at or after the feedback text. An older
+     * instance belongs to a previous run (or to the teacher) and is left alone.
+     *
+     * @param \stdClass $assignment The assign record.
+     * @param \stdClass $cm The course module record.
+     * @param context_module $context The module context.
+     * @param int $userid The graded student.
+     * @param int $since Timestamp of the feedback text; earlier instances are ignored.
+     * @return array 'applied' flag and a list of criterionid / levelid / remark entries.
+     */
+    private static function load_rubric_assessment(
+        \stdClass $assignment,
+        \stdClass $cm,
+        context_module $context,
+        int $userid,
+        int $since
+    ): array {
+        global $CFG, $DB, $USER;
+        require_once($CFG->dirroot . '/mod/assign/locallib.php');
+        require_once($CFG->dirroot . '/grade/grading/lib.php');
+
+        $empty = ['applied' => false, 'criteria' => []];
+        if (!aif::is_rubric_application_enabled()) {
+            return $empty;
+        }
+        if (!$DB->get_field('assignfeedback_aif', 'applyrubricgrades', ['assignment' => $assignment->id])) {
+            return $empty;
+        }
+
+        $gradingmanager = get_grading_manager($context, 'mod_assign', 'submissions');
+        if ($gradingmanager->get_active_method() !== aif::GRADING_METHOD_RUBRIC) {
+            return $empty;
+        }
+        $controller = $gradingmanager->get_controller(aif::GRADING_METHOD_RUBRIC);
+        if (!$controller->is_form_available()) {
+            return $empty;
+        }
+
+        $course = get_course($assignment->course);
+        $assign = new \assign($context, $cm, $course);
+        $grade = $assign->get_user_grade($userid, false);
+        if (!$grade) {
+            return $empty;
+        }
+        // Core ignores the rater id here (see the MDL-31237 placeholder in gradingform_controller),
+        // so any grader polling the page sees the instance the adhoc task wrote for this grade item.
+        $instance = $controller->get_current_instance($USER->id, $grade->id);
+        if (!$instance || (int) $instance->get_data('timemodified') < $since) {
+            return $empty;
+        }
+
+        $criteria = [];
+        $filling = $instance->get_rubric_filling();
+        foreach ($filling['criteria'] ?? [] as $criterionid => $entry) {
+            $criteria[] = [
+                'criterionid' => (int) $criterionid,
+                'levelid' => (int) ($entry['levelid'] ?? 0),
+                'remark' => (string) ($entry['remark'] ?? ''),
+            ];
+        }
+        return ['applied' => true, 'criteria' => $criteria];
     }
 
     /**
@@ -198,6 +279,19 @@ class check_feedback_status extends external_api {
                 VALUE_DEFAULT,
                 0
             ),
+            'rubric' => new external_single_structure([
+                'applied' => new external_value(
+                    PARAM_BOOL,
+                    'Whether the current feedback run applied a rubric assessment'
+                ),
+                'criteria' => new external_multiple_structure(
+                    new external_single_structure([
+                        'criterionid' => new external_value(PARAM_INT, 'Rubric criterion id'),
+                        'levelid' => new external_value(PARAM_INT, 'Selected level id (0 if none)'),
+                        'remark' => new external_value(PARAM_RAW, 'Remark stored for the criterion'),
+                    ])
+                ),
+            ], 'Rubric filling applied by the adhoc task (only for per-user mode)'),
         ]);
     }
 }
