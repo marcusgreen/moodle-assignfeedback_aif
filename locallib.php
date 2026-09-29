@@ -691,6 +691,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return array The list of settings.
      */
     public function get_config_for_external(): array {
-        return (array) $this->get_config();
+        $configs = (array) $this->get_config();
+        if (!has_capability('moodle/course:manageactivities', $this->assignment->get_context())) {
+            unset($configs['prompt']);
+        }
+        return $configs;
     }
 }

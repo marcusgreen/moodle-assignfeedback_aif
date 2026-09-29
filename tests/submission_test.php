@@ -606,6 +606,26 @@ final class submission_test extends \advanced_testcase {
         $this->assertStringContainsString('image.png', $result);
     }
 
+    #[\PHPUnit\Framework\Attributes\Group('baseline')]
+    /**
+     * The AI prompt is only returned to external callers who may edit the activity.
+     *
+     * @covers ::get_config_for_external
+     */
+    public function test_get_config_for_external_hides_prompt_from_students(): void {
+        $this->resetAfterTest();
+        $env = $this->create_test_environment();
+        $plugin = $this->get_aif_plugin($env->assignobj);
+
+        // Violation: a student must not receive the prompt.
+        $this->setUser($env->student);
+        $this->assertArrayNotHasKey('prompt', $plugin->get_config_for_external());
+
+        // Verification: the teacher still receives it.
+        $this->setUser($env->teacher);
+        $this->assertSame('Default test prompt', $plugin->get_config_for_external()['prompt']);
+    }
+
     /**
      * Get the AIF feedback plugin from an assign instance.
      *
