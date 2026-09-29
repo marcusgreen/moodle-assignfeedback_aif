@@ -566,6 +566,20 @@ final class submission_test extends \advanced_testcase {
     }
 
     /**
+     * The stored error message is escaped on output.
+     *
+     * @covers \assignfeedback_aif\local\feedback_utils::get_error_from_feedback
+     */
+    public function test_error_message_is_escaped(): void {
+        $record = (object) ['skippedfiles' => json_encode([['_error' => 'Quota <b>exceeded</b>']])];
+
+        $error = \assignfeedback_aif\local\feedback_utils::get_error_from_feedback($record);
+
+        $this->assertStringNotContainsString('<b>', $error);
+        $this->assertStringContainsString('Quota &lt;b&gt;exceeded&lt;/b&gt;', $error);
+    }
+
+    /**
      * Test view shows skipped files warning when feedback contains skipped files.
      *
      * @covers ::view
