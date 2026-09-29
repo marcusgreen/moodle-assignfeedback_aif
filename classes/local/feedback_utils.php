@@ -189,7 +189,7 @@ class feedback_utils {
         if (!empty($skipped) && is_array($skipped)) {
             foreach ($skipped as $entry) {
                 if (is_array($entry) && isset($entry['_error'])) {
-                    $msg = get_string('feedbackgenerationerror', 'assignfeedback_aif', $entry['_error']);
+                    $msg = get_string('feedbackgenerationerror', 'assignfeedback_aif', s($entry['_error']));
                     if (!empty($entry['_debuginfo']) && !empty($CFG->debugdisplay) && $CFG->debug >= DEBUG_DEVELOPER) {
                         $msg .= \html_writer::tag('pre', s($entry['_debuginfo']), ['class' => 'mt-2 small']);
                     }
