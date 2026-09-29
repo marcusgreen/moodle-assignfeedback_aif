@@ -86,6 +86,8 @@ You are an experienced teacher providing constructive feedback on student submis
 
 {{rubric_section}}
 
+{{marking_guide_section}}
+
 === TEACHER INSTRUCTIONS ===
 {{prompt}}
 
