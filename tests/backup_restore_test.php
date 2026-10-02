@@ -227,7 +227,12 @@ final class backup_restore_test extends \advanced_testcase {
         );
 
         // Duplicate the activity (backup/restore without user data).
-        $newcm = duplicate_module($env->course, $env->cm);
+        // Moodle 5.2 deprecated duplicate_module() in favour of cmactions::duplicate() (MDL-86858).
+        if (method_exists(\core_courseformat\local\cmactions::class, 'duplicate')) {
+            $newcm = \core_courseformat\formatactions::cm($env->course->id)->duplicate($env->cm->id);
+        } else {
+            $newcm = duplicate_module($env->course, $env->cm);
+        }
         $this->assertNotEmpty($newcm);
 
         $newassign = $DB->get_record('assign', ['id' => $newcm->instance]);
