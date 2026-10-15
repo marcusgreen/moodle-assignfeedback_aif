@@ -300,7 +300,7 @@ final class hook_callbacks_test extends \advanced_testcase {
 
         // Set the current user so the tenant is resolved from their profile.
         $this->setUser($user);
-        $tenant = \core\di::get(\local_ai_manager\local\tenant::class);
+        $tenant = \core\di::get(\local_ai_manager\local\tenant_factory::class)->get();
 
         // Enable the tenant.
         $configmanager = \core\di::get(\local_ai_manager\local\config_manager::class);
