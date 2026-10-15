@@ -101,17 +101,24 @@ class output_helper {
      * @param string $errormsg The error message to display.
      * @param int $assignmentid The assignment ID.
      * @param int $userid The user ID.
-     * @return string HTML with error notification and retry button.
+     * @param bool $showretry Whether to show the retry button.
+     * @return string HTML with error notification and optional retry button.
      */
-    public static function render_error_with_retry(string $errormsg, int $assignmentid, int $userid): string {
+    public static function render_error_with_retry(
+        string $errormsg,
+        int $assignmentid,
+        int $userid,
+        bool $showretry = true
+    ): string {
         global $OUTPUT, $PAGE;
         $html = $OUTPUT->render_from_template('assignfeedback_aif/error_with_retry', [
             'errormsg' => $errormsg,
             'assignmentid' => $assignmentid,
             'userid' => $userid,
             'retrylabel' => get_string('retrygeneration', 'assignfeedback_aif'),
+            'showretry' => $showretry,
         ]);
-        if (!self::$retryinitialised) {
+        if ($showretry && !self::$retryinitialised) {
             $PAGE->requires->js_call_amd('assignfeedback_aif/feedbackpoller', 'initRetryAll', []);
             self::$retryinitialised = true;
         }

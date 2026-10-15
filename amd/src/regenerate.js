@@ -36,6 +36,7 @@ import {add as addToast} from 'core/toast';
 import {get_string as getString} from 'core/str';
 import Templates from 'core/templates';
 import Pending from 'core/pending';
+import Log from 'core/log';
 
 /** @var {number} Polling interval in milliseconds. */
 const POLL_INTERVAL = 5000;
@@ -114,12 +115,15 @@ const showConfirmationWithAnalysis = async(button, assignmentId, userId) => {
         }])[0];
 
         confirmMessage = await buildAnalysisMessage(analysis);
-    } catch {
-        // Fall back to generic message if analysis fails.
+    } catch (e) {
+        // Fall back to generic message if analysis fails. At least log error before in debug mode.
+        Log.error(e.errorcode);
+        Log.error(e.message);
+        Log.error(e.backtrace);
         confirmMessage = await getString('confirmgeneratefeedback', 'assignfeedback_aif');
     }
 
-    Notification.confirm(
+    await Notification.confirm(
         confirmTitle,
         confirmMessage,
         await getString('yes', 'core'),
@@ -134,7 +138,7 @@ const showConfirmationWithAnalysis = async(button, assignmentId, userId) => {
  * Build a human-readable confirmation message from the submission analysis.
  *
  * @param {object} analysis The analysis result from the webservice.
- * @returns {string} HTML message for the confirmation dialog.
+ * @returns {Promise<string>} HTML message for the confirmation dialog.
  */
 const buildAnalysisMessage = async(analysis) => {
     const [confirmtext, onlinetextlabel, processablefileslabel, skippedfileslabel, nosubmissionlabel] =

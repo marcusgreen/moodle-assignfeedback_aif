@@ -55,6 +55,9 @@ class provider implements
         $data = [
             'assignment' => 'privacy:metadata:assignmentid',
             'aitext' => 'privacy:metadata:aitext',
+            'status' => 'privacy:metadata:status',
+            'errormessage' => 'privacy:metadata:errormessage',
+            'timemodified' => 'privacy:metadata:timemodified',
         ];
         $collection->add_database_table('assignfeedback_aif_feedback', $data, 'privacy:metadata:tablesummary');
 
@@ -138,8 +141,12 @@ class provider implements
                     $feedback->feedbackformat,
                     ['context' => $exportdata->get_context()]
                 ),
+                'status' => $feedback->status ?? 'pending',
+                'errormessage' => $feedback->errormessage ?? '',
                 'timecreated' => $feedback->timecreated ?
                     \core_privacy\local\request\transform::datetime($feedback->timecreated) : '',
+                'timemodified' => $feedback->timemodified ?
+                    \core_privacy\local\request\transform::datetime($feedback->timemodified) : '',
             ];
             writer::with_context($exportdata->get_context())->export_data($currentpath, $data);
         }

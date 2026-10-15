@@ -57,10 +57,14 @@ class assignfeedback_aif_generator extends component_generator_base {
         $clock = \core\di::get(\core\clock::class);
         $feedbacktext = $data['feedback'] ?? 'Pre-existing AI feedback for testing.';
         $skippedfiles = null;
+        $status = 'completed';
+        $errormessage = null;
 
         // If error is specified, create an error feedback record.
         if (!empty($data['error'])) {
             $feedbacktext = '';
+            $status = 'error';
+            $errormessage = $data['error'];
             $skippedfiles = json_encode([['_error' => $data['error']]]);
         }
 
@@ -68,7 +72,10 @@ class assignfeedback_aif_generator extends component_generator_base {
             'aif' => $aif->id,
             'feedback' => $feedbacktext,
             'feedbackformat' => FORMAT_HTML,
+            'status' => $status,
+            'errormessage' => $errormessage,
             'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
             'submission' => $submission->id,
             'skippedfiles' => $skippedfiles,
         ]);

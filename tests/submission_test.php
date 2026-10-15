@@ -122,6 +122,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Now call save() to update the feedback via the plugin.
@@ -200,6 +201,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Should now return the feedback record.
@@ -245,6 +247,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Should now return formatted feedback.
@@ -288,6 +291,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         $this->assertEquals('Gradebook feedback text', $plugin->text_for_gradebook($grade));
@@ -322,6 +326,7 @@ final class submission_test extends \advanced_testcase {
             'feedback' => 'Feedback to delete',
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Verify records exist.
@@ -370,6 +375,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Should not be empty now.
@@ -407,6 +413,7 @@ final class submission_test extends \advanced_testcase {
             'feedbackformat' => FORMAT_HTML,
             'submission' => $submission->id,
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         // Get_editor_text should return the current feedback.
@@ -468,6 +475,7 @@ final class submission_test extends \advanced_testcase {
                 'feedbackformat' => FORMAT_HTML,
                 'submission' => $submission->id,
                 'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
             ]);
         }
 
@@ -480,6 +488,30 @@ final class submission_test extends \advanced_testcase {
 
         // All feedback records must be gone.
         $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
+    }
+
+    /**
+     * Test bulk AI generation queues per-student tasks under the teacher user.
+     *
+     * @covers ::process_feedbackaif
+     */
+    public function test_process_feedbackaif_bulk_generation_uses_teacher_as_task_user(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $student2 = $this->getDataGenerator()->create_and_enrol($env->course, 'student');
+        $plugin = $this->get_aif_plugin($env->assignobj);
+
+        $this->setUser($env->teacher);
+        $plugin->process_feedbackaif([$env->student->id, $student2->id], 'generate');
+
+        $task1 = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $task2 = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $student2->id);
+
+        $this->assertNotNull($task1);
+        $this->assertNotNull($task2);
+        $this->assertEquals($env->teacher->id, $task1->get_userid());
+        $this->assertEquals($env->teacher->id, $task2->get_userid());
     }
 
     /**
@@ -513,6 +545,7 @@ final class submission_test extends \advanced_testcase {
             'submission' => $submission->id,
             'skippedfiles' => json_encode([['_error' => 'AI quota exceeded']]),
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         $showviewlink = false;
@@ -558,12 +591,27 @@ final class submission_test extends \advanced_testcase {
             'submission' => $submission->id,
             'skippedfiles' => json_encode([['_error' => 'Connection timeout']]),
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         $result = $plugin->view($grade);
 
         $this->assertStringContainsString('Connection timeout', $result);
         $this->assertStringContainsString('data-action="retry-aif"', $result);
+    }
+
+    /**
+     * The stored error message is escaped on output.
+     *
+     * @covers \assignfeedback_aif\local\feedback_utils::get_error_from_feedback
+     */
+    public function test_error_message_is_escaped(): void {
+        $record = (object) ['skippedfiles' => json_encode([['_error' => 'Quota <b>exceeded</b>']])];
+
+        $error = \assignfeedback_aif\local\feedback_utils::get_error_from_feedback($record);
+
+        $this->assertStringNotContainsString('<b>', $error);
+        $this->assertStringContainsString('Quota &lt;b&gt;exceeded&lt;/b&gt;', $error);
     }
 
     /**
@@ -599,12 +647,33 @@ final class submission_test extends \advanced_testcase {
                 ['filename' => 'image.png', 'reason' => 'skipreason_conversionnotsupported', 'reasondata' => 'pdf, docx'],
             ]),
             'timecreated' => $clock->now()->getTimestamp(),
+            'status' => 'completed',
         ]);
 
         $result = $plugin->view($grade);
 
         $this->assertStringContainsString('Partial feedback.', $result);
         $this->assertStringContainsString('image.png', $result);
+    }
+
+    #[\PHPUnit\Framework\Attributes\Group('baseline')]
+    /**
+     * The AI prompt is only returned to external callers who may edit the activity.
+     *
+     * @covers ::get_config_for_external
+     */
+    public function test_get_config_for_external_hides_prompt_from_students(): void {
+        $this->resetAfterTest();
+        $env = $this->create_test_environment();
+        $plugin = $this->get_aif_plugin($env->assignobj);
+
+        // Violation: a student must not receive the prompt.
+        $this->setUser($env->student);
+        $this->assertArrayNotHasKey('prompt', $plugin->get_config_for_external());
+
+        // Verification: the teacher still receives it.
+        $this->setUser($env->teacher);
+        $this->assertSame('Default test prompt', $plugin->get_config_for_external()['prompt']);
     }
 
     /**

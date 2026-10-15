@@ -25,7 +25,6 @@
 
 namespace assignfeedback_aif;
 
-use assignfeedback_aif\task\process_feedback;
 use assignfeedback_aif\task\process_feedback_adhoc;
 use assignfeedback_aif\external\regenerate_feedback;
 
@@ -40,7 +39,6 @@ require_once(__DIR__ . '/generator_trait.php');
  * @package    assignfeedback_aif
  * @copyright  2024 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \assignfeedback_aif\task\process_feedback
  * @covers \assignfeedback_aif\task\process_feedback_adhoc
  * @covers \assignfeedback_aif\event\observer
  * @covers \assignfeedback_aif\external\regenerate_feedback
@@ -69,72 +67,6 @@ final class process_feedback_test extends \advanced_testcase {
         \core\di::set(\assignfeedback_aif\local\ai_request_provider::class, $mock);
     }
 
-    /**
-     * Test the dispatcher scheduled task enqueues adhoc tasks for unprocessed submissions.
-     *
-     * @covers \assignfeedback_aif\task\process_feedback::execute
-     */
-    public function test_rubric_scheduled_task_generates_feedback(): void {
-        global $DB;
-        $this->resetAfterTest();
-
-        $env = $this->create_test_environment();
-        $this->create_and_submit($env, 'My essay about renewable energy');
-        $this->create_aif_config($env, 'Evaluate based on rubric', 1);
-
-        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
-        $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
-
-        $task = new process_feedback();
-        ob_start();
-        $task->execute();
-        ob_end_clean();
-
-        // Dispatcher should have enqueued an adhoc task.
-        $tasksafter = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
-        $this->assertGreaterThan($tasksbefore, $tasksafter);
-    }
-
-    /**
-     * Test the rubric scheduled task skips submissions with existing feedback.
-     *
-     * @covers \assignfeedback_aif\task\process_feedback::execute
-     */
-    public function test_rubric_scheduled_task_skips_existing(): void {
-        global $DB;
-        $this->resetAfterTest();
-
-        $env = $this->create_test_environment();
-        $this->create_and_submit($env, 'Test essay');
-        $aifid = $this->create_aif_config($env, 'Evaluate', 1);
-
-        $submission = $DB->get_record('assign_submission', [
-            'assignment' => $env->assign->id,
-            'userid' => $env->student->id,
-            'latest' => 1,
-        ]);
-
-        // Pre-insert feedback.
-        $clock = \core\di::get(\core\clock::class);
-        $DB->insert_record('assignfeedback_aif_feedback', [
-            'aif' => $aifid,
-            'feedback' => 'Already processed',
-            'submission' => $submission->id,
-            'timecreated' => $clock->now()->getTimestamp(),
-        ]);
-
-        $taskclass = '\\assignfeedback_aif\\task\\process_feedback_adhoc';
-        $tasksbefore = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
-
-        $task = new process_feedback();
-        ob_start();
-        $task->execute();
-        ob_end_clean();
-
-        // No new adhoc task should be enqueued.
-        $tasksafter = $DB->count_records('task_adhoc', ['classname' => $taskclass]);
-        $this->assertEquals($tasksbefore, $tasksafter);
-    }
 
     /**
      * Test the adhoc task generates feedback for a specific user.
@@ -151,10 +83,11 @@ final class process_feedback_test extends \advanced_testcase {
 
         $task = new process_feedback_adhoc();
         $task->set_custom_data([
-            'assignment' => $env->assign->id,
-            'users' => [$env->student->id],
+            'assignment' => intval($env->assign->id),
+            'userid' => intval($env->student->id),
             'action' => 'generate',
         ]);
+        $task->set_userid($env->student->id);
 
         $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback'));
 
@@ -163,6 +96,142 @@ final class process_feedback_test extends \advanced_testcase {
         ob_end_clean();
 
         $this->assertEquals(1, $DB->count_records('assignfeedback_aif_feedback'));
+    }
+
+    /**
+     * Test auto-triggered generation runs extraction and AI request as the student.
+     *
+     * @covers \assignfeedback_aif\task\process_feedback_adhoc::execute
+     */
+    public function test_adhoc_task_auto_trigger_uses_student_as_acting_user(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_aif_config($env, 'Provide feedback');
+        $this->create_and_submit($env, 'Student assignment text');
+
+        $captured = $this->capture_acting_users();
+
+        $task = new process_feedback_adhoc();
+        $task->set_custom_data([
+            'assignment' => intval($env->assign->id),
+            'userid' => intval($env->student->id),
+            'action' => 'generate',
+        ]);
+        $task->set_userid($env->student->id);
+
+        ob_start();
+        $task->execute();
+        ob_end_clean();
+
+        $this->assertEquals($env->student->id, $captured->extractionuserid);
+        $this->assertEquals($env->student->id, $captured->requestuserid);
+    }
+
+    /**
+     * Test manual-triggered generation runs extraction and AI request as the teacher.
+     *
+     * Covers both the grading view trigger and the bulk grading action, which queue
+     * the task with the teacher as task runner.
+     *
+     * @covers \assignfeedback_aif\task\process_feedback_adhoc::execute
+     */
+    public function test_adhoc_task_manual_trigger_uses_teacher_as_acting_user(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_aif_config($env, 'Provide feedback');
+        $this->create_and_submit($env, 'Student assignment text');
+
+        $captured = $this->capture_acting_users();
+
+        $task = new process_feedback_adhoc();
+        $task->set_custom_data([
+            'assignment' => intval($env->assign->id),
+            'userid' => intval($env->student->id),
+            'action' => 'generate',
+        ]);
+        $task->set_userid($env->teacher->id);
+
+        ob_start();
+        $task->execute();
+        ob_end_clean();
+
+        $this->assertEquals($env->teacher->id, $captured->extractionuserid);
+        $this->assertEquals($env->teacher->id, $captured->requestuserid);
+    }
+
+    /**
+     * Test a manual trigger re-points an already queued automatic task to the triggering user.
+     *
+     * The task runner defines the user all AI requests are performed for, so a teacher
+     * requesting feedback while the automatically queued task of the student is still
+     * waiting must not be silently downgraded to a run as the student.
+     *
+     * @covers \assignfeedback_aif\local\task_manager::queue_generation
+     */
+    public function test_queue_generation_repoints_queued_task_to_new_task_user(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_aif_config($env, 'Provide feedback');
+
+        // Automatic trigger on submission: the task runs as the student.
+        \assignfeedback_aif\local\task_manager::queue_generation(
+            $env->assign->id,
+            $env->student->id,
+            $env->student->id
+        );
+        $task = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertEquals($env->student->id, $task->get_userid());
+
+        // Manual trigger by the teacher while the automatic task is still queued.
+        \assignfeedback_aif\local\task_manager::queue_generation(
+            $env->assign->id,
+            $env->student->id,
+            $env->teacher->id
+        );
+
+        $this->assertCount(1, \core\task\manager::get_adhoc_tasks(process_feedback_adhoc::class));
+        $task = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertEquals($env->teacher->id, $task->get_userid());
+
+        // A repeated trigger by the same user must not queue an additional task.
+        \assignfeedback_aif\local\task_manager::queue_generation(
+            $env->assign->id,
+            $env->student->id,
+            $env->teacher->id
+        );
+
+        $this->assertCount(1, \core\task\manager::get_adhoc_tasks(process_feedback_adhoc::class));
+    }
+
+    /**
+     * Register an aif mock in the DI container that records the acting user IDs.
+     *
+     * @return \stdClass Object whose 'extractionuserid' and 'requestuserid' are filled during execution.
+     */
+    private function capture_acting_users(): \stdClass {
+        $captured = (object) ['extractionuserid' => null, 'requestuserid' => null];
+
+        $aifmock = $this->createMock(\assignfeedback_aif\aif::class);
+        $aifmock->method('set_contextid');
+        $aifmock->method('get_prompt')->willReturnCallback(
+            function (\stdClass $assignment, string $gradingmethod, int $actinguserid) use ($captured): array {
+                $captured->extractionuserid = $actinguserid;
+                return ['prompt' => 'Mock prompt text', 'options' => [], 'skippedfiles' => []];
+            }
+        );
+        $aifmock->method('perform_request')->willReturnCallback(
+            function (string $prompt, int $userid, string $purpose = 'feedback', array $options = []) use ($captured): string {
+                $captured->requestuserid = $userid;
+                return 'Mock feedback';
+            }
+        );
+        $aifmock->method('append_disclaimer')->willReturnArgument(0);
+        \core\di::set(\assignfeedback_aif\aif::class, $aifmock);
+
+        return $captured;
     }
 
     /**
@@ -196,10 +265,11 @@ final class process_feedback_test extends \advanced_testcase {
 
         $task = new process_feedback_adhoc();
         $task->set_custom_data([
-            'assignment' => $env->assign->id,
-            'users' => [$env->student->id],
+            'assignment' => intval($env->assign->id),
+            'userid' => intval($env->student->id),
             'action' => 'delete',
         ]);
+        $task->set_userid($env->student->id);
         ob_start();
         $task->execute();
         ob_end_clean();
@@ -244,16 +314,16 @@ final class process_feedback_test extends \advanced_testcase {
         ]);
         $this->assertGreaterThan($tasksbefore, $tasksafter);
 
-        // Verify the queued task contains the correct student userid (not null).
+        // Verify the queued task contains the correct student userid.
         $task = $DB->get_records('task_adhoc', [
             'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ], 'id DESC', '*', 0, 1);
         $task = reset($task);
         $customdata = json_decode($task->customdata);
-        $this->assertContains(
+        $this->assertEquals(
             $env->student->id,
-            $customdata->users,
-            'Adhoc task must contain the submitting student userid, not null'
+            $customdata->userid,
+            'Adhoc task must contain the submitting student userid'
         );
     }
 
@@ -335,10 +405,10 @@ final class process_feedback_test extends \advanced_testcase {
         $task = $DB->get_records('task_adhoc', ['classname' => $taskclass], 'id DESC', '*', 0, 1);
         $task = reset($task);
         $customdata = json_decode($task->customdata);
-        $this->assertContains(
+        $this->assertEquals(
             $env->student->id,
-            $customdata->users,
-            'CP5a: Task users must contain the student. customdata=' . $task->customdata
+            $customdata->userid,
+            'CP5a: Task userid must be the student. customdata=' . $task->customdata
         );
         $this->assertEquals(
             $env->assign->id,
@@ -350,6 +420,7 @@ final class process_feedback_test extends \advanced_testcase {
         // CP6: Execute the adhoc task — feedback is created.
         $adhoctask = new process_feedback_adhoc();
         $adhoctask->set_custom_data($customdata);
+        $adhoctask->set_userid($env->student->id);
         ob_start();
         $adhoctask->execute();
         ob_end_clean();
@@ -393,6 +464,7 @@ final class process_feedback_test extends \advanced_testcase {
         // Student saves a submission. When submissiondrafts=0, this auto-submits.
         // save_submission() fires assessable_submitted at line 7871 of mod/assign/locallib.php.
         $this->setUser($env->student);
+        $notices = [];
         $msgsink = $this->redirectMessages();
         $env->assignobj->save_submission(
             (object) [
@@ -433,14 +505,15 @@ final class process_feedback_test extends \advanced_testcase {
         $task = $DB->get_records('task_adhoc', ['classname' => $taskclass], 'id DESC', '*', 0, 1);
         $task = reset($task);
         $customdata = json_decode($task->customdata);
-        $this->assertContains(
+        $this->assertEquals(
             $env->student->id,
-            $customdata->users,
-            'CP4a: Task users must contain the student'
+            $customdata->userid,
+            'CP4a: Task userid must be the student'
         );
 
         $adhoctask = new process_feedback_adhoc();
         $adhoctask->set_custom_data($customdata);
+        $adhoctask->set_userid($env->student->id);
         ob_start();
         $adhoctask->execute();
         ob_end_clean();
@@ -548,6 +621,51 @@ final class process_feedback_test extends \advanced_testcase {
             'classname' => '\\assignfeedback_aif\\task\\process_feedback_adhoc',
         ]);
         $this->assertGreaterThan($tasksbefore, $tasksafter);
+
+        $queuedtask = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertNotNull($queuedtask);
+        $this->assertEquals($env->teacher->id, $queuedtask->get_userid());
+
+        $taskdata = $queuedtask->get_custom_data();
+        $this->assertEquals($env->student->id, (int) $taskdata->userid);
+    }
+
+    /**
+     * Test that manual regenerate via external API re-points a queued student task to teacher context.
+     *
+     * With local_ai_manager backend the acting user matters for availability/quota checks,
+     * so the manual trigger must always run through task_manager deduplication logic.
+     *
+     * @covers \assignfeedback_aif\external\regenerate_feedback::execute
+     */
+    public function test_regenerate_external_api_repoints_queued_task_to_teacher(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_and_submit($env, 'Student work');
+        $this->create_aif_config($env, 'Test');
+
+        // Precondition: automatic path queued the task as the student.
+        \assignfeedback_aif\local\task_manager::queue_generation(
+            $env->assign->id,
+            $env->student->id,
+            $env->student->id
+        );
+        $queuedtask = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertNotNull($queuedtask);
+        $this->assertEquals($env->student->id, $queuedtask->get_userid());
+
+        // Manual external trigger by teacher must re-point to teacher context.
+        $this->setUser($env->teacher);
+        $result = regenerate_feedback::execute($env->assign->id, $env->student->id);
+
+        $this->assertTrue($result['success']);
+        $this->assertNotEmpty($result['progressrecordid']);
+        $this->assertCount(1, \core\task\manager::get_adhoc_tasks(process_feedback_adhoc::class));
+
+        $queuedtask = \assignfeedback_aif\local\task_manager::find_task_for_user($env->assign->id, $env->student->id);
+        $this->assertNotNull($queuedtask);
+        $this->assertEquals($env->teacher->id, $queuedtask->get_userid());
     }
 
     /**
@@ -637,5 +755,85 @@ final class process_feedback_test extends \advanced_testcase {
             $DB->count_records('task_adhoc', ['classname' => $taskclass]),
             'Adhoc task must be queued for new feedback generation'
         );
+    }
+
+    /**
+     * Test the adhoc task stores the error when intro attachment extraction fails.
+     *
+     * When an intro attachment PDF cannot be converted because the AI backend rejects
+     * the ITT request (e.g. terms of use not confirmed), get_prompt() throws and the
+     * adhoc task must persist the error as an error feedback record so the teacher can
+     * see what went wrong.
+     *
+     * @covers \assignfeedback_aif\task\process_feedback_adhoc::execute
+     */
+    public function test_adhoc_task_stores_error_when_introattachment_extraction_fails(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        // Override the default AI mock so every ITT request fails as if rejected by the backend.
+        $backenderror = new \moodle_exception(
+            'err_retrievingfeedback',
+            'assignfeedback_aif',
+            '',
+            'AI backend rejected the request'
+        );
+        $providermock = $this->createMock(\assignfeedback_aif\local\ai_request_provider::class);
+        $providermock->method('perform_request_core_ai')->willThrowException($backenderror);
+        $providermock->method('perform_request_local_ai_manager')->willThrowException($backenderror);
+        $providermock->method('is_available')->willReturn(true);
+        \core\di::set(\assignfeedback_aif\local\ai_request_provider::class, $providermock);
+
+        $env = $this->create_test_environment();
+        $this->create_and_submit($env, 'My essay about renewable energy');
+        $this->create_aif_config($env, 'Analyse the submission');
+
+        // Add a PDF intro attachment (teacher-owned) so ITT extraction is triggered.
+        get_file_storage()->create_file_from_string([
+            'contextid' => $env->context->id,
+            'component' => 'mod_assign',
+            'filearea' => 'introattachment',
+            'itemid' => 0,
+            'filepath' => '/',
+            'filename' => 'instructions.pdf',
+            'userid' => $env->teacher->id,
+        ], 'fake pdf content');
+
+        // Register a mock extractor that throws when extracting the PDF,
+        // simulating an AI backend rejection (e.g. terms of use not confirmed).
+        $extractormock = $this->createMock(\local_ai_content\document_extractor::class);
+        $extractormock->method('is_file_supported')->willReturn(true);
+        $extractormock->method('extract_text_from_file')->willThrowException($backenderror);
+        $extractormock->method('get_supported_extensions')->willReturn('PDF, PNG, TXT');
+        \core\di::set(\local_ai_content\document_extractor::class, $extractormock);
+
+        $task = new process_feedback_adhoc();
+        $task->set_custom_data([
+            'assignment' => intval($env->assign->id),
+            'userid' => intval($env->student->id),
+            'action' => 'generate',
+        ]);
+        $task->set_userid($env->student->id);
+
+        ob_start();
+        $task->execute();
+        ob_end_clean();
+
+        // The task must have stored exactly one error feedback record for the submission.
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'latest' => 1,
+        ]);
+        $feedback = $DB->get_record('assignfeedback_aif_feedback', ['submission' => $submission->id]);
+        $this->assertNotFalse($feedback, 'An error feedback record must be stored on extraction failure.');
+
+        // The error must be stored in the status and errormessage fields.
+        $this->assertEquals('error', $feedback->status);
+        $this->assertNotEmpty($feedback->errormessage);
+        $this->assertStringContainsString('AI backend rejected the request', $feedback->errormessage);
+
+        // No actual feedback text should be stored when generation fails.
+        $this->assertSame('', $feedback->feedback);
     }
 }

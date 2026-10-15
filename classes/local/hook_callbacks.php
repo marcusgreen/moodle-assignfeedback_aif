@@ -124,7 +124,7 @@ class hook_callbacks {
             return;
         }
 
-        // Teacher grading overview: show spinner when adhoc tasks are pending.
+        // Teacher grading overview: show feedback summary widget.
         if ($PAGE->pagetype !== 'mod-assign-view') {
             return;
         }
@@ -133,38 +133,181 @@ class hook_callbacks {
             return;
         }
 
-        // Check if there are pending adhoc tasks for this assignment.
-        $taskclass = \assignfeedback_aif\task\process_feedback_adhoc::class;
-        $tasks = \core\task\manager::get_adhoc_tasks($taskclass);
-        $pending = false;
-        foreach ($tasks as $task) {
-            $data = $task->get_custom_data();
-            if (isset($data->assignment) && (int) $data->assignment === (int) $cm->instance) {
-                $pending = true;
-                break;
+        // Only show the widget if the AIF plugin is configured for this assignment.
+        $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
+        if (!$aifconfig) {
+            return;
+        }
+
+        // Check if there are submitted submissions at all.
+        $hassubmissions = $DB->record_exists('assign_submission', [
+            'assignment' => (int) $cm->instance,
+            'latest' => 1,
+            'status' => 'submitted',
+        ]);
+        if (!$hassubmissions) {
+            return;
+        }
+
+        // Render the summary widget with pre-populated data. The template loads its controller.
+        $summarydata = self::get_summary_data((int) $cm->instance);
+        $templatecontext = array_merge(
+            [
+                'assignmentid' => (int) $cm->instance,
+                'widgetid' => 'assignfeedback-aif-summary-widget-' . (int) $cm->instance,
+                'widgetselector' => '#assignfeedback-aif-summary-widget-' . (int) $cm->instance,
+            ],
+            $summarydata
+        );
+        $html = $OUTPUT->render_from_template('assignfeedback_aif/feedback_summary_widget', $templatecontext);
+        $hook->add_html($html);
+    }
+
+    /**
+     * Calculate the feedback summary data for an assignment.
+     *
+     * Returns counts and systemic errors for the progress widget template.
+     * This data is also available via the get_assignment_feedback_summary webservice,
+     * but pre-populating it avoids a visible empty-shell delay on page load.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @return array Summary data with counts, bar widths and formatted details.
+     */
+    private static function get_summary_data(int $assignmentid): array {
+        global $DB;
+
+        $aif = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
+        if (!$aif) {
+            return self::empty_summary_template_context();
+        }
+
+        $totalsubmissions = $DB->count_records('assign_submission', [
+            'assignment' => $assignmentid,
+            'latest' => 1,
+            'status' => 'submitted',
+        ]);
+
+        if ($totalsubmissions === 0) {
+            return self::empty_summary_template_context();
+        }
+
+        // Count feedback records by status.
+        $sql = "SELECT aiff.status, COUNT(*) AS cnt
+                  FROM {assignfeedback_aif_feedback} aiff
+                  JOIN {assign_submission} sub ON sub.id = aiff.submission
+                 WHERE aiff.aif = :aifid
+                   AND sub.latest = 1
+                   AND sub.status = 'submitted'
+              GROUP BY aiff.status";
+        $statuscounts = $DB->get_records_sql($sql, ['aifid' => $aif->id]);
+
+        $completed = 0;
+        $errors = 0;
+        $pending = 0;
+        foreach ($statuscounts as $row) {
+            switch ($row->status) {
+                case 'completed':
+                    $completed = (int) $row->cnt;
+                    break;
+                case 'error':
+                    $errors = (int) $row->cnt;
+                    break;
+                case 'pending':
+                    $pending = (int) $row->cnt;
+                    break;
             }
         }
 
-        if (!$pending) {
-            return;
+        $notstarted = max(0, $totalsubmissions - $completed - $errors - $pending);
+        $haspending = task_manager::has_pending_tasks($assignmentid);
+
+        // Only count notstarted as pending when there are actually tasks queued.
+        $activepending = $pending + ($haspending ? $notstarted : 0);
+
+        // Calculate bar widths as percentages.
+        $barcompleted = round($completed / $totalsubmissions * 100, 1);
+        $barpending = round($activepending / $totalsubmissions * 100, 1);
+        $barerrors = round($errors / $totalsubmissions * 100, 1);
+
+        // Format counts string.
+        $countstext = $completed . ' / ' . $totalsubmissions;
+
+        $pendinglabel = get_string('widgetpending', 'assignfeedback_aif');
+        $errorslabel = get_string('widgeterrors', 'assignfeedback_aif');
+        $completedlabel = get_string('widgetcompleted', 'assignfeedback_aif');
+
+        // Build systemic error list shown below the progress bar.
+        $systemicerrors = [];
+        if ($errors > 0) {
+            $sql = "SELECT aiff.errormessage, COUNT(*) AS cnt
+                      FROM {assignfeedback_aif_feedback} aiff
+                      JOIN {assign_submission} sub ON sub.id = aiff.submission
+                     WHERE aiff.aif = :aifid
+                       AND aiff.status = 'error'
+                       AND aiff.errormessage IS NOT NULL
+                       AND aiff.errormessage <> ''
+                       AND sub.latest = 1
+                       AND sub.status = 'submitted'
+                  GROUP BY aiff.errormessage
+                    HAVING COUNT(*) > 1
+                  ORDER BY cnt DESC";
+            $records = $DB->get_records_sql($sql, ['aifid' => $aif->id]);
+            foreach ($records as $record) {
+                $systemicerrors[] = [
+                    'message' => $record->errormessage,
+                    'counttext' => get_string('widgetsystemicerror', 'assignfeedback_aif', (int) $record->cnt),
+                ];
+            }
         }
 
-        // Skip if view_summary() already rendered a spinner for this page.
-        if (\assign_feedback_aif::is_spinner_rendered()) {
-            return;
-        }
+        return [
+            'showwidget' => true,
+            'hassummary' => true,
+            'countstext' => $countstext,
+            'barcompleted' => $barcompleted,
+            'barpending' => $barpending,
+            'barerrors' => $barerrors,
+            'hasdetails' => ($activepending > 0 || $errors > 0 || $completed > 0),
+            'hasactivepending' => $activepending > 0,
+            'activependingcount' => $activepending,
+            'pendinglabel' => $pendinglabel,
+            'haserrors' => $errors > 0,
+            'errorscount' => $errors,
+            'errorslabel' => $errorslabel,
+            'hascompleted' => $completed > 0,
+            'completedcount' => $completed,
+            'completedlabel' => $completedlabel,
+            'systemicerrors' => $systemicerrors,
+            'hassystemicerrors' => !empty($systemicerrors),
+        ];
+    }
 
-        // Render the spinner notification and start the poller.
-        $html = $OUTPUT->render_from_template('assignfeedback_aif/feedback_generating', [
-            'message' => get_string('waitingforadhoctaskstart', 'assignfeedback_aif'),
-        ]);
-        $hook->add_html($html);
-
-        $PAGE->requires->js_call_amd(
-            'assignfeedback_aif/feedbackpoller',
-            'init',
-            [(int) $cm->instance, 0]
-        );
+    /**
+     * Return an empty template context for the feedback summary widget.
+     *
+     * @return array Empty summary context.
+     */
+    private static function empty_summary_template_context(): array {
+        return [
+            'showwidget' => false,
+            'hassummary' => false,
+            'countstext' => '',
+            'barcompleted' => 0,
+            'barpending' => 0,
+            'barerrors' => 0,
+            'hasdetails' => false,
+            'hasactivepending' => false,
+            'activependingcount' => 0,
+            'pendinglabel' => '',
+            'haserrors' => false,
+            'errorscount' => 0,
+            'errorslabel' => '',
+            'hascompleted' => false,
+            'completedcount' => 0,
+            'completedlabel' => '',
+            'systemicerrors' => [],
+            'hassystemicerrors' => false,
+        ];
     }
 
     /**

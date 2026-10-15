@@ -81,6 +81,7 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
             'assignment' => $assignmentid,
             'prompt' => $data->prompt ?? null,
             'autogenerate' => $data->autogenerate ?? 0,
+            'useintroattachments' => $data->useintroattachments ?? 1,
             'timecreated' => $data->timecreated ?? 0,
         ];
         $DB->insert_record('assignfeedback_aif', $record);
@@ -117,6 +118,7 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
                 'assignment' => $assignmentid,
                 'prompt' => $data->configprompt ?? null,
                 'autogenerate' => $data->configautogenerate ?? 0,
+                'useintroattachments' => $data->configuseintroattachments ?? 1,
                 'timecreated' => $data->configtimecreated ?? 0,
             ];
             $aif->id = $DB->insert_record('assignfeedback_aif', $aif);
@@ -155,6 +157,8 @@ class restore_assignfeedback_aif_subplugin extends restore_subplugin {
             'submission' => $newsubmissionid,
             'feedback' => $data->feedback ?? null,
             'feedbackformat' => $data->feedbackformat ?? FORMAT_HTML,
+            'status' => $data->status ?? (!empty($data->feedback) ? 'completed' : 'pending'),
+            'errormessage' => $data->errormessage ?? null,
             'timemodified' => $data->timemodified ?? 0,
             'timecreated' => $data->timecreated ?? 0,
             'skippedfiles' => $data->skippedfiles ?? null,

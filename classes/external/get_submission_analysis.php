@@ -55,8 +55,8 @@ class get_submission_analysis extends external_api {
      * @return array Analysis result with file lists.
      */
     public static function execute(int $assignmentid, int $userid): array {
-        global $DB;
-
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/mod/assign/locallib.php');
         $params = self::validate_parameters(self::execute_parameters(), [
             'assignmentid' => $assignmentid,
             'userid' => $userid,
@@ -67,6 +67,16 @@ class get_submission_analysis extends external_api {
         $context = context_module::instance($cm->id);
         self::validate_context($context);
         require_capability('mod/assign:grade', $context);
+
+        $course = $DB->get_record('course', ['id' => $assignment->course], '*', MUST_EXIST);
+        $assign = new \assign($context, $cm, $course);
+
+        // Only consider submission plugins that are currently enabled for this assignment.
+        // Switching submission types leaves orphaned data of the disabled plugins in the
+        // database, which must not be taken into account for AI feedback.
+        $enabledplugins = \assignfeedback_aif\aif::get_enabled_submission_plugins($assign);
+        $onlinetextenabled = $enabledplugins['onlinetext'];
+        $fileenabled = $enabledplugins['file'];
 
         // Get the latest submission.
         $submission = $DB->get_record('assign_submission', [
@@ -84,7 +94,9 @@ class get_submission_analysis extends external_api {
         }
 
         // Check for online text.
-        $onlinetext = $DB->get_field('assignsubmission_onlinetext', 'onlinetext', ['submission' => $submission->id]);
+        $onlinetext = $onlinetextenabled
+            ? $DB->get_field('assignsubmission_onlinetext', 'onlinetext', ['submission' => $submission->id])
+            : false;
         $hasonlinetext = !empty($onlinetext);
 
         // Analyse submitted files.
@@ -92,17 +104,19 @@ class get_submission_analysis extends external_api {
         $skipped = [];
 
         $fs = get_file_storage();
-        $files = $fs->get_area_files(
-            $context->id,
-            'assignsubmission_file',
-            'submission_files',
-            $submission->id,
-            'itemid, filepath, filename',
-            false
-        );
+        $files = [];
+        if ($fileenabled) {
+            $files = $fs->get_area_files(
+                $context->id,
+                'assignsubmission_file',
+                'submission_files',
+                $submission->id,
+                'itemid, filepath, filename',
+                false
+            );
+        }
 
-        $imagemimetypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-        $converter = new \core_files\converter();
+        $extractor = \core\di::get(\local_ai_content\document_extractor::class);
 
         foreach ($files as $file) {
             if (!$file instanceof \stored_file) {
@@ -112,22 +126,7 @@ class get_submission_analysis extends external_api {
             $filename = $file->get_filename();
             $mimetype = $file->get_mimetype();
 
-            if ($mimetype === 'text/plain') {
-                $processable[] = ['filename' => $filename, 'mimetype' => $mimetype];
-                continue;
-            }
-
-            if (in_array($mimetype, $imagemimetypes)) {
-                $processable[] = ['filename' => $filename, 'mimetype' => $mimetype];
-                continue;
-            }
-
-            if ($mimetype === 'application/pdf') {
-                $processable[] = ['filename' => $filename, 'mimetype' => $mimetype];
-                continue;
-            }
-
-            if ($converter->can_convert_storedfile_to($file, 'txt')) {
+            if ($extractor->is_file_supported($file)) {
                 $processable[] = ['filename' => $filename, 'mimetype' => $mimetype];
             } else {
                 $skipped[] = [
@@ -136,7 +135,7 @@ class get_submission_analysis extends external_api {
                     'reason' => get_string(
                         'skipreason_conversionnotsupported',
                         'assignfeedback_aif',
-                        \assignfeedback_aif\aif::get_supported_file_extensions()
+                        $extractor->get_supported_extensions()
                     ),
                 ];
             }

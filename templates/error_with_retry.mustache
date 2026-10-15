@@ -24,18 +24,21 @@
     * assignmentid - The assignment instance ID.
     * userid - The user ID.
     * retrylabel - The label for the retry button.
+    * showretry - Whether to show the retry button.
 
     Example context (json):
     {
         "errormsg": "AI feedback generation failed: quota exceeded",
         "assignmentid": 42,
         "userid": 7,
-        "retrylabel": "Retry"
+        "retrylabel": "Retry",
+        "showretry": true
     }
 }}
 <div class="alert alert-danger" role="alert">
     {{{errormsg}}}
 </div>
+{{#showretry}}
 <button type="button"
         class="btn btn-secondary btn-sm mt-1"
         data-action="retry-aif"
@@ -43,3 +46,4 @@
         data-userid="{{userid}}">
     {{retrylabel}}
 </button>
+{{/showretry}}

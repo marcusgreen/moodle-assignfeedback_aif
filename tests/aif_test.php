@@ -326,7 +326,8 @@ final class aif_test extends \advanced_testcase {
         $context = \core\context\system::instance();
         $aif = new aif($context->id);
 
-        $result = $aif->perform_request('Test prompt');
+        $user = $this->getDataGenerator()->create_user();
+        $result = $aif->perform_request('Test prompt', $user->id);
 
         $this->assertEquals($expectedresponse, $result);
     }
@@ -374,12 +375,131 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertNotEmpty($result['prompt']);
         $this->assertStringContainsString($submissioncontent, $result['prompt']);
         $this->assertIsArray($result['options']);
+    }
+
+    /**
+     * Data provider for online text HTML cleaning tests.
+     *
+     * @return array
+     */
+    public static function get_prompt_cleans_onlinetext_provider(): array {
+        // Real-world DOM HTML from MBS-10773 ticket: full page structure with YUI IDs and footer blocks.
+        $domhtml = '<div id="topofscroll" class="main-inner ">'
+            . ' <div id="page-content" class="pb-3 d-print-block">'
+            . ' <div id="region-main-box">'
+            . ' <div id="region-main">'
+            . ' <div role="main" id="yui_3_18_1_1_1777311427730_410">'
+            . ' <div class="box py-3 generalbox center clearfix" id="yui_3_18_1_1_1777311427730_409">'
+            . ' <div class="no-overflow" id="yui_3_18_1_1_1777311427730_408">'
+            . ' <p id="yui_3_18_1_1_1777311427730_407">A few decades ago we were all Nazis.'
+            . ' But that\'s luckily over. Every country has stereotypes, but the \'Brits\' have it worse.</p>'
+            . ' </div> </div> </div> </div> </div> </div> </div>'
+            . ' <div class="row footerblock" id="yui_3_18_1_1_1777311427730_238">'
+            . ' <section class="d-print-none col-12 col-lg-6" data-region="footer-left">'
+            . ' <aside class="block-region yui3-dd-drop" data-blockregion="footer-left">'
+            . ' <h2 class="visually-hidden">Blöcke</h2>'
+            . ' </aside> </section>'
+            . ' <section class="d-print-none col-12 col-lg-6" data-region="footer-right">'
+            . ' <aside class="block-region yui3-dd-drop" data-blockregion="footer-right">'
+            . ' <h2 class="visually-hidden">Blöcke</h2>'
+            . ' </aside> </section> </div>';
+
+        return [
+            'dom_html_from_ticket' => [
+                'onlinetext' => $domhtml,
+                'onlineformat' => 1,
+                'mustcontain' => ['A few decades ago', 'stereotypes'],
+                'mustnotcontain' => ['<div', 'topofscroll', 'yui_3_18', 'page-content', 'footerblock', '<section', '<aside'],
+            ],
+            'code_with_indentation' => [
+                'onlinetext' => '<pre class="language-java"><code>public class Test {' . "\n"
+                    . '    private String text;' . "\n"
+                    . '    public Test(String t) {' . "\n"
+                    . '        text = t;' . "\n"
+                    . '    }' . "\n"
+                    . '}</code></pre>',
+                'onlineformat' => 1,
+                'mustcontain' => ['public class Test', '    private String text'],
+                'mustnotcontain' => ['<pre', '<code', 'language-java'],
+            ],
+            'simple_html_formatting' => [
+                'onlinetext' => '<h1>Title</h1><p>Paragraph with <strong>bold</strong> text.</p>'
+                    . '<ul><li>Item one</li><li>Item two</li></ul>',
+                'onlineformat' => 1,
+                // Html_to_text uppercases h1 and strong tags.
+                'mustcontain' => ['TITLE', 'Paragraph', 'BOLD', 'Item one'],
+                'mustnotcontain' => ['<h1', '<p>', '<strong', '<ul', '<li'],
+            ],
+        ];
+    }
+
+    /**
+     * Test get_prompt strips HTML from online text submissions.
+     *
+     * @param string $onlinetext The HTML content stored in the database.
+     * @param int $onlineformat The Moodle text format constant.
+     * @param array $mustcontain Strings that must appear in the prompt.
+     * @param array $mustnotcontain Strings that must not appear in the prompt.
+     * @covers ::get_prompt
+     * @dataProvider get_prompt_cleans_onlinetext_provider
+     */
+    public function test_get_prompt_cleans_onlinetext(
+        string $onlinetext,
+        int $onlineformat,
+        array $mustcontain,
+        array $mustnotcontain
+    ): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $aifid = $this->create_aif_config($env, 'Analyse the submission');
+
+        $clock = \core\di::get(\core\clock::class);
+        $subid = $DB->insert_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'status' => 'submitted',
+            'latest' => 1,
+            'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
+            'attemptnumber' => 0,
+        ]);
+        $DB->insert_record('assignsubmission_onlinetext', [
+            'assignment' => $env->assign->id,
+            'submission' => $subid,
+            'onlinetext' => $onlinetext,
+            'onlineformat' => $onlineformat,
+        ]);
+
+        $record = (object) [
+            'aid' => $env->assign->id,
+            'subid' => $subid,
+            'userid' => $env->student->id,
+            'aifid' => $aifid,
+            'prompt' => 'Analyse the submission',
+            'contextid' => $env->context->id,
+            'assignmentname' => $env->assign->name,
+        ];
+
+        $aif = new aif($env->context->id);
+        ob_start();
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
+        ob_end_clean();
+
+        $this->assertNotEmpty($result['prompt']);
+        foreach ($mustcontain as $expected) {
+            $this->assertStringContainsString($expected, $result['prompt']);
+        }
+        foreach ($mustnotcontain as $notexpected) {
+            $this->assertStringNotContainsString($notexpected, $result['prompt']);
+        }
     }
 
     /**
@@ -435,7 +555,7 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertNotEmpty($result['prompt']);
@@ -478,7 +598,7 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertEmpty($result['prompt']);
@@ -533,7 +653,7 @@ final class aif_test extends \advanced_testcase {
 
         $aif = new aif($env->context->id);
         ob_start();
-        $result = $aif->get_prompt($record, 'simple');
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
         $this->assertNotEmpty($result['prompt']);
@@ -542,148 +662,182 @@ final class aif_test extends \advanced_testcase {
     }
 
     /**
-     * Test that the resource cache stores and retrieves extracted content.
+     * Test get_prompt only uses content from submission plugin types currently enabled in mod_assign.
      *
-     * @covers ::store_to_cache
-     * @covers ::get_from_cache
+     * @covers ::get_prompt
      */
-    public function test_cache_stores_and_retrieves_content(): void {
+    public function test_get_prompt_ignores_content_from_disabled_submission_plugins(): void {
         global $DB;
         $this->resetAfterTest();
 
-        $context = \core\context\system::instance();
-        $aif = new aif($context->id);
+        $extractor = $this->createMock(\local_ai_content\document_extractor::class);
+        $extractor->method('is_file_supported')->willReturn(true);
+        $extractor->method('extract_text_from_file')->willReturn('Extracted file submission content.');
+        \core\di::set(\local_ai_content\document_extractor::class, $extractor);
 
-        // Use reflection to access protected methods.
-        $storemethod = new \ReflectionMethod($aif, 'store_to_cache');
-        $getmethod = new \ReflectionMethod($aif, 'get_from_cache');
+        $env = $this->create_test_environment([
+            'assignsubmission_onlinetext_enabled' => 1,
+            'assignsubmission_file_enabled' => 1,
+            'assignsubmission_file_maxfiles' => 1,
+            'assignsubmission_file_maxsizebytes' => 1024 * 1024,
+        ]);
+        $aifid = $this->create_aif_config($env, 'Analyse this submission');
 
-        $testhash = 'abc123hash';
-        $testcontent = 'Extracted text from file.';
-
-        // Initially no cache entry.
-        $result = $getmethod->invoke($aif, $testhash);
-        $this->assertNull($result);
-
-        // Store content.
-        $storemethod->invoke($aif, $testhash, $testcontent);
-
-        // Retrieve.
-        $result = $getmethod->invoke($aif, $testhash);
-        $this->assertEquals($testcontent, $result);
-
-        // Verify DB record.
-        $record = $DB->get_record('assignfeedback_aif_rescache', ['contenthash' => $testhash]);
-        $this->assertNotFalse($record);
-        $this->assertEquals($testcontent, $record->extractedcontent);
-    }
-
-    /**
-     * Test that the cache updates existing entries on store.
-     *
-     * @covers ::store_to_cache
-     * @covers ::get_from_cache
-     */
-    public function test_cache_updates_existing_entry(): void {
-        global $DB;
-        $this->resetAfterTest();
-
-        $context = \core\context\system::instance();
-        $aif = new aif($context->id);
-
-        $storemethod = new \ReflectionMethod($aif, 'store_to_cache');
-        $getmethod = new \ReflectionMethod($aif, 'get_from_cache');
-
-        $testhash = 'hash1';
-        $updatedcontent = 'Version 2';
-
-        $storemethod->invoke($aif, $testhash, 'Version 1');
-        $storemethod->invoke($aif, $testhash, $updatedcontent);
-
-        $result = $getmethod->invoke($aif, $testhash);
-        $this->assertEquals($updatedcontent, $result);
-
-        // Only one record should exist.
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_rescache', ['contenthash' => $testhash]));
-    }
-
-    /**
-     * Test the cleanup cache task deletes expired entries.
-     *
-     * @covers \assignfeedback_aif\task\cleanup_cache::execute
-     */
-    public function test_cleanup_cache_task(): void {
-        global $DB;
-        $this->resetAfterTest();
-
-        set_config('cachecleanupdelay', 7, 'assignfeedback_aif');
-
-        $clock = $this->mock_clock_with_frozen(time());
-
-        $oldhash = 'oldhash';
-        $recenthash = 'recenthash';
-
-        // Insert an old cache entry (accessed 10 days ago).
-        $oldtime = $clock->now()->getTimestamp() - (10 * DAYSECS);
-        $DB->insert_record('assignfeedback_aif_rescache', [
-            'contenthash' => $oldhash,
-            'extractedcontent' => 'Old content',
-            'timecreated' => $oldtime,
-            'timemodified' => $oldtime,
-            'timelastaccessed' => $oldtime,
+        $clock = \core\di::get(\core\clock::class);
+        $subid = $DB->insert_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'status' => 'submitted',
+            'latest' => 1,
+            'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
+            'attemptnumber' => 0,
         ]);
 
-        // Insert a recent cache entry (accessed 2 days ago).
-        $recenttime = $clock->now()->getTimestamp() - (2 * DAYSECS);
-        $DB->insert_record('assignfeedback_aif_rescache', [
-            'contenthash' => $recenthash,
-            'extractedcontent' => 'Recent content',
-            'timecreated' => $recenttime,
-            'timemodified' => $recenttime,
-            'timelastaccessed' => $recenttime,
+        $onlinetext = 'Online submission content.';
+        $DB->insert_record('assignsubmission_onlinetext', [
+            'assignment' => $env->assign->id,
+            'submission' => $subid,
+            'onlinetext' => '<p>' . $onlinetext . '</p>',
+            'onlineformat' => FORMAT_HTML,
         ]);
+        $this->add_file_submission($env, 'submission.txt', $subid);
 
-        $this->assertEquals(2, $DB->count_records('assignfeedback_aif_rescache'));
+        $record = (object) [
+            'aid' => $env->assign->id,
+            'subid' => $subid,
+            'userid' => $env->student->id,
+            'aifid' => $aifid,
+            'prompt' => 'Analyse this submission',
+            'contextid' => $env->context->id,
+            'assignmentname' => $env->assign->name,
+        ];
 
-        $task = new \assignfeedback_aif\task\cleanup_cache();
+        $aif = new aif($env->context->id);
+
+        // Both plugin types enabled: prompt should include online text and extracted file content.
         ob_start();
-        $task->execute();
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
         ob_end_clean();
 
-        // Old entry should be deleted, recent should remain.
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_rescache'));
-        $this->assertTrue($DB->record_exists('assignfeedback_aif_rescache', ['contenthash' => $recenthash]));
-        $this->assertFalse($DB->record_exists('assignfeedback_aif_rescache', ['contenthash' => $oldhash]));
+        $this->assertStringContainsString('[Online text submission]', $result['prompt']);
+        $this->assertStringContainsString('[Submitted files]', $result['prompt']);
+        $this->assertStringContainsString($onlinetext, $result['prompt']);
+        $this->assertStringContainsString('Extracted file submission content.', $result['prompt']);
+
+        // Disable file plugin: file data remains in DB/filearea but must not be included.
+        $this->set_submission_plugin_enabled($env, 'file', false);
+        ob_start();
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
+        ob_end_clean();
+
+        $this->assertStringContainsString($onlinetext, $result['prompt']);
+        $this->assertStringNotContainsString('Extracted file submission content.', $result['prompt']);
+        $this->assertStringNotContainsString('[Submitted files]', $result['prompt']);
+
+        // Re-enable file and disable online text: orphaned online text row must be ignored.
+        $this->set_submission_plugin_enabled($env, 'file', true);
+        $this->set_submission_plugin_enabled($env, 'onlinetext', false);
+        ob_start();
+        $result = $aif->get_prompt($record, 'simple', $env->student->id);
+        ob_end_clean();
+
+        $this->assertStringContainsString('Extracted file submission content.', $result['prompt']);
+        $this->assertStringNotContainsString($onlinetext, $result['prompt']);
+        $this->assertStringNotContainsString('[Online text submission]', $result['prompt']);
     }
 
     /**
-     * Test the cleanup cache task does nothing when disabled.
+     * Data provider for the acting user passed down to the file extraction.
      *
-     * @covers \assignfeedback_aif\task\cleanup_cache::execute
+     * @return array array of cases that specify which role is acting as the user for the extraction.
      */
-    public function test_cleanup_cache_task_disabled(): void {
+    public static function get_prompt_passes_acting_user_provider(): array {
+        return [
+            'student_on_direct_submission' => ['actingrole' => 'student'],
+            'teacher_on_manual_or_bulk' => ['actingrole' => 'teacher'],
+        ];
+    }
+
+    /**
+     * Test get_prompt forwards the acting user to the document extraction.
+     *
+     * The acting user is mandatory: on a direct submission it is the student, on a
+     * manual or bulk generation it is the teacher who triggered it.
+     *
+     * @param string $actingrole Which environment user acts as the acting user.
+     * @covers ::get_prompt
+     * @covers ::extract_content_from_files
+     * @dataProvider get_prompt_passes_acting_user_provider
+     */
+    public function test_get_prompt_passes_acting_user_to_extraction(string $actingrole): void {
         global $DB;
         $this->resetAfterTest();
 
-        set_config('cachecleanupdelay', 0, 'assignfeedback_aif');
-
-        $this->mock_clock_with_frozen(time());
-
-        $oldtime = time() - (100 * DAYSECS);
-        $DB->insert_record('assignfeedback_aif_rescache', [
-            'contenthash' => 'hash1',
-            'extractedcontent' => 'Content',
-            'timecreated' => $oldtime,
-            'timemodified' => $oldtime,
-            'timelastaccessed' => $oldtime,
+        $env = $this->create_test_environment([
+            'assignsubmission_onlinetext_enabled' => 1,
+            'assignsubmission_file_enabled' => 1,
+            'assignsubmission_file_maxfiles' => 1,
+            'assignsubmission_file_maxsizebytes' => 1024 * 1024,
         ]);
+        $aifid = $this->create_aif_config($env, 'Analyse this submission');
 
-        $task = new \assignfeedback_aif\task\cleanup_cache();
+        $clock = \core\di::get(\core\clock::class);
+        $subid = $DB->insert_record('assign_submission', [
+            'assignment' => $env->assign->id,
+            'userid' => $env->student->id,
+            'status' => 'submitted',
+            'latest' => 1,
+            'timecreated' => $clock->now()->getTimestamp(),
+            'timemodified' => $clock->now()->getTimestamp(),
+            'attemptnumber' => 0,
+        ]);
+        $this->add_file_submission($env, 'submission.txt', $subid);
+
+        $calleduserids = [];
+        $extractor = $this->createMock(\local_ai_content\document_extractor::class);
+        $extractor->method('is_file_supported')->willReturn(true);
+        $extractor->method('get_supported_extensions')->willReturn('PDF, TXT');
+        $extractor->method('extract_text_from_file')->willReturnCallback(
+            function (\stored_file $file, int $contextid, ?int $userid = null) use (&$calleduserids): string {
+                $calleduserids[] = $userid;
+                return 'Extracted file submission content.';
+            }
+        );
+        \core\di::set(\local_ai_content\document_extractor::class, $extractor);
+
+        $record = (object) [
+            'aid' => $env->assign->id,
+            'subid' => $subid,
+            'userid' => $env->student->id,
+            'aifid' => $aifid,
+            'prompt' => 'Analyse this submission',
+            'contextid' => $env->context->id,
+            'assignmentname' => $env->assign->name,
+        ];
+
+        $actinguserid = ($actingrole === 'teacher') ? $env->teacher->id : $env->student->id;
+
+        $aif = new aif($env->context->id);
         ob_start();
-        $task->execute();
+        $aif->get_prompt($record, 'simple', $actinguserid);
         ob_end_clean();
 
-        // Nothing should be deleted when disabled.
-        $this->assertEquals(1, $DB->count_records('assignfeedback_aif_rescache'));
+        $this->assertNotEmpty($calleduserids);
+        $this->assertEquals($actinguserid, $calleduserids[0]);
+    }
+
+    /**
+     * Test perform_request rejects a request that has no user behind it.
+     *
+     * @covers ::perform_request
+     */
+    public function test_perform_request_requires_a_user(): void {
+        $this->resetAfterTest();
+
+        $aif = new aif(\core\context\system::instance()->id);
+
+        $this->expectException(\moodle_exception::class);
+        $aif->perform_request('Test prompt', 0);
     }
 }

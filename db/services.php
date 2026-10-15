@@ -54,4 +54,11 @@ $functions = [
         'ajax' => true,
         'capabilities' => 'mod/assign:grade',
     ],
+    'assignfeedback_aif_get_assignment_feedback_summary' => [
+        'classname' => 'assignfeedback_aif\external\get_assignment_feedback_summary',
+        'description' => 'Get assignment-wide AI feedback generation summary for the progress widget',
+        'type' => 'read',
+        'ajax' => true,
+        'capabilities' => 'mod/assign:grade',
+    ],
 ];

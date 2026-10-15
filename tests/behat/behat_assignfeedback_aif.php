@@ -201,20 +201,11 @@ class behat_assignfeedback_aif extends behat_base {
             );
         }
 
-        $skipped = json_decode($feedback->skippedfiles ?? '', true);
-        $haserror = false;
-        if (is_array($skipped)) {
-            foreach ($skipped as $entry) {
-                if (is_array($entry) && isset($entry['_error'])) {
-                    $haserror = true;
-                    break;
-                }
-            }
-        }
+        $haserror = ($feedback->status ?? '') === 'error' && trim((string) ($feedback->errormessage ?? '')) !== '';
 
         if (!$haserror) {
             throw new \Behat\Mink\Exception\ExpectationException(
-                "AI feedback for user '{$username}' in assignment '{$assignmentname}' has no error marker",
+                "AI feedback for user '{$username}' in assignment '{$assignmentname}' has no status/errormessage error state",
                 $this->getSession()
             );
         }
@@ -251,17 +242,13 @@ class behat_assignfeedback_aif extends behat_base {
             );
         }
 
-        $skipped = json_decode($feedback->skippedfiles ?? '', true);
-        if (is_array($skipped)) {
-            foreach ($skipped as $entry) {
-                if (is_array($entry) && isset($entry['_error'])) {
-                    throw new \Behat\Mink\Exception\ExpectationException(
-                        "AI feedback for user '{$username}' in assignment '{$assignmentname}' "
-                        . "unexpectedly has error: " . $entry['_error'],
-                        $this->getSession()
-                    );
-                }
-            }
+        $haserror = ($feedback->status ?? '') === 'error' && trim((string) ($feedback->errormessage ?? '')) !== '';
+        if ($haserror) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "AI feedback for user '{$username}' in assignment '{$assignmentname}' unexpectedly has error: "
+                . (string) ($feedback->errormessage ?? ''),
+                $this->getSession()
+            );
         }
     }
 
