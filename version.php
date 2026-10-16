@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'assignfeedback_aif';
-$plugin->release = '1.0.0';
-$plugin->version = 2026101600;
+$plugin->release = '1.1.0';
+$plugin->version = 2026101601;
 $plugin->requires = 2024100700; // Moodle 4.5 for Core AI subsystem.
 $plugin->maturity = MATURITY_BETA;
 $plugin->dependencies = [
