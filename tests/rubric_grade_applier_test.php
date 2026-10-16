@@ -102,6 +102,48 @@ final class rubric_grade_applier_test extends \advanced_testcase {
     }
 
     /**
+     * A bare JSON object followed by unrelated text containing its own "[...]}" must
+     * not be overmatched by the greedy fallback pattern.
+     */
+    public function test_extract_unfenced_json_with_trailing_brackets(): void {
+        $response = "Solid effort.\n\n"
+            . '{"rubric": [{"criterion": "Pictures", "level": "One picture", "score": 1, "remark": ""}]}'
+            . "\n\nExample: {\"tags\": [\"x\", \"y\"]}\n";
+        $result = rubric_grade_applier::extract($response);
+
+        $this->assertCount(1, $result['assessment']);
+        $this->assertSame('Pictures', $result['assessment'][0]['criterion']);
+    }
+
+    /**
+     * An unrelated fenced block before the rubric block is left alone and the rubric block is still found.
+     */
+    public function test_extract_skips_earlier_fenced_block(): void {
+        $example = self::FENCE . "json\n{\"tags\": [\"x\", \"y\"]}\n" . self::FENCE;
+        $response = "Consider this structure:\n\n" . $example . "\n\n" . self::RESPONSE;
+        $result = rubric_grade_applier::extract($response);
+
+        $this->assertCount(2, $result['assessment']);
+        $this->assertSame('Spelling is important', $result['assessment'][0]['criterion']);
+        $this->assertStringContainsString($example, $result['feedback']);
+        $this->assertStringNotContainsString('"rubric"', $result['feedback']);
+        $this->assertSame(2, substr_count($result['feedback'], self::FENCE));
+    }
+
+    /**
+     * A malformed rubric block yields no assessment but is still removed from the feedback.
+     */
+    public function test_extract_strips_malformed_block(): void {
+        $response = "Good work.\n\n" . self::FENCE . "json\n"
+            . '{"rubric": [{"criterion": "Pictures", "level": "One picture", "score": 1, "remark": "",}]}'
+            . "\n" . self::FENCE . "\n";
+        $result = rubric_grade_applier::extract($response);
+
+        $this->assertNull($result['assessment']);
+        $this->assertSame("Good work.\n", $result['feedback']);
+    }
+
+    /**
      * Prompt instructions list every criterion with its levels and scores.
      */
     public function test_build_prompt_instructions(): void {

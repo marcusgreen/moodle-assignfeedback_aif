@@ -121,32 +121,65 @@ class rubric_grade_applier {
     /**
      * Extract the structured rubric block from the model response.
      *
-     * The block is removed from the feedback so students never see it.
+     * The block is removed from the feedback so students never see it. A fenced
+     * block that mentions the rubric key but is not valid JSON is removed as well,
+     * with a null assessment, so no grade is applied.
      *
      * @param string $feedback The raw model response.
      * @return array ['feedback' => string, 'assessment' => array|null] where assessment is the list of criterion entries.
      */
     public static function extract(string $feedback): array {
         $assessment = null;
-        // Prefer a fenced block, fall back to a bare JSON object containing the rubric key.
-        $patterns = [
-            '/' . self::FENCE . '(?:json)?\s*(\{.*?"' . self::JSON_KEY . '".*?\})\s*' . self::FENCE . '/is',
-            '/(\{\s*"' . self::JSON_KEY . '"\s*:\s*\[.*?\]\s*\})/is',
-        ];
-        foreach ($patterns as $pattern) {
-            if (!preg_match($pattern, $feedback, $matches)) {
-                continue;
+        $block = null;
+
+        // Check every fenced block in order; the first one carrying the rubric key wins.
+        preg_match_all('/' . self::FENCE . '(?:json)?\s*(.*?)\s*' . self::FENCE . '/is', $feedback, $fenced, PREG_SET_ORDER);
+        foreach ($fenced as $match) {
+            $assessment = self::decode_assessment($match[1]);
+            if ($assessment !== null) {
+                $block = $match[0];
+                break;
             }
-            $decoded = json_decode($matches[1], true);
-            if (is_array($decoded) && isset($decoded[self::JSON_KEY]) && is_array($decoded[self::JSON_KEY])) {
-                $assessment = $decoded[self::JSON_KEY];
+        }
+
+        // Fall back to a bare JSON object whose opening brace directly precedes the rubric key.
+        if ($block === null && preg_match('/(\{\s*"' . self::JSON_KEY . '"\s*:\s*\[.*?\]\s*\})/is', $feedback, $match)) {
+            $assessment = self::decode_assessment($match[1]);
+            if ($assessment !== null) {
+                $block = $match[0];
             }
-            // Strip the block (and a directly preceding heading) regardless of validity.
-            $feedback = str_replace($matches[0], '', $feedback);
+        }
+
+        // A malformed rubric block is still machine output: strip it rather than show it to students.
+        if ($block === null) {
+            foreach ($fenced as $match) {
+                if (stripos($match[1], '"' . self::JSON_KEY . '"') !== false) {
+                    $block = $match[0];
+                    break;
+                }
+            }
+        }
+
+        if ($block !== null) {
+            // Strip the block and a directly preceding heading.
+            $feedback = str_replace($block, '', $feedback);
             $feedback = preg_replace('/\n#{1,6}[^\n]*(rubric|assessment)[^\n]*\n\s*$/i', "\n", $feedback);
-            break;
         }
         return ['feedback' => rtrim($feedback) . "\n", 'assessment' => $assessment];
+    }
+
+    /**
+     * Decode a candidate JSON string and return its rubric entries.
+     *
+     * @param string $json The candidate JSON.
+     * @return array|null The list of criterion entries, or null if it is not a valid rubric object.
+     */
+    private static function decode_assessment(string $json): ?array {
+        $decoded = json_decode(trim($json), true);
+        if (!is_array($decoded) || !isset($decoded[self::JSON_KEY]) || !is_array($decoded[self::JSON_KEY])) {
+            return null;
+        }
+        return $decoded[self::JSON_KEY];
     }
 
     /**
