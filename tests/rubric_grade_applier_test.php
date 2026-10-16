@@ -411,15 +411,16 @@ final class rubric_grade_applier_test extends \advanced_testcase {
         $task = new process_feedback_adhoc();
         $task->set_custom_data([
             'assignment' => $env->assign->id,
-            'users' => [$env->student->id],
+            'userid' => $env->student->id,
             'action' => 'generate',
-            'triggeredby' => $triggeredby,
         ]);
+        // The task runner decides the trigger: the student for automatic runs, the teacher otherwise.
         if ($triggeredby === 'manual') {
             $this->setUser($env->teacher);
             $task->set_userid($env->teacher->id);
         } else {
             $this->setAdminUser();
+            $task->set_userid($env->student->id);
         }
         ob_start();
         $task->execute();
