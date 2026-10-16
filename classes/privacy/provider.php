@@ -60,6 +60,9 @@ class provider implements
             'timemodified' => 'privacy:metadata:timemodified',
         ];
         $collection->add_database_table('assignfeedback_aif_feedback', $data, 'privacy:metadata:tablesummary');
+        // When "apply rubric grades" is enabled, the AI's rubric assessment is written into the
+        // advanced grading subsystem on behalf of the assignment.
+        $collection->add_subsystem_link('core_grading', [], 'privacy:metadata:core_grading');
 
         return $collection;
     }
