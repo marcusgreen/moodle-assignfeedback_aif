@@ -216,6 +216,85 @@ final class provider_test extends \advanced_testcase {
     }
 
     /**
+     * Test that exporting each grade exports the feedback of that grade's attempt.
+     *
+     * @covers \assignfeedback_aif\privacy\provider::export_feedback_user_data
+     */
+    public function test_export_feedback_user_data_per_attempt(): void {
+        $this->resetAfterTest();
+
+        [$env, , $grade0, $grade1] = $this->seed_two_attempts();
+
+        foreach ([$grade0, $grade1] as $grade) {
+            $exportdata = new assign_plugin_request_data(
+                $env->context,
+                $env->assignobj,
+                $grade,
+                ['attempt' . ($grade->attemptnumber + 1)],
+                $env->student
+            );
+            provider::export_feedback_user_data($exportdata);
+        }
+
+        /** @var content_writer $writer */
+        $writer = \core_privacy\local\request\writer::with_context($env->context);
+        $aipath = get_string('privacy:aipath', 'assignfeedback_aif');
+
+        $exported = $writer->get_data(['attempt1', $aipath]);
+        $this->assertNotEmpty($exported);
+        $this->assertStringContainsString('Feedback for attempt 1', $exported->feedback);
+
+        $exported = $writer->get_data(['attempt2', $aipath]);
+        $this->assertNotEmpty($exported);
+        $this->assertStringContainsString('Feedback for attempt 2', $exported->feedback);
+    }
+
+    /**
+     * Test that deleting feedback for an earlier attempt's grade only removes that attempt's feedback.
+     *
+     * @covers \assignfeedback_aif\privacy\provider::delete_feedback_for_grade
+     */
+    public function test_delete_feedback_for_grade_previous_attempt(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        [$env, $aifid, $grade0] = $this->seed_two_attempts();
+
+        $requestdata = new assign_plugin_request_data(
+            $env->context,
+            $env->assignobj,
+            $grade0,
+            [],
+            $env->student
+        );
+        provider::delete_feedback_for_grade($requestdata);
+
+        $remaining = $DB->get_records('assignfeedback_aif_feedback', ['aif' => $aifid]);
+        $this->assertCount(1, $remaining);
+        $this->assertStringContainsString('attempt 2', reset($remaining)->feedback);
+    }
+
+    /**
+     * Test that deleting feedback for a list of users removes feedback for all their attempts.
+     *
+     * @covers \assignfeedback_aif\privacy\provider::delete_feedback_for_grades
+     */
+    public function test_delete_feedback_for_grades_all_attempts(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        [$env, $aifid] = $this->seed_two_attempts();
+        $this->assertEquals(2, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
+
+        $deletedata = new assign_plugin_request_data($env->context, $env->assignobj);
+        $deletedata->set_userids([$env->student->id]);
+        $deletedata->populate_submissions_and_grades();
+        provider::delete_feedback_for_grades($deletedata);
+
+        $this->assertEquals(0, $DB->count_records('assignfeedback_aif_feedback', ['aif' => $aifid]));
+    }
+
+    /**
      * Create an AIF feedback record linked to the user's latest submission.
      *
      * @param int $assignmentid Assignment id.
@@ -258,5 +337,32 @@ final class provider_test extends \advanced_testcase {
         $this->insert_feedback_record($env->assign->id, $env->student->id, $aifid, $feedbacktext);
 
         return [$env, $grade, $feedbacktext];
+    }
+
+    /**
+     * Seed a student with two attempts, each graded and with its own AI feedback record.
+     *
+     * @return array{0: \stdClass, 1: int, 2: \stdClass, 3: \stdClass} Environment, aif id,
+     *     grade for attempt 0 and grade for attempt 1.
+     */
+    private function seed_two_attempts(): array {
+        $env = $this->create_test_environment([
+            'maxattempts' => -1,
+            'attemptreopenmethod' => ASSIGN_ATTEMPT_REOPEN_METHOD_MANUAL,
+        ]);
+        $this->create_and_submit($env, 'First attempt');
+        $aifid = $this->create_aif_config($env, 'Privacy test prompt', 0);
+
+        $this->setUser($env->teacher);
+        $grade0 = $env->assignobj->get_user_grade($env->student->id, true, 0);
+        $this->insert_feedback_record($env->assign->id, $env->student->id, $aifid, 'Feedback for attempt 1');
+
+        // Open a second attempt; it becomes the latest submission.
+        $_POST['sesskey'] = sesskey();
+        $this->assertTrue($env->assignobj->testable_process_add_attempt($env->student->id));
+        $grade1 = $env->assignobj->get_user_grade($env->student->id, true, 1);
+        $this->insert_feedback_record($env->assign->id, $env->student->id, $aifid, 'Feedback for attempt 2');
+
+        return [$env, $aifid, $grade0, $grade1];
     }
 }
