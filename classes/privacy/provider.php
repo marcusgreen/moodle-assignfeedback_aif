@@ -110,13 +110,8 @@ class provider implements
         $grade = $exportdata->get_pluginobject();
         $assignmentid = $assign->get_instance()->id;
 
-        // Find the submission for this grade's user.
-        $submission = $DB->get_record('assign_submission', [
-            'assignment' => $assignmentid,
-            'userid' => $grade->userid,
-            'latest' => 1,
-        ]);
-
+        // Find the submission for the attempt this grade belongs to.
+        $submission = self::get_submission_for_grade($assignmentid, $grade);
         if (!$submission) {
             return;
         }
@@ -177,13 +172,8 @@ class provider implements
         $grade = $requestdata->get_pluginobject();
         $assignmentid = $requestdata->get_assign()->get_instance()->id;
 
-        // Find the submission for this grade's user.
-        $submission = $DB->get_record('assign_submission', [
-            'assignment' => $assignmentid,
-            'userid' => $grade->userid,
-            'latest' => 1,
-        ]);
-
+        // Find the submission for the attempt this grade belongs to.
+        $submission = self::get_submission_for_grade($assignmentid, $grade);
         if (!$submission) {
             return;
         }
@@ -224,11 +214,12 @@ class provider implements
             return;
         }
 
-        // Get submission IDs for these users.
+        // Get submission IDs for every attempt of these users, so feedback on
+        // earlier attempts is removed along with the latest one.
         [$uinsql, $uinparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
         $uinparams['assignmentid'] = $assignmentid;
         $submissionids = $DB->get_fieldset_sql(
-            "SELECT id FROM {assign_submission} WHERE assignment = :assignmentid AND userid $uinsql AND latest = 1",
+            "SELECT id FROM {assign_submission} WHERE assignment = :assignmentid AND userid $uinsql",
             $uinparams
         );
 
@@ -240,5 +231,26 @@ class provider implements
         [$sinsql, $sinparams] = $DB->get_in_or_equal($submissionids, SQL_PARAMS_NAMED);
         $sinparams['aifid'] = $aif->id;
         $DB->delete_records_select('assignfeedback_aif_feedback', "aif = :aifid AND submission $sinsql", $sinparams);
+    }
+
+    /**
+     * Get the submission belonging to the same attempt as a grade.
+     *
+     * Feedback is stored per submission, and mod_assign calls the feedback
+     * privacy callbacks once per grade (one per attempt), so the grade's
+     * attemptnumber identifies which submission's feedback is meant.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @param \stdClass $grade The assign_grades record.
+     * @return \stdClass|false The submission record or false if not found.
+     */
+    private static function get_submission_for_grade(int $assignmentid, \stdClass $grade): \stdClass|false {
+        global $DB;
+
+        return $DB->get_record('assign_submission', [
+            'assignment' => $assignmentid,
+            'userid' => $grade->userid,
+            'attemptnumber' => $grade->attemptnumber ?? 0,
+        ]);
     }
 }
