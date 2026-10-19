@@ -524,7 +524,7 @@ final class rubric_grade_applier_test extends \advanced_testcase {
         $this->setup_ai_mock('Plain feedback only.');
         $this->run_adhoc_task($env);
         $feedback = $DB->get_record('assignfeedback_aif_feedback', ['aif' => $aifid], '*', MUST_EXIST);
-        $this->assertSame($clock->time(), (int) $feedback->timecreated);
+        $this->assertSame($clock->time(), (int) $feedback->timemodified);
 
         $this->setUser($env->teacher);
         $result = check_feedback_status::execute($env->assign->id, $env->student->id);
