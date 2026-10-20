@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Privacy provider exports and deletes AI feedback for every assignment attempt, not only the
+  latest. Earlier attempts' feedback was never exported, and deletion left it behind. (#33)
+
 ## 1.1.0 (2026-10-16)
 
 ### Added
