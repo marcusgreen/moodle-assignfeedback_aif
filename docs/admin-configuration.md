@@ -38,6 +38,10 @@ workflow enabled. When disabled, the option is hidden and no rubric grades are a
 the site; values already stored per assignment are kept and become active again once re-enabled.
 See [Rubric Grade Application](rubric-grade-application.md).
 
+Sites upgrading from 1.1.0, where the per-assignment option existed without this switch, keep
+their behaviour: the upgrade step enables the switch when at least one assignment has the option
+ticked. All other sites start with it disabled.
+
 > **Recommendation:** Leave disabled on large sites. Let teachers opt-in per assignment to
 > avoid unexpected AI costs.
 
