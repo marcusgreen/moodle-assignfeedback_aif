@@ -16,9 +16,10 @@
 /**
  * Fill the rubric grading form on the grading page with an applied AI assessment.
  *
- * The adhoc task stores the assessment in the grading instance. When feedback is
- * injected into the editor without a page reload, the rubric widget would still
- * show the old state, so the selected levels and remarks are updated in place.
+ * The adhoc task stores the assessment in the grading instance and keeps the grade
+ * "In review". When feedback is injected into the editor without a page reload, the
+ * rubric widget and the marking workflow field would still show the old state, so
+ * the selected levels, the remarks and the workflow state are updated in place.
  *
  * @module     assignfeedback_aif/rubricform
  * @copyright  2026 Jack
@@ -48,11 +49,38 @@ const selectLevel = (radio) => {
 };
 
 /**
+ * Select the marking workflow state the task left the grade in.
+ *
+ * Without this, saving the form would post the state from page load (e.g. "Not marked")
+ * over the "In review" the task has set. The select is missing when marking workflow is
+ * off or when core froze it, and the option is missing when the grader may not set this
+ * state; in both cases the field is left alone.
+ *
+ * @param {string} state The workflow state, e.g. "inreview".
+ * @returns {boolean} Whether the state is selected now.
+ */
+const selectWorkflowState = (state) => {
+    if (!state) {
+        return false;
+    }
+    const select = document.querySelector('select[name="workflowstate"]');
+    if (!select || select.disabled || !select.querySelector(`option[value="${state}"]`)) {
+        return false;
+    }
+    if (select.value !== state) {
+        select.value = state;
+        select.dispatchEvent(new Event('change', {bubbles: true}));
+    }
+    return true;
+};
+
+/**
  * Apply an assessment to the rubric form in the current document.
  *
  * @param {object} rubric The rubric structure returned by check_feedback_status.
  * @param {boolean} rubric.applied Whether the adhoc task applied an assessment.
  * @param {Array} rubric.criteria Entries with criterionid, levelid and remark.
+ * @param {string} [rubric.workflowstate] Marking workflow state of the grade, if any.
  * @returns {number} Number of criteria whose level was selected.
  */
 export const applyAssessment = (rubric) => {
@@ -80,6 +108,8 @@ export const applyAssessment = (rubric) => {
             remarkField.dispatchEvent(new Event('change', {bubbles: true}));
         }
     });
+
+    selectWorkflowState(rubric.workflowstate);
 
     return applied;
 };

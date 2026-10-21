@@ -51,17 +51,20 @@ widget would otherwise keep showing its old state until the next reload, and sav
 would overwrite the AI assessment with the stale values.
 
 `check_feedback_status` therefore returns the filling of the current grading instance
-(criterion id, level id, remark) when all of the following hold:
+(criterion id, level id, remark) together with the grade's marking workflow state when all of
+the following hold:
 
 - rubric application is enabled site-wide and for the assignment,
 - the active grading method is a ready rubric,
 - the instance was modified at or after the feedback text, i.e. by the same run.
 
 The `assignfeedback_aif/rubricform` module then selects the matching level radios, mirrors the
-`checked` state the rubric widget maintains, fills the remark fields and shows a toast. The
-instance is the source of truth here, not the raw AI JSON, so the form shows exactly what was
-stored after criterion and level matching. The automatic-generation spinner still reloads the
-page, which picks up the rubric on its own.
+`checked` state the rubric widget maintains, fills the remark fields and shows a toast. It also
+selects the workflow state ("In review") in the grader form: the task sets it server-side, and the
+form would otherwise post the state from page load over it on save. The instance is the source of
+truth here, not the raw AI JSON, so the form shows exactly what was stored after criterion and
+level matching. The automatic-generation spinner still reloads the page, which picks up the rubric
+on its own.
 
 ## Safety rules
 

@@ -75,3 +75,21 @@ Feature: AI rubric assessment is mirrored into the grading form
     Then the level with "3" points is selected for the rubric criterion "Spelling"
     And the level with "2" points is selected for the rubric criterion "Pictures"
     And the field with xpath "(//textarea[contains(@name, '[remark]')])[1]" matches value "Flawless."
+
+  @javascript
+  Scenario: Saving the grading form after generation keeps the grade in review
+    Given I am on the "Rubric Task" "assign activity" page logged in as teacher1
+    And I navigate to "Submissions" in current page administration
+    And I click on "Grade actions" "actionmenu" in the "Student 1" "table_row"
+    And I choose "Grade" in the open action menu
+    And the field "Marking workflow state" matches value "Not marked"
+    When I click on "button[data-action='regenerate-aif']" "css_element"
+    And I click on "Yes" "button" in the ".modal" "css_element"
+    And I run all adhoc tasks
+    And I wait until ".level.checked" "css_element" exists
+    Then the field "Marking workflow state" matches value "In review"
+    And I press "Save changes"
+    And I should see "The changes to the grade and feedback were saved"
+    And I am on the "Rubric Task" "assign activity" page
+    And I navigate to "Submissions" in current page administration
+    And I should see "In review" in the "Student 1" "table_row"

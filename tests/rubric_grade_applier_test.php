@@ -456,6 +456,8 @@ final class rubric_grade_applier_test extends \advanced_testcase {
         $this->assertTrue($result['feedbackexists']);
         $this->assertTrue($result['rubric']['applied']);
         $this->assertCount(2, $result['rubric']['criteria']);
+        // The grading page selects this state so that saving the form does not undo it.
+        $this->assertSame(ASSIGN_MARKING_WORKFLOW_STATE_INREVIEW, $result['rubric']['workflowstate']);
 
         $criteria = $controller->get_definition()->rubric_criteria;
         $expected = ['Spelling is important' => [2.0, 'Flawless.'], 'Pictures' => [1.0, 'Add another one.']];
@@ -473,6 +475,7 @@ final class rubric_grade_applier_test extends \advanced_testcase {
         $this->assertTrue($result['feedbackexists']);
         $this->assertFalse($result['rubric']['applied']);
         $this->assertSame([], $result['rubric']['criteria']);
+        $this->assertSame('', $result['rubric']['workflowstate']);
     }
 
     /**
@@ -500,6 +503,7 @@ final class rubric_grade_applier_test extends \advanced_testcase {
         $this->assertTrue($result['feedbackexists']);
         $this->assertFalse($result['rubric']['applied']);
         $this->assertSame([], $result['rubric']['criteria']);
+        $this->assertSame('', $result['rubric']['workflowstate']);
     }
 
     /**

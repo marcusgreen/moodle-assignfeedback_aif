@@ -105,7 +105,7 @@ class check_feedback_status extends external_api {
             // Return the feedback HTML when it exists, so the grading page can
             // inject it into the editor without a full page reload.
             $feedbackhtml = '';
-            $rubric = ['applied' => false, 'criteria' => []];
+            $rubric = ['applied' => false, 'criteria' => [], 'workflowstate' => ''];
             if ($exists && has_capability('mod/assign:grade', $context)) {
                 $format = $record->feedbackformat ?? FORMAT_HTML;
                 $feedbackhtml = format_text($record->feedback, $format, ['context' => $context]);
@@ -148,7 +148,7 @@ class check_feedback_status extends external_api {
             'feedbackexists' => !$pendingorrunning,
             'feedbackhtml' => '',
             'progressrecordid' => 0,
-            'rubric' => ['applied' => false, 'criteria' => []],
+            'rubric' => ['applied' => false, 'criteria' => [], 'workflowstate' => ''],
         ];
     }
 
@@ -161,12 +161,17 @@ class check_feedback_status extends external_api {
      * and when the instance was written at or after the feedback text. An older
      * instance belongs to a previous run (or to the teacher) and is left alone.
      *
+     * The marking workflow state is returned with the filling because the task sets
+     * it to "In review" server-side: the grader form must select it as well, or saving
+     * the form would post the state from page load over it.
+     *
      * @param \stdClass $assignment The assign record.
      * @param \stdClass $cm The course module record.
      * @param context_module $context The module context.
      * @param int $userid The graded student.
      * @param int $since Timestamp of the feedback text; earlier instances are ignored.
-     * @return array 'applied' flag and a list of criterionid / levelid / remark entries.
+     * @return array 'applied' flag, a list of criterionid / levelid / remark entries and
+     *               the marking workflow state of the grade ('' if none).
      */
     private static function load_rubric_assessment(
         \stdClass $assignment,
@@ -179,7 +184,7 @@ class check_feedback_status extends external_api {
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
         require_once($CFG->dirroot . '/grade/grading/lib.php');
 
-        $empty = ['applied' => false, 'criteria' => []];
+        $empty = ['applied' => false, 'criteria' => [], 'workflowstate' => ''];
         if (!aif::is_rubric_application_enabled()) {
             return $empty;
         }
@@ -218,9 +223,11 @@ class check_feedback_status extends external_api {
                 'remark' => (string) ($entry['remark'] ?? ''),
             ];
         }
-        return ['applied' => true, 'criteria' => $criteria];
-    }
+        $flags = $assign->get_user_flags($userid, false);
+        $workflowstate = $flags ? (string) $flags->workflowstate : '';
 
+        return ['applied' => true, 'criteria' => $criteria, 'workflowstate' => $workflowstate];
+    }
 
     /**
      * Describes the return value for check_feedback_status.
@@ -253,6 +260,12 @@ class check_feedback_status extends external_api {
                         'levelid' => new external_value(PARAM_INT, 'Selected level id (0 if none)'),
                         'remark' => new external_value(PARAM_RAW, 'Remark stored for the criterion'),
                     ])
+                ),
+                'workflowstate' => new external_value(
+                    PARAM_ALPHA,
+                    'Marking workflow state of the grade once the assessment was applied (empty if none)',
+                    VALUE_DEFAULT,
+                    ''
                 ),
             ], 'Rubric filling applied by the adhoc task (only for per-user mode)'),
         ]);
