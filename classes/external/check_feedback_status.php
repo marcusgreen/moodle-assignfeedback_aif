@@ -239,7 +239,7 @@ class check_feedback_status extends external_api {
             'feedbackexists' => new external_value(PARAM_BOOL, 'Whether AI feedback exists for the submission'),
             'feedbackhtml' => new external_value(
                 PARAM_RAW,
-                'The formatted feedback HTML (only for per-user mode)',
+                'The formatted feedback HTML (empty in assignment-wide mode)',
                 VALUE_DEFAULT,
                 ''
             ),
@@ -267,7 +267,7 @@ class check_feedback_status extends external_api {
                     VALUE_DEFAULT,
                     ''
                 ),
-            ], 'Rubric filling applied by the adhoc task (only for per-user mode)'),
+            ], 'Rubric filling applied by the adhoc task; assignment-wide mode returns applied=false with no criteria'),
         ]);
     }
 }
