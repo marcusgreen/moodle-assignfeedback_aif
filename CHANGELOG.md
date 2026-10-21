@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+- Site-wide admin setting "Enable applying rubric assessments" (`enableapplyrubricgrades`) that
+  gates the per-assignment option. Off by default; the upgrade step turns it on for sites where
+  an assignment already uses the option. (#34)
+- On the grading page, "Generate AI feedback" mirrors the AI's rubric assessment and the
+  "In review" workflow state into the grading form without a reload. (#34)
+
+### Changed
+- The per-assignment option "Apply the AI's rubric assessment to the grading form" is only
+  offered while the site-wide setting is on. New installations and sites that have not used the
+  option start with it off. (#34)
+
 ### Fixed
 - Privacy provider exports and deletes AI feedback for every assignment attempt, not only the
   latest. Earlier attempts' feedback was never exported, and deletion left it behind. (#33)

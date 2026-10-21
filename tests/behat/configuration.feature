@@ -50,7 +50,9 @@ Feature: AI Feedback plugin configuration
     Then the field "assignfeedback_aif_autogenerate" matches value "1"
 
   Scenario: Teacher enables applying the AI rubric assessment to the grading form
-    Given the following "activity" exists:
+    Given the following config values are set as admin:
+      | enableapplyrubricgrades | 1 | assignfeedback_aif |
+    And the following "activity" exists:
       | activity                            | assign                  |
       | course                              | C1                      |
       | name                                | Rubric Assignment       |
@@ -70,7 +72,9 @@ Feature: AI Feedback plugin configuration
 
   @javascript
   Scenario: Apply rubric assessment option is disabled while marking workflow is disabled
-    Given the following "activity" exists:
+    Given the following config values are set as admin:
+      | enableapplyrubricgrades | 1 | assignfeedback_aif |
+    And the following "activity" exists:
       | activity                            | assign                  |
       | course                              | C1                      |
       | name                                | Workflow Assignment     |
