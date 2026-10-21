@@ -49,6 +49,22 @@ const selectLevel = (radio) => {
 };
 
 /**
+ * Clear the level selection of a criterion, including the widget's visual state.
+ *
+ * @param {NodeList} radios The level radios of the criterion.
+ */
+const clearLevels = (radios) => {
+    radios.forEach((radio) => {
+        radio.checked = false;
+        const level = radio.closest('.level');
+        if (level) {
+            level.classList.remove('checked');
+            level.setAttribute('aria-checked', 'false');
+        }
+    });
+};
+
+/**
  * Select the marking workflow state the task left the grade in.
  *
  * Without this, saving the form would post the state from page load (e.g. "Not marked")
@@ -91,15 +107,18 @@ export const applyAssessment = (rubric) => {
     let applied = 0;
     rubric.criteria.forEach(({criterionid, levelid, remark}) => {
         const base = `${ELEMENT_NAME}[criteria][${criterionid}]`;
+        const radios = document.querySelectorAll(`input[type="radio"][name="${base}[levelid]"]`);
 
         if (levelid > 0) {
-            const radio = document.querySelector(
-                `input[type="radio"][name="${base}[levelid]"][value="${levelid}"]`
-            );
+            const radio = Array.from(radios).find((candidate) => candidate.value === String(levelid));
             if (radio) {
                 selectLevel(radio);
                 applied++;
             }
+        } else {
+            // The stored filling has no level for this criterion: mirror that as well, so the
+            // form does not keep a selection the task did not make.
+            clearLevels(radios);
         }
 
         const remarkField = document.querySelector(`textarea[name="${base}[remark]"]`);
