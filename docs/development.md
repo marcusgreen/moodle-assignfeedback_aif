@@ -5,7 +5,7 @@ Feedback plugin.
 
 ## Prerequisites
 
-- Moodle 4.5+ development environment
+- Moodle 5.0+ development environment
 - PHP 8.2+
 - Node.js 22+ (for AMD module building)
 - A running Moodle instance with the plugin installed

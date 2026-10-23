@@ -1,6 +1,6 @@
 # AI Assisted Feedback (assignfeedback_aif)
 
-[![Moodle Plugin](https://img.shields.io/badge/Moodle-4.5%2B-orange)](https://moodle.org)
+[![Moodle Plugin](https://img.shields.io/badge/Moodle-5.0%2B-orange)](https://moodle.org)
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-GPL%20v3-green)](https://www.gnu.org/copyleft/gpl.html)
 [![Maturity](https://img.shields.io/badge/Maturity-Beta-yellow)]()
@@ -39,7 +39,7 @@ generation on submission.
 
 ## Requirements
 
-- **Moodle** 4.5 or later (for Core AI Subsystem support)
+- **Moodle** 5.0 or later (required by `local_ai_content`)
 - **PHP** 8.2 or later
 - At least one AI provider configured:
   - **Core AI Subsystem**: Configure an AI provider in *Site Administration → AI → AI providers*
