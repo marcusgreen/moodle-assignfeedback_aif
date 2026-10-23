@@ -53,13 +53,37 @@ class provider implements
      */
     public static function get_metadata(collection $collection): collection {
         $data = [
-            'assignment' => 'privacy:metadata:assignmentid',
-            'aitext' => 'privacy:metadata:aitext',
+            'submission' => 'privacy:metadata:submission',
+            'feedback' => 'privacy:metadata:feedback',
             'status' => 'privacy:metadata:status',
             'errormessage' => 'privacy:metadata:errormessage',
+            'skippedfiles' => 'privacy:metadata:skippedfiles',
+            'timecreated' => 'privacy:metadata:timecreated',
             'timemodified' => 'privacy:metadata:timemodified',
         ];
         $collection->add_database_table('assignfeedback_aif_feedback', $data, 'privacy:metadata:tablesummary');
+        // When "apply rubric grades" is enabled, the AI's rubric assessment is written into the
+        // advanced grading subsystem on behalf of the assignment.
+        $collection->add_subsystem_link('core_grading', [], 'privacy:metadata:core_grading');
+
+        // The submission, rubric and prompt are sent to the AI backend configured for the site.
+        // With local_ai_manager, each request is logged in its request log with
+        // component='assignfeedback_aif'. That table is managed by local_ai_manager, whose privacy
+        // provider exports and deletes these entries for all components.
+        $collection->add_database_table(
+            'local_ai_manager_request_log',
+            [
+                'userid' => 'privacy:metadata:local_ai_manager_request_log:userid',
+                'contextid' => 'privacy:metadata:local_ai_manager_request_log:contextid',
+                'component' => 'privacy:metadata:local_ai_manager_request_log:component',
+                'prompttext' => 'privacy:metadata:local_ai_manager_request_log:prompttext',
+                'promptcompletion' => 'privacy:metadata:local_ai_manager_request_log:promptcompletion',
+                'timecreated' => 'privacy:metadata:local_ai_manager_request_log:timecreated',
+            ],
+            'privacy:metadata:local_ai_manager_request_log'
+        );
+        // With the core AI subsystem, requests are processed and stored by core_ai.
+        $collection->add_subsystem_link('core_ai', [], 'privacy:metadata:core_ai');
 
         return $collection;
     }
@@ -107,13 +131,8 @@ class provider implements
         $grade = $exportdata->get_pluginobject();
         $assignmentid = $assign->get_instance()->id;
 
-        // Find the submission for this grade's user.
-        $submission = $DB->get_record('assign_submission', [
-            'assignment' => $assignmentid,
-            'userid' => $grade->userid,
-            'latest' => 1,
-        ]);
-
+        // Find the submission for the attempt this grade belongs to.
+        $submission = self::get_submission_for_grade($assignmentid, $grade);
         if (!$submission) {
             return;
         }
@@ -174,13 +193,8 @@ class provider implements
         $grade = $requestdata->get_pluginobject();
         $assignmentid = $requestdata->get_assign()->get_instance()->id;
 
-        // Find the submission for this grade's user.
-        $submission = $DB->get_record('assign_submission', [
-            'assignment' => $assignmentid,
-            'userid' => $grade->userid,
-            'latest' => 1,
-        ]);
-
+        // Find the submission for the attempt this grade belongs to.
+        $submission = self::get_submission_for_grade($assignmentid, $grade);
         if (!$submission) {
             return;
         }
@@ -221,11 +235,12 @@ class provider implements
             return;
         }
 
-        // Get submission IDs for these users.
+        // Get submission IDs for every attempt of these users, so feedback on
+        // earlier attempts is removed along with the latest one.
         [$uinsql, $uinparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
         $uinparams['assignmentid'] = $assignmentid;
         $submissionids = $DB->get_fieldset_sql(
-            "SELECT id FROM {assign_submission} WHERE assignment = :assignmentid AND userid $uinsql AND latest = 1",
+            "SELECT id FROM {assign_submission} WHERE assignment = :assignmentid AND userid $uinsql",
             $uinparams
         );
 
@@ -237,5 +252,26 @@ class provider implements
         [$sinsql, $sinparams] = $DB->get_in_or_equal($submissionids, SQL_PARAMS_NAMED);
         $sinparams['aifid'] = $aif->id;
         $DB->delete_records_select('assignfeedback_aif_feedback', "aif = :aifid AND submission $sinsql", $sinparams);
+    }
+
+    /**
+     * Get the submission belonging to the same attempt as a grade.
+     *
+     * Feedback is stored per submission, and mod_assign calls the feedback
+     * privacy callbacks once per grade (one per attempt), so the grade's
+     * attemptnumber identifies which submission's feedback is meant.
+     *
+     * @param int $assignmentid The assignment instance ID.
+     * @param \stdClass $grade The assign_grades record.
+     * @return \stdClass|false The submission record or false if not found.
+     */
+    private static function get_submission_for_grade(int $assignmentid, \stdClass $grade): \stdClass|false {
+        global $DB;
+
+        return $DB->get_record('assign_submission', [
+            'assignment' => $assignmentid,
+            'userid' => $grade->userid,
+            'attemptnumber' => $grade->attemptnumber ?? 0,
+        ]);
     }
 }

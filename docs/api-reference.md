@@ -172,64 +172,62 @@ Implements:
 - `\mod_assign\privacy\assignfeedback_provider` — Assignment-specific data handling
 - `\mod_assign\privacy\assignfeedback_user_provider` — User-specific data operations
 
-### Metadata Declaration
+### Data Stored
 
-The plugin declares it stores the following data in `assignfeedback_aif_feedback`:
+AI feedback is stored per submission attempt in `assignfeedback_aif_feedback`: the feedback
+text, its processing status (pending, completed, error), any error message, and timestamps.
 
-| Field | Privacy String | Description |
-|-------|---------------|-------------|
-| `assignment` | `privacy:metadata:assignmentid` | The assignment ID |
-| `aitext` | `privacy:metadata:aitext` | The AI-generated feedback text |
+When the apply-rubric-grades option is enabled, the AI's rubric assessment is written into the
+assignment's rubric grading form. The plugin declares a subsystem link to `core_grading`
+(`privacy:metadata:core_grading`); that data is exported and deleted through `mod_assign` and
+`core_grading`, like any rubric filled in by a teacher.
 
 ### Data Export
 
-The `export_feedback_user_data()` method is currently a no-op because the assignment module's
-core provider already handles the grade-level export flow. The plugin integrates via the
-standard assign feedback provider interface.
+`export_feedback_user_data()` exports the AI feedback for the attempt each grade belongs to,
+under an "AI Feedback" subpath of the assignment context. Because `mod_assign` calls it once per
+grade, feedback for every attempt is exported, not only the latest.
 
 ### Data Deletion
 
-Three deletion methods are implemented:
-
-#### delete_feedback_for_context
-
-Deletes all AI feedback for an entire assignment context (e.g., when a course is deleted).
-
-```php
-public static function delete_feedback_for_context(assign_plugin_request_data $requestdata) {
-    $assign = $requestdata->get_assign();
-    $plugin = $assign->get_plugin_by_type('assignfeedback', 'aif');
-    $plugin->delete_instance();
-}
-```
-
-#### delete_feedback_for_grade
-
-Deletes AI feedback associated with a specific grade entry (e.g., when a user's data is purged).
-
-Removes all `assignfeedback_aif_feedback` records linked to the assignment's
-`assignfeedback_aif` record, then removes the config record itself.
-
-#### delete_feedback_for_grades
-
-Deletes AI feedback for multiple grade IDs at once (batch privacy deletion).
+| Method | Deletes |
+|--------|---------|
+| `delete_feedback_for_context` | All AI feedback for the assignment (e.g. when a course is deleted) |
+| `delete_feedback_for_grade` | AI feedback for the attempt the grade belongs to |
+| `delete_feedback_for_grades` | AI feedback for every attempt of the users whose grades are being deleted |
 
 ### Data Sent to AI Providers
 
-The following data may be sent to external AI providers:
+To generate feedback, the plugin sends a prompt to the configured AI backend:
 
 | Data | When | Purpose |
 |------|------|---------|
 | Submission text | Always | Generating feedback |
 | File content (extracted text) | File submissions | Generating feedback |
 | Image data (base64) | Image submissions | Image analysis feedback |
-| Rubric criteria | Rubric grading | Context-aware feedback |
+| Rubric criteria and levels | Rubric grading | Context-aware feedback |
+| Teacher's prompt | Always | Instructions for the AI |
 | Assignment name | Always | Context for the AI |
+| User's language name | Always | Response language |
 | Disclaimer text | Translation enabled | Translating disclaimer |
 
-> **Important:** No personally identifiable information (student name, email, etc.) is sent
-> to the AI provider. Only submission content, assignment metadata, and rubric criteria are
-> included in the prompt.
+Student names, email addresses and other profile fields are not included in the prompt. The
+submission itself may still contain personal data.
+
+### AI Request Logs
+
+Each request is made on behalf of a user: the student for automatic generation on submission,
+the teacher for manual or bulk generation. The backend logs the request against that user:
+
+- **local_ai_manager**: requests and responses are stored in `local_ai_manager_request_log`
+  with `component = 'assignfeedback_aif'`. The plugin declares this table in its metadata
+  (`privacy:metadata:local_ai_manager_request_log`). Export and deletion are handled by
+  local_ai_manager's own privacy provider, which covers entries from all components.
+- **Core AI subsystem**: the plugin declares a subsystem link to `core_ai`
+  (`privacy:metadata:core_ai`). Requests and responses are stored and handled by `core_ai`.
+
+The AI provider itself (for example OpenAI or a self-hosted model) is outside Moodle. Site
+administrators should check its data processing terms before enabling the plugin.
 
 ---
 

@@ -102,6 +102,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
                        cx.id AS contextid,
                        aif.id AS aifid,
                        aif.prompt AS prompt,
+                       aif.applyrubricgrades AS applyrubricgrades,
                        a.id AS aid,
                        a.name AS assignmentname,
                        sub.userid
@@ -298,6 +299,17 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         // Step 4: Saving feedback (90%).
         $this->progress->update_full(90, get_string('progressstepsaving', 'assignfeedback_aif'));
 
+        // Opt-in rubric application: split the structured assessment off the feedback text.
+        $rubricassessment = null;
+        $applyrubric = \assignfeedback_aif\aif::is_rubric_application_enabled()
+            && ($gradingmethod === \assignfeedback_aif\aif::GRADING_METHOD_RUBRIC)
+            && !empty($record->applyrubricgrades);
+        if ($applyrubric) {
+            $extracted = \assignfeedback_aif\local\rubric_grade_applier::extract($aifeedback);
+            $aifeedback = $extracted['feedback'];
+            $rubricassessment = $extracted['assessment'];
+        }
+
         // Practice mode: only when auto-triggered (not teacher) and no marking workflow.
         $ispractice = ($triggeredby === 'auto') && $this->is_practice_mode($record->aid);
 
@@ -351,9 +363,62 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
         mtrace("AI feedback generated for assignment {$record->aid} submission {$record->subid}");
 
+        if ($applyrubric) {
+            $this->apply_rubric_assessment($record, $assign, $rubricassessment, $triggeredby);
+        }
+
         return null;
     }
 
+    /**
+     * Apply the AI rubric assessment to the advanced grading form.
+     *
+     * Any mismatch or precondition failure is logged and leaves the
+     * feedback-only result in place (no exception is raised).
+     *
+     * @param object $record The submission record.
+     * @param \assign $assign The assign instance.
+     * @param array|null $assessment The extracted assessment entries, or null if none was found.
+     * @param string $triggeredby How the task was triggered: 'auto' or 'manual'.
+     */
+    private function apply_rubric_assessment(object $record, \assign $assign, ?array $assessment, string $triggeredby): void {
+        $applier = \assignfeedback_aif\local\rubric_grade_applier::class;
+
+        $formdata = null;
+        if ($assessment !== null) {
+            $criteria = $applier::load_criteria($record->contextid);
+            $formdata = $applier::resolve($assessment, $criteria);
+        }
+        if ($formdata === null) {
+            mtrace('Rubric assessment not applied for submission ' . $record->subid . ': '
+                . get_string('rubricapplyskipped_nomatch', 'assignfeedback_aif'));
+            return;
+        }
+
+        // The rater of the rubric instance: the teacher who triggered the run, otherwise
+        // (automatic generation on submission) the site admin as a neutral placeholder.
+        $graderid = 0;
+        if ($triggeredby === 'manual' && $this->get_userid()) {
+            $graderid = (int) $this->get_userid();
+        }
+        if (!$graderid || !has_capability('mod/assign:grade', $assign->get_context(), $graderid)) {
+            $graderid = (int) get_admin()->id;
+        }
+
+        try {
+            $skipped = $applier::apply($assign, (int) $record->userid, $graderid, $formdata);
+        } catch (\Throwable $e) {
+            mtrace('Rubric assessment not applied for submission ' . $record->subid . ': ' . $e->getMessage());
+            return;
+        }
+
+        if ($skipped !== null) {
+            mtrace('Rubric assessment not applied for submission ' . $record->subid . ': '
+                . get_string($skipped, 'assignfeedback_aif'));
+            return;
+        }
+        mtrace("Rubric assessment applied for assignment {$record->aid} submission {$record->subid} (in review)");
+    }
 
     /**
      * Check whether this assignment operates in practice mode.
@@ -407,7 +472,8 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
      *
      * @param object $record The submission record.
      * @param string $errormsg The error message to store.
-     * @param string $debuginfo Optional debug info (stored in errormessage if non-empty).
+     * @param string $debuginfo Optional debug info. Written to the task log only, because the stored
+     *                          message is shown to everyone who can see the feedback, including students.
      */
     private function save_error_feedback(object $record, string $errormsg, string $debuginfo = ''): void {
         global $DB;
@@ -415,9 +481,8 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
         $clock = \core\di::get(\core\clock::class);
         $now = $clock->now()->getTimestamp();
 
-        $fullmsg = $errormsg;
         if ($debuginfo !== '') {
-            $fullmsg .= ' | ' . $debuginfo;
+            mtrace("Debug info for submission {$record->subid}: {$debuginfo}");
         }
 
         // Check if a record already exists (e.g. a pending lock record).
@@ -428,7 +493,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
 
         if ($existing) {
             $existing->status = 'error';
-            $existing->errormessage = $fullmsg;
+            $existing->errormessage = $errormsg;
             $existing->feedback = '';
             $existing->timemodified = $now;
             $DB->update_record('assignfeedback_aif_feedback', $existing);
@@ -438,7 +503,7 @@ class process_feedback_adhoc extends \core\task\adhoc_task {
                 'feedback' => '',
                 'feedbackformat' => FORMAT_HTML,
                 'status' => 'error',
-                'errormessage' => $fullmsg,
+                'errormessage' => $errormsg,
                 'timecreated' => $now,
                 'timemodified' => $now,
                 'submission' => $record->subid,

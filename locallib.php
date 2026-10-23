@@ -156,6 +156,40 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $mform->addHelpButton('assignfeedback_aif_useintroattachments', 'useintroattachments', 'assignfeedback_aif');
         $mform->hideIf('assignfeedback_aif_useintroattachments', 'assignfeedback_aif_enabled', 'notchecked');
 
+        // Apply AI rubric assessment to the advanced grading form (opt-in, only offered when enabled site-wide).
+        if (\assignfeedback_aif\aif::is_rubric_application_enabled()) {
+            $mform->addElement(
+                'advcheckbox',
+                'assignfeedback_aif_applyrubricgrades',
+                get_string('applyrubricgrades', 'assignfeedback_aif'),
+                '',
+                ['id' => 'id_assignfeedback_aif_applyrubricgrades'],
+                [0, 1]
+            );
+            $mform->setDefault('assignfeedback_aif_applyrubricgrades', 0);
+            $mform->addHelpButton('assignfeedback_aif_applyrubricgrades', 'applyrubricgrades', 'assignfeedback_aif');
+            $mform->hideIf('assignfeedback_aif_applyrubricgrades', 'assignfeedback_aif_enabled', 'notchecked');
+            // Keep the option visible but greyed out while marking workflow is off; the help text explains why.
+            $mform->disabledIf('assignfeedback_aif_applyrubricgrades', 'markingworkflow', 'eq', 0);
+
+            // Warn when the option is on but the assignment has no usable rubric yet.
+            $context = $this->assignment->get_context();
+            if ($context && !$this->has_rubric_criteria($context->id)) {
+                $mform->addElement(
+                    'static',
+                    'assignfeedback_aif_norubricnotice',
+                    '',
+                    \html_writer::div(
+                        get_string('applyrubricgrades_norubricnotice', 'assignfeedback_aif'),
+                        'alert alert-warning'
+                    )
+                );
+                $mform->hideIf('assignfeedback_aif_norubricnotice', 'assignfeedback_aif_enabled', 'notchecked');
+                $mform->hideIf('assignfeedback_aif_norubricnotice', 'markingworkflow', 'eq', 0);
+                $mform->hideIf('assignfeedback_aif_norubricnotice', 'assignfeedback_aif_applyrubricgrades', 'notchecked');
+            }
+        }
+
         // Show info box about AI control center when block_ai_control is installed and active.
         $enabledblocks = \core_plugin_manager::instance()->get_enabled_plugins('block');
         if (isset($enabledblocks['ai_control'])) {
@@ -186,6 +220,9 @@ class assign_feedback_aif extends assign_feedback_plugin {
                 $mform->setDefault('assignfeedback_aif_prompt', $record->prompt);
                 $mform->setDefault('assignfeedback_aif_autogenerate', $record->autogenerate ?? 0);
                 $mform->setDefault('assignfeedback_aif_useintroattachments', $record->useintroattachments ?? 1);
+                if ($mform->elementExists('assignfeedback_aif_applyrubricgrades')) {
+                    $mform->setDefault('assignfeedback_aif_applyrubricgrades', $record->applyrubricgrades ?? 0);
+                }
             }
         }
     }
@@ -212,6 +249,16 @@ class assign_feedback_aif extends assign_feedback_plugin {
             'attemptnumber' => $attemptnumber,
         ]);
         return $submission ? (int) $submission->id : null;
+    }
+
+    /**
+     * Whether the assignment currently uses a rubric with at least one criterion.
+     *
+     * @param int $contextid The module context id.
+     * @return bool
+     */
+    private function has_rubric_criteria(int $contextid): bool {
+        return !empty(\assignfeedback_aif\local\rubric_grade_applier::load_criteria($contextid));
     }
 
     /**
@@ -250,9 +297,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
      *
      * @param string $name The field name.
      * @param int $gradeid The grade ID.
+     * @param int|null $markid Optional mark ID.
      * @return string The saved text content.
      */
-    public function get_editor_text($name, $gradeid): string {
+    public function get_editor_text($name, $gradeid, ?int $markid = null): string {
         global $DB;
         if ($name === 'aif') {
             // Get the grade to find the assignment and user.
@@ -272,9 +320,10 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @param string $name The field name.
      * @param string $value The text value to save.
      * @param int $gradeid The grade ID.
+     * @param int|null $markid Optional mark ID.
      * @return bool True if the text was saved.
      */
-    public function set_editor_text($name, $value, $gradeid): bool {
+    public function set_editor_text($name, $value, $gradeid, ?int $markid = null): bool {
         global $DB;
         if ($name === 'aif') {
             // Get the grade to find the assignment and user.
@@ -714,13 +763,18 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $prompt = $data->assignfeedback_aif_prompt;
         $autogenerate = !empty($data->assignfeedback_aif_autogenerate) ? 1 : 0;
         $useintroattachments = !empty($data->assignfeedback_aif_useintroattachments) ? 1 : 0;
+        // The field is absent while the feature is disabled site-wide: keep the stored value untouched.
+        $applyrubricgrades = isset($data->assignfeedback_aif_applyrubricgrades)
+            ? (int) !empty($data->assignfeedback_aif_applyrubricgrades)
+            : (int) $this->get_config('applyrubricgrades');
 
         // Persist into the plugin's custom table (used at runtime).
         \assignfeedback_aif\local\feedback_utils::save_settings(
             $this->assignment->get_instance()->id,
             $prompt,
             $autogenerate,
-            $useintroattachments
+            $useintroattachments,
+            $applyrubricgrades
         );
 
         // Also persist into assign_plugin_config so that mod_assign's core
@@ -729,6 +783,7 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $this->set_config('prompt', $prompt);
         $this->set_config('autogenerate', $autogenerate);
         $this->set_config('useintroattachments', $useintroattachments);
+        $this->set_config('applyrubricgrades', $applyrubricgrades);
 
         return true;
     }

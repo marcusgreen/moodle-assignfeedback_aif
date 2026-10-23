@@ -37,6 +37,7 @@ import {get_string as getString} from 'core/str';
 import Templates from 'core/templates';
 import Pending from 'core/pending';
 import Log from 'core/log';
+import {applyAssessment} from 'assignfeedback_aif/rubricform';
 
 /** @var {number} Polling interval in milliseconds. */
 const POLL_INTERVAL = 5000;
@@ -406,6 +407,11 @@ const injectFeedbackIntoEditor = async(container) => {
             }
 
             addToast(await getString('feedbackgenerationcomplete', 'assignfeedback_aif'), {type: 'success'});
+
+            // Mirror the rubric assessment the task applied into the grading form.
+            if (applyAssessment(result.rubric) > 0) {
+                addToast(await getString('rubricassessmentapplied', 'assignfeedback_aif'), {type: 'info'});
+            }
         } else {
             // Feedback not available yet — fall back to reload.
             setTimeout(() => window.location.reload(), 1500);

@@ -253,5 +253,38 @@ function xmldb_assignfeedback_aif_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026072700, 'assignfeedback', 'aif');
     }
 
+    if ($oldversion < 2026101600) {
+        // Add applyrubricgrades: opt-in application of AI suggested rubric levels.
+        $table = new xmldb_table('assignfeedback_aif');
+        $field = new xmldb_field(
+            'applyrubricgrades',
+            XMLDB_TYPE_INTEGER,
+            '1',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '0',
+            'useintroattachments'
+        );
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026101600, 'assignfeedback', 'aif');
+    }
+
+    if ($oldversion < 2026102100) {
+        // The per-assignment option applyrubricgrades is now gated by the site-wide setting
+        // enableapplyrubricgrades, which defaults to off. Sites that already use the option
+        // keep their behaviour: enable the switch for them unless an admin has set it already.
+        $configured = get_config('assignfeedback_aif', 'enableapplyrubricgrades') !== false;
+        if (!$configured && $DB->record_exists('assignfeedback_aif', ['applyrubricgrades' => 1])) {
+            set_config('enableapplyrubricgrades', 1, 'assignfeedback_aif');
+        }
+
+        upgrade_plugin_savepoint(true, 2026102100, 'assignfeedback', 'aif');
+    }
+
     return true;
 }

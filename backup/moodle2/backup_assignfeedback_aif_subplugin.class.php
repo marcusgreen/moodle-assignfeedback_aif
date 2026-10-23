@@ -57,6 +57,7 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
             'prompt',
             'autogenerate',
             'useintroattachments',
+            'applyrubricgrades',
             'timecreated',
         ]);
 
@@ -78,6 +79,7 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
             'configprompt',
             'configautogenerate',
             'configuseintroattachments',
+            'configapplyrubricgrades',
             'configtimecreated',
         ]);
 
@@ -88,7 +90,7 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
 
         // Config source: look up by the grade's assignment.
         $config->set_source_sql(
-            'SELECT aif.prompt, aif.autogenerate, aif.useintroattachments, aif.timecreated
+            'SELECT aif.prompt, aif.autogenerate, aif.useintroattachments, aif.applyrubricgrades, aif.timecreated
                FROM {assignfeedback_aif} aif
                JOIN {assign_grades} g ON g.assignment = aif.assignment
               WHERE g.id = :gradeid',
@@ -110,6 +112,7 @@ class backup_assignfeedback_aif_subplugin extends backup_subplugin {
                     aif.prompt AS configprompt,
                     aif.autogenerate AS configautogenerate,
                     aif.useintroattachments AS configuseintroattachments,
+                    aif.applyrubricgrades AS configapplyrubricgrades,
                     aif.timecreated AS configtimecreated
                FROM {assignfeedback_aif_feedback} aiff
                JOIN {assignfeedback_aif} aif ON aif.id = aiff.aif

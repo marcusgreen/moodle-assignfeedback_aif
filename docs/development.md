@@ -5,7 +5,7 @@ Feedback plugin.
 
 ## Prerequisites
 
-- Moodle 4.5+ development environment
+- Moodle 5.0+ development environment
 - PHP 8.2+
 - Node.js 22+ (for AMD module building)
 - A running Moodle instance with the plugin installed
@@ -101,6 +101,7 @@ vendor/bin/phpcs --standard=moodle mod/assign/feedback/aif
 |-----------|---------------|
 | `tests/process_feedback_test.php` | Scheduled task execution, feedback generation |
 | `tests/submission_test.php` | Plugin enabling, basic submission flow |
+| `tests/rubric_grade_applier_test.php` | JSON extraction, criterion/level resolution, applying rubric grades in review |
 
 #### Running PHPUnit
 
