@@ -64,6 +64,25 @@ class provider implements
         // advanced grading subsystem on behalf of the assignment.
         $collection->add_subsystem_link('core_grading', [], 'privacy:metadata:core_grading');
 
+        // The submission, rubric and prompt are sent to the AI backend configured for the site.
+        // With local_ai_manager, each request is logged in its request log with
+        // component='assignfeedback_aif'. That table is managed by local_ai_manager, whose privacy
+        // provider exports and deletes these entries for all components.
+        $collection->add_database_table(
+            'local_ai_manager_request_log',
+            [
+                'userid' => 'privacy:metadata:local_ai_manager_request_log:userid',
+                'contextid' => 'privacy:metadata:local_ai_manager_request_log:contextid',
+                'component' => 'privacy:metadata:local_ai_manager_request_log:component',
+                'prompttext' => 'privacy:metadata:local_ai_manager_request_log:prompttext',
+                'promptcompletion' => 'privacy:metadata:local_ai_manager_request_log:promptcompletion',
+                'timecreated' => 'privacy:metadata:local_ai_manager_request_log:timecreated',
+            ],
+            'privacy:metadata:local_ai_manager_request_log'
+        );
+        // With the core AI subsystem, requests are processed and stored by core_ai.
+        $collection->add_subsystem_link('core_ai', [], 'privacy:metadata:core_ai');
+
         return $collection;
     }
 

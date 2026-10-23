@@ -29,7 +29,7 @@ require_once(__DIR__ . '/generator_trait.php');
  * Tests for applying the AI rubric assessment to the advanced grading form.
  *
  * @package    assignfeedback_aif
- * @copyright  2026 Jack
+ * @copyright  2026 Jack Bichsler
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \assignfeedback_aif\local\rubric_grade_applier
  */
