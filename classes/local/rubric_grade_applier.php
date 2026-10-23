@@ -34,7 +34,7 @@ use assignfeedback_aif\aif;
  *    every grade before release.
  *
  * @package    assignfeedback_aif
- * @copyright  2026 Jack
+ * @copyright  2026 Jack Bichsler
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class rubric_grade_applier {
