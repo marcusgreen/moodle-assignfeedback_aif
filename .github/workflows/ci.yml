@@ -38,6 +38,11 @@ jobs:
         php: ['8.3']
         moodle-branch: ['MOODLE_502_STABLE', 'MOODLE_501_STABLE', 'MOODLE_500_STABLE']
         database: [pgsql, mariadb]
+        include:
+          # Lowest supported PHP on the lowest supported Moodle.
+          - php: '8.2'
+            moodle-branch: 'MOODLE_500_STABLE'
+            database: pgsql
 
     steps:
       - name: Check out repository code

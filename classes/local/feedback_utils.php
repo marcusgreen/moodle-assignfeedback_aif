@@ -227,7 +227,8 @@ class feedback_utils {
 
         // New status-based error detection.
         if (!empty($record->status) && $record->status === 'error') {
-            $errormsg = $record->errormessage ?? '';
+            // The message may come from the AI backend and is rendered unescaped by the template.
+            $errormsg = s($record->errormessage ?? '');
             return get_string('feedbackgenerationerror', 'assignfeedback_aif', $errormsg);
         }
 

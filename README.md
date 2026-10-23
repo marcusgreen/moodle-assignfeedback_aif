@@ -3,7 +3,7 @@
 [![Moodle Plugin](https://img.shields.io/badge/Moodle-5.0%2B-orange)](https://moodle.org)
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-GPL%20v3-green)](https://www.gnu.org/copyleft/gpl.html)
-[![Maturity](https://img.shields.io/badge/Maturity-Beta-yellow)]()
+[![Maturity](https://img.shields.io/badge/Maturity-Stable-green)]()
 
 An assignment feedback plugin that uses AI to generate feedback on student submissions. Feedback
 can be generated automatically when a student submits, or by teachers for one or many students

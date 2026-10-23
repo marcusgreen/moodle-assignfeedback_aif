@@ -53,10 +53,12 @@ class provider implements
      */
     public static function get_metadata(collection $collection): collection {
         $data = [
-            'assignment' => 'privacy:metadata:assignmentid',
-            'aitext' => 'privacy:metadata:aitext',
+            'submission' => 'privacy:metadata:submission',
+            'feedback' => 'privacy:metadata:feedback',
             'status' => 'privacy:metadata:status',
             'errormessage' => 'privacy:metadata:errormessage',
+            'skippedfiles' => 'privacy:metadata:skippedfiles',
+            'timecreated' => 'privacy:metadata:timecreated',
             'timemodified' => 'privacy:metadata:timemodified',
         ];
         $collection->add_database_table('assignfeedback_aif_feedback', $data, 'privacy:metadata:tablesummary');
