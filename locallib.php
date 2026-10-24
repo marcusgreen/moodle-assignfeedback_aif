@@ -245,17 +245,15 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return boolean True if the AI feedback has been modified, else false.
      */
     public function is_feedback_modified(stdClass $grade, stdClass $data): bool {
+        // No editor data (e.g. a web service call without AI feedback) must not touch existing feedback.
+        if (!isset($data->assignfeedbackaif_editor['text'])) {
+            return false;
+        }
+
         $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
         $oldvalue = $record ? $record->feedback : '';
 
-        // Get the new value from the editor.
-        if (isset($data->assignfeedbackaif_editor['text'])) {
-            $newvalue = $data->assignfeedbackaif_editor['text'];
-        } else {
-            $newvalue = '';
-        }
-
-        return $oldvalue !== $newvalue;
+        return $oldvalue !== $data->assignfeedbackaif_editor['text'];
     }
 
     /**
@@ -801,7 +799,9 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return array The external parameters.
      */
     public function get_external_parameters(): array {
-        return ['assignfeedbackaif' => new \core_external\external_value(PARAM_RAW, 'The text for this feedback.')];
+        return [
+            'assignfeedbackaif' => new \core_external\external_value(PARAM_RAW, 'The text for this feedback.', VALUE_OPTIONAL),
+        ];
     }
 
     /**
