@@ -192,9 +192,10 @@ students at once.
 
 ### Generate AI Feedback (Batch)
 
-1. Navigate to the assignment and click **View all submissions**.
+1. Navigate to the assignment and open the **Submissions** tab.
 2. Use the checkboxes to select the students you want to generate feedback for.
-3. From the **With selected...** dropdown at the bottom, choose **Generate AI feedback**.
+3. In the bulk actions bar at the bottom of the page, click **More** and choose
+   **Generate AI feedback**.
 4. Confirm the action in the dialog.
 5. A notification will indicate the task has been queued.
 6. Wait for cron to process the tasks.
@@ -206,7 +207,7 @@ students at once.
 To remove AI-generated feedback for selected students:
 
 1. Select students using the checkboxes.
-2. Choose **Delete AI feedback** from the dropdown.
+2. In the bulk actions bar, click **More** and choose **Delete AI feedback**.
 3. Confirm the deletion.
 
 > **Tip:** You can select all students using the checkbox in the table header.
