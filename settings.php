@@ -104,6 +104,8 @@ Format your response in strict Markdown:
 - Always leave a blank line before and after headings, lists, and code/math blocks.
 - Use **bold** and *italic* for emphasis.
 - For all math equations use always LaTeX style: inline with $$ ... $$ and display blocks with \( ... \).
+- Use \lt to replace < in LaTeX style.
+- Use \gt to replace > in LaTeX style.
 
 === LANGUAGE ===
 Respond in {{language}}.';
