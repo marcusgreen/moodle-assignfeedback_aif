@@ -26,7 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'assignfeedback_aif';
 $plugin->release = '1.1.0';
-$plugin->version = 2026102100;
+$plugin->version = 2026103000;
 $plugin->requires = 2025041400; // Moodle 5.0, required by local_ai_content.
 $plugin->supported = [500, 502];
 $plugin->maturity = MATURITY_STABLE;
