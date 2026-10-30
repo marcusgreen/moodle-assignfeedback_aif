@@ -228,6 +228,30 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
+     * Resolve a submission ID from a grade or submission object.
+     *
+     * Feedback plugin callbacks receive either a grade object (which has attemptnumber
+     * but no submission id) or a submission object (which has id directly). Submission
+     * objects are identified by the presence of a 'status' field.
+     *
+     * @param stdClass $submissionorgrade A grade or submission object.
+     * @return int|null The submission ID, or null if it cannot be resolved.
+     */
+    private function get_submission_id(stdClass $submissionorgrade): ?int {
+        global $DB;
+        if (isset($submissionorgrade->status)) {
+            return (int) $submissionorgrade->id;
+        }
+        $attemptnumber = $submissionorgrade->attemptnumber ?? 0;
+        $submission = $DB->get_record('assign_submission', [
+            'assignment' => $submissionorgrade->assignment,
+            'userid' => $submissionorgrade->userid,
+            'attemptnumber' => $attemptnumber,
+        ]);
+        return $submission ? (int) $submission->id : null;
+    }
+
+    /**
      * Whether the assignment currently uses a rubric with at least one criterion.
      *
      * @param int $contextid The module context id.
@@ -250,7 +274,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             return false;
         }
 
-        $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+        $submissionid = $this->get_submission_id($grade);
+        $record = $submissionid !== null ? $this->get_feedbackaif($submissionid) : false;
         $oldvalue = $record ? $record->feedback : '';
 
         return $oldvalue !== $data->assignfeedbackaif_editor['text'];
@@ -279,7 +304,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
             // Get the grade to find the assignment and user.
             $grade = $DB->get_record('assign_grades', ['id' => $gradeid]);
             if ($grade) {
-                $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+                $submissionid = $this->get_submission_id($grade);
+                $record = $submissionid !== null ? $this->get_feedbackaif($submissionid) : false;
                 return $record ? $record->feedback : '';
             }
         }
@@ -301,9 +327,13 @@ class assign_feedback_aif extends assign_feedback_plugin {
             // Get the grade to find the assignment and user.
             $grade = $DB->get_record('assign_grades', ['id' => $gradeid]);
             if ($grade) {
+                $submissionid = $this->get_submission_id($grade);
+                if ($submissionid === null) {
+                    return false;
+                }
                 return \assignfeedback_aif\local\feedback_utils::save_feedback(
                     $grade->assignment,
-                    $grade->userid,
+                    $submissionid,
                     $value,
                     FORMAT_HTML
                 );
@@ -325,7 +355,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
         global $DB, $PAGE, $USER;
 
         // Get the existing feedback.
-        $record = $this->get_feedbackaif($submissionorgrade->assignment, $submissionorgrade->userid);
+        $submissionid = $this->get_submission_id($submissionorgrade);
+        $record = $submissionid !== null ? $this->get_feedbackaif($submissionid) : false;
 
         // Check first for data from last form submission in case grading validation failed.
         if (!empty($data->assignfeedbackaif_editor['text'])) {
@@ -412,9 +443,13 @@ class assign_feedback_aif extends assign_feedback_plugin {
             $submissionorgrade->id
         );
 
+        $submissionid = $this->get_submission_id($submissionorgrade);
+        if ($submissionid === null) {
+            return false;
+        }
         return \assignfeedback_aif\local\feedback_utils::save_feedback(
             $submissionorgrade->assignment,
-            $submissionorgrade->userid,
+            $submissionid,
             $data->assignfeedbackaif,
             $data->assignfeedbackaifformat
         );
@@ -518,7 +553,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string The formatted feedback summary.
      */
     public function view_summary(stdClass $submissionorgrade, &$showviewlink): string {
-        $record = $this->get_feedbackaif($submissionorgrade->assignment, $submissionorgrade->userid);
+        $submissionid = $this->get_submission_id($submissionorgrade);
+        $record = $submissionid !== null ? $this->get_feedbackaif($submissionid) : false;
         if ($record) {
             // Check for error status.
             $errormsg = $this->get_error_from_feedback($record);
@@ -579,14 +615,13 @@ class assign_feedback_aif extends assign_feedback_plugin {
     }
 
     /**
-     * Get AI feedback for a submission.
+     * Get AI feedback for a specific submission.
      *
-     * @param int $assignment The assignment ID.
-     * @param int $userid The user ID.
+     * @param int $submissionid The submission ID (from assign_submission).
      * @return stdClass|false The feedback record or false if not found.
      */
-    public function get_feedbackaif(int $assignment, int $userid): stdClass|false {
-        return \assignfeedback_aif\local\feedback_utils::get_feedbackaif($assignment, $userid);
+    public function get_feedbackaif(int $submissionid): stdClass|false {
+        return \assignfeedback_aif\local\feedback_utils::get_feedbackaif($submissionid);
     }
 
     /**
@@ -626,7 +661,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string The formatted feedback text.
      */
     public function view(stdClass $submissionorgrade): string {
-        $record = $this->get_feedbackaif($submissionorgrade->assignment, $submissionorgrade->userid);
+        $submissionid = $this->get_submission_id($submissionorgrade);
+        $record = $submissionid !== null ? $this->get_feedbackaif($submissionid) : false;
         if (!$record) {
             return '';
         }
@@ -681,7 +717,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return string The feedback text for the gradebook.
      */
     public function text_for_gradebook(stdClass $grade): string {
-        $record = $this->get_feedbackaif($grade->assignment, $grade->userid);
+        $submissionid = $this->get_submission_id($grade);
+        $record = $submissionid !== null ? $this->get_feedbackaif($submissionid) : false;
         if (!$record) {
             return '';
         }
@@ -759,7 +796,8 @@ class assign_feedback_aif extends assign_feedback_plugin {
      * @return bool True if no feedback exists and none is pending.
      */
     public function is_empty(stdClass $submissionorgrade): bool {
-        if ($this->get_feedbackaif($submissionorgrade->assignment, $submissionorgrade->userid)) {
+        $submissionid = $this->get_submission_id($submissionorgrade);
+        if ($submissionid !== null && $this->get_feedbackaif($submissionid)) {
             return false;
         }
         // Show section when feedback is still being generated.

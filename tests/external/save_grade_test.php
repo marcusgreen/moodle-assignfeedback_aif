@@ -46,7 +46,8 @@ final class save_grade_test extends \advanced_testcase {
         $env = $this->create_test_environment();
         $this->create_and_submit($env);
         $this->create_aif_config($env);
-        feedback_utils::save_feedback($env->assign->id, $env->student->id, 'Existing AI feedback', FORMAT_HTML);
+        $submission = $env->assignobj->get_user_submission($env->student->id, false);
+        feedback_utils::save_feedback($env->assign->id, $submission->id, 'Existing AI feedback', FORMAT_HTML);
 
         $this->setUser($env->teacher);
         $result = \mod_assign_external::save_grade($env->assign->id, $env->student->id, 50.0, -1, false, '', false, []);
@@ -54,7 +55,7 @@ final class save_grade_test extends \advanced_testcase {
 
         $grade = $env->assignobj->get_user_grade($env->student->id, false);
         $this->assertEquals(50.0, (float) $grade->grade);
-        $record = feedback_utils::get_feedbackaif($env->assign->id, $env->student->id);
+        $record = feedback_utils::get_feedbackaif($submission->id);
         $this->assertEquals('Existing AI feedback', $record->feedback);
     }
 }
