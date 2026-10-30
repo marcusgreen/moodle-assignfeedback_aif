@@ -447,8 +447,8 @@ final class aif_test extends \advanced_testcase {
      * @param array $mustcontain Strings that must appear in the prompt.
      * @param array $mustnotcontain Strings that must not appear in the prompt.
      * @covers ::get_prompt
-     * @dataProvider get_prompt_cleans_onlinetext_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_prompt_cleans_onlinetext_provider')]
     public function test_get_prompt_cleans_onlinetext(
         string $onlinetext,
         int $onlineformat,
@@ -768,8 +768,8 @@ final class aif_test extends \advanced_testcase {
      * @param string $actingrole Which environment user acts as the acting user.
      * @covers ::get_prompt
      * @covers ::extract_content_from_files
-     * @dataProvider get_prompt_passes_acting_user_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_prompt_passes_acting_user_provider')]
     public function test_get_prompt_passes_acting_user_to_extraction(string $actingrole): void {
         global $DB;
         $this->resetAfterTest();

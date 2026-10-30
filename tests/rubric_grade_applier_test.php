@@ -189,9 +189,9 @@ final class rubric_grade_applier_test extends \advanced_testcase {
     /**
      * Any mismatch aborts the whole application (feedback-only fallback).
      *
-     * @dataProvider resolve_failure_provider
      * @param array $assessment The model assessment.
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('resolve_failure_provider')]
     public function test_resolve_failure(array $assessment): void {
         $this->assertNull(rubric_grade_applier::resolve($assessment, $this->sample_criteria()));
     }
