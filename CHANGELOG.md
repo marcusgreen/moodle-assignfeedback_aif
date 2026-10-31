@@ -20,6 +20,8 @@
 - AI error messages are escaped before display.
 - Students see the AI notice before they submit, with either backend, and only one notice
   is shown. Thanks to Richard Aljaste. (#14, #38)
+- Default prompt tells the AI to write `\lt` and `\gt` in LaTeX, so `<` and `>` no longer
+  cause MathJax "Misplaced &" errors. Thanks to Stefan Hanauska. (MBS-11586, #37)
 
 ## 1.1.0 (2026-10-16)
 
