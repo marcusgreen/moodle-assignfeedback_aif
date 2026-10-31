@@ -84,7 +84,6 @@ final class hook_callbacks_test extends \advanced_testcase {
         $env = $this->create_test_environment();
         $this->create_aif_config($env, 'Test prompt', 1);
 
-        // Student must have a submission so the notice path is taken (not the infobox path).
         $this->create_and_submit($env, 'My submission text');
 
         // Set up real ai_manager infrastructure so AI is available for the student.
@@ -153,7 +152,6 @@ final class hook_callbacks_test extends \advanced_testcase {
         $env = $this->create_test_environment();
         $this->create_aif_config($env, 'Test prompt', 1);
 
-        // Student must have a submission so the notice path is taken (not the infobox path).
         $this->create_and_submit($env, 'My submission text');
 
         // Set up AI as available first, then lock the user to trigger 'disabled' state.
@@ -186,14 +184,14 @@ final class hook_callbacks_test extends \advanced_testcase {
     }
 
     /**
-     * Test student without submission sees infobox when AI is available.
+     * Test student without submission sees the AI notice when AI is available.
      *
-     * When a student has not yet submitted and AI is available, the AI manager
-     * infobox widget should be rendered instead of the plain notification.
+     * The same notice is shown before and after submission, so students are
+     * informed that their work will be sent to an AI system before they submit.
      *
      * @covers ::before_footer
      */
-    public function test_student_without_submission_sees_infobox(): void {
+    public function test_student_without_submission_sees_ai_notice(): void {
         $this->resetAfterTest();
 
         $env = $this->create_test_environment();
@@ -202,13 +200,39 @@ final class hook_callbacks_test extends \advanced_testcase {
         // Set up real ai_manager infrastructure so AI is available for the student.
         $this->setup_ai_availability($env->student, true);
 
-        // No submission created — student should see the infobox container.
+        // No submission created.
         $html = $this->dispatch_before_footer($env->cm, $env->student);
 
         $this->assertStringContainsString(
-            'data-aif="submission-infobox"',
+            'data-aif="student-ai-notice"',
             $html,
-            'Student without submission should see the AI manager infobox'
+            'Student without submission should see the AI manager infobox widget'
+        );
+    }
+
+    /**
+     * Test student without submission sees the AI notice with the core AI backend.
+     *
+     * @covers ::before_footer
+     */
+    public function test_student_without_submission_sees_notice_core_backend(): void {
+        $this->resetAfterTest();
+
+        $env = $this->create_test_environment();
+        $this->create_aif_config($env, 'Test prompt', 1);
+        set_config('backend', 'core_ai_subsystem', 'assignfeedback_aif');
+
+        $mock = $this->createMock(\assignfeedback_aif\local\ai_request_provider::class);
+        $mock->method('get_unavailability_reason')->willReturn(null);
+        \core\di::set(\assignfeedback_aif\local\ai_request_provider::class, $mock);
+
+        // No submission created.
+        $html = $this->dispatch_before_footer($env->cm, $env->student);
+
+        $this->assertStringContainsString(
+            get_string('studentsubmissionainotice', 'assignfeedback_aif'),
+            $html,
+            'Student without submission should see the data sharing notice with the core AI backend'
         );
     }
 

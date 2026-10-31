@@ -101,24 +101,9 @@ class hook_callbacks {
         if ($PAGE->pagetype === 'mod-assign-view' && !has_capability('mod/assign:grade', $context)) {
             $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
             if ($aifconfig && !empty($aifconfig->autogenerate)) {
-                $action = optional_param('action', '', PARAM_ALPHA);
-                if ($action === 'editsubmission') {
-                    self::render_submission_infobox($hook, $context);
-                } else if (
-                    !$DB->record_exists('assign_submission', [
-                    'assignment' => (int) $cm->instance,
-                    'userid' => $USER->id,
-                    'status' => 'submitted',
-                    'latest' => 1,
-                    ])
-                ) {
-                    // Student has no submission yet — show the AI manager infobox.
-                    self::render_submission_infobox($hook, $context);
-                } else {
-                    $notice = self::get_student_ai_notice($context);
-                    if ($notice !== null) {
-                        $hook->add_html($notice);
-                    }
+                $notice = self::get_student_ai_notice($context);
+                if ($notice !== null) {
+                    $hook->add_html($notice);
                 }
             }
             return;
@@ -308,42 +293,6 @@ class hook_callbacks {
             'systemicerrors' => [],
             'hassystemicerrors' => false,
         ];
-    }
-
-    /**
-     * Render the local_ai_manager infobox on the edit submission page.
-     *
-     * Shows the data sharing notice ("entered data will be sent to an external AI system")
-     * so students are aware before typing their submission.
-     *
-     * @param \core\hook\output\before_footer_html_generation $hook The hook instance.
-     * @param \context $context The module context.
-     */
-    private static function render_submission_infobox(
-        \core\hook\output\before_footer_html_generation $hook,
-        \context $context
-    ): void {
-        global $PAGE, $USER;
-
-        if (get_config('assignfeedback_aif', 'backend') !== 'local_ai_manager') {
-            return;
-        }
-        if (!class_exists('\local_ai_manager\ai_manager_utils')) {
-            return;
-        }
-
-        $aiconfig = \local_ai_manager\ai_manager_utils::get_ai_config($USER, $context->id, null, ['feedback']);
-        $status = $aiconfig['availability']['available'] ?? '';
-        if ($status !== \local_ai_manager\ai_manager_utils::AVAILABILITY_AVAILABLE) {
-            return;
-        }
-
-        $hook->add_html('<div data-aif="submission-infobox"></div>');
-        $PAGE->requires->js_call_amd(
-            'local_ai_manager/infobox',
-            'renderInfoBox',
-            ['assignfeedback_aif', $USER->id, '[data-aif="submission-infobox"]', ['feedback', 'itt']]
-        );
     }
 
     /**

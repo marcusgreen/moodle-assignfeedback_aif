@@ -18,6 +18,8 @@
 - Privacy metadata lists all stored AI data.
 - Web service grading without AI feedback data works again. Thanks to Peter Mayer. (MBS-11605, #36)
 - AI error messages are escaped before display.
+- Students see the AI notice before they submit, with either backend, and only one notice
+  is shown. Thanks to Richard Aljaste. (#14, #38)
 
 ## 1.1.0 (2026-10-16)
 
