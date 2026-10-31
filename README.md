@@ -74,7 +74,7 @@ More detail is in [docs/](docs/): [teacher guide](docs/teacher-guide.md),
 
 - Original author: [Marcus Green](https://github.com/marcusgreen)
 - A large amount of the code was contributed by [ByCS Lernplattform](https://github.com/bycs-lp)
-  (ISB Bayern). They are based in Bavaria and look after approximatly 18 million Moodle accounts.
+  (ISB Bayern). They are based in Bavaria and look after approximately 1.8 million Moodle accounts.
 - Contributors: Sumaiya Javed (Catalyst), Thom Rawson (inspiration and support)
 
 ## License
