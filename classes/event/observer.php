@@ -69,10 +69,11 @@ class observer {
         $assignmentid = $assign->get_instance()->id;
         // Use relateduserid when set (teacher submitting on behalf), otherwise userid (student self-submission).
         $userid = $event->relateduserid ?? $event->userid;
-        $cm = $assign->get_course_module();
 
         // Check if autogenerate is enabled for this assignment.
+        \assignfeedback_aif\local\feedback_utils::ensure_config_exists($assignmentid);
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $assignmentid]);
+
         if (!$aifconfig || empty($aifconfig->autogenerate)) {
             return;
         }

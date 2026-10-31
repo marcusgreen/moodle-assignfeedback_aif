@@ -99,7 +99,9 @@ class hook_callbacks {
 
         // Student submission page: show notice or warning when autogenerate is enabled.
         if ($PAGE->pagetype === 'mod-assign-view' && !has_capability('mod/assign:grade', $context)) {
+            \assignfeedback_aif\local\feedback_utils::ensure_config_exists((int) $cm->instance);
             $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => (int) $cm->instance]);
+
             if ($aifconfig && !empty($aifconfig->autogenerate)) {
                 $notice = self::get_student_ai_notice($context);
                 if ($notice !== null) {
