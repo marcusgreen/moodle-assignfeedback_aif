@@ -498,6 +498,14 @@ class assign_feedback_aif extends assign_feedback_plugin {
         $overviewurl = new \moodle_url('/mod/assign/view.php', ['id' => $cmid]);
         $gradingurl = new \moodle_url('/mod/assign/view.php', ['id' => $cmid, 'action' => 'grading']);
 
+        // The user list comes from the request, so drop users outside the teacher's groups.
+        $course = $this->assignment->get_course();
+        $cm = $this->assignment->get_course_module();
+        $users = array_values(array_filter(
+            $users,
+            fn($userid) => groups_user_groups_visible($course, (int) $userid, $cm)
+        ));
+
         if ($action == 'generatefeedbackai') {
             $this->process_feedbackaif($users, 'generate');
             redirect(

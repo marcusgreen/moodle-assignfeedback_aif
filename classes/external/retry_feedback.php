@@ -77,6 +77,10 @@ class retry_feedback extends external_api {
         // Permission check: teacher with grade capability OR own submission with autogenerate.
         $isteacher = has_capability('mod/assign:grade', $context);
         $isownsubmission = ((int) $USER->id === $params['userid']);
+        $checkgroup = $isteacher && !$isownsubmission;
+        if ($checkgroup && !groups_user_groups_visible(get_course($cm->course), $params['userid'], $cm)) {
+            throw new \required_capability_exception($context, 'moodle/site:accessallgroups', 'nopermissions', '');
+        }
 
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $params['assignmentid']]);
         if (!$aifconfig) {
