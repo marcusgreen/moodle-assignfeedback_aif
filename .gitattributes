@@ -1,0 +1,3 @@
+# Files left out of release zips built with git archive.
+.github export-ignore
+.gitattributes export-ignore

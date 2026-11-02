@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-11-02)
 
 ### Added
 - Site-wide setting to enable applying rubric assessments. (#34)
 - Grading page shows the AI's rubric assessment without a reload. (#34)
+- `LICENSE` file (GNU GPL v3).
 
 ### Changed
 - Requires Moodle 5.0. Supports 5.0 to 5.2. Marked stable.
