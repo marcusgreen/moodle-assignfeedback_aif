@@ -18,6 +18,8 @@
 - Privacy metadata lists all stored AI data.
 - Web service grading without AI feedback data works again. Thanks to Peter Mayer. (MBS-11605, #36)
 - AI error messages are escaped before display.
+- In separate groups mode, teachers can only generate, retry, analyse or check AI feedback for
+  students in their own groups, including through bulk actions.
 - Students see the AI notice before they submit, with either backend, and only one notice
   is shown. Thanks to Richard Aljaste. (#14, #38)
 - Default prompt tells the AI to write `\lt` and `\gt` in LaTeX, so `<` and `>` no longer

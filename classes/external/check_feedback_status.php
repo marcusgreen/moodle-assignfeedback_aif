@@ -88,6 +88,10 @@ class check_feedback_status extends external_api {
             if (!$canview) {
                 throw new \required_capability_exception($context, 'mod/assign:grade', 'nopermissions', '');
             }
+            $isother = (int) $params['userid'] !== (int) $USER->id;
+            if ($isother && !groups_user_groups_visible(get_course($cm->course), $params['userid'], $cm)) {
+                throw new \required_capability_exception($context, 'moodle/site:accessallgroups', 'nopermissions', '');
+            }
 
             $sql = "SELECT aiff.id, aiff.feedback, aiff.feedbackformat, aiff.status, aiff.timecreated, aiff.timemodified
                       FROM {assignfeedback_aif_feedback} aiff

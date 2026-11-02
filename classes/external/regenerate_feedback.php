@@ -67,6 +67,9 @@ class regenerate_feedback extends external_api {
         // Validate context and capability.
         self::validate_context($context);
         require_capability('mod/assign:grade', $context);
+        if (!groups_user_groups_visible(get_course($cm->course), $params['userid'], $cm)) {
+            throw new \required_capability_exception($context, 'moodle/site:accessallgroups', 'nopermissions', '');
+        }
 
         // Delete existing feedback immediately so the UI reflects the regeneration.
         $aifconfig = $DB->get_record('assignfeedback_aif', ['assignment' => $params['assignmentid']]);

@@ -69,6 +69,9 @@ class get_submission_analysis extends external_api {
         require_capability('mod/assign:grade', $context);
 
         $course = $DB->get_record('course', ['id' => $assignment->course], '*', MUST_EXIST);
+        if (!groups_user_groups_visible($course, $params['userid'], $cm)) {
+            throw new \required_capability_exception($context, 'moodle/site:accessallgroups', 'nopermissions', '');
+        }
         $assign = new \assign($context, $cm, $course);
 
         // Only consider submission plugins that are currently enabled for this assignment.
