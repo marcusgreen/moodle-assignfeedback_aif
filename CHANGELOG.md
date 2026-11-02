@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Supports Moodle 5.0 to 5.3. CI also tests 5.3, and uses MariaDB 11.4.
+
+### Fixed
+- The "no notice when AI is hidden" test is skipped when local_ai_manager is not installed.
+
 ## 1.2.0 (2026-11-02)
 
 ### Added

@@ -303,10 +303,9 @@ final class hook_callbacks_test extends \advanced_testcase {
      */
     private function setup_ai_availability(\stdClass $user, bool $available): void {
         if (!class_exists(\local_ai_manager\ai_manager_utils::class)) {
-            if ($available) {
-                $this->markTestSkipped('local_ai_manager plugin is not installed.');
-            }
-            return;
+            // Without local_ai_manager the core AI backend is used, which reports AI as
+            // unavailable rather than available or hidden, so these tests cannot run.
+            $this->markTestSkipped('local_ai_manager plugin is not installed.');
         }
 
         // Use local_ai_manager backend so the provider delegates to the AI Manager.
