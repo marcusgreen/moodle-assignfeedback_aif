@@ -31,16 +31,18 @@ from the grading interface. Teachers can review and edit the feedback before rel
 
 ## Requirements
 
-- Moodle 5.0 or later, PHP 8.2 or later.
-- [local_ai_content](https://moodle.org/plugins/local_ai_content), used for extracting text from
-  submitted files.
+- Moodle 5.0 to 5.3, PHP 8.2 or later.
+- [local_ai_content](https://moodle.org/plugins/local_ai_content) (**required**). It is used for
+  extracting text from submitted files and must be installed before this plugin.
 - An AI backend: either an AI provider configured in *Site administration > AI > AI providers*,
   or local_ai_manager installed and configured.
 
 ## Installation
 
-Install from the Moodle plugins directory, or copy the plugin to `mod/assign/feedback/aif` and
-visit *Site administration > Notifications*.
+1. Install [local_ai_content](https://moodle.org/plugins/local_ai_content).
+2. Install this plugin from the Moodle plugins directory, or copy it to
+   `mod/assign/feedback/aif`.
+3. Visit *Site administration > Notifications* to complete the installation.
 
 ## Configuration
 
